@@ -45,7 +45,7 @@ export default function SignInPage() {
               type="submit"
               className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-line bg-canvas px-4 py-3 text-sm font-medium text-muted-fg transition-colors hover:bg-line"
             >
-              Continue as test student (dev only)
+              Test
             </button>
           </form>
         )}
