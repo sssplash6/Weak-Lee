@@ -1,36 +1,113 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Weekly Goal Tracker — freshman.academy
 
-## Getting Started
+A weekly goal tracking system for students. Each student signs in with Google and
+sets **up to 5 goals per week**. Every goal is broken into **subtasks**; checking
+subtasks off drives the goal's **completion %** and the overall **week progress**.
+Hit **Start new week** to archive the current week and begin a fresh one.
 
-First, run the development server:
+## Stack
+
+- **Next.js 16** (App Router) + **React 19** + **TypeScript**
+- **Tailwind CSS v4**
+- **Prisma 7** + **PostgreSQL** (via the `@prisma/adapter-pg` driver adapter)
+- **Auth.js / NextAuth v5** with **Google OAuth** (JWT sessions, Prisma adapter)
+
+## Data model
+
+```
+User ──< Week ──< Goal ──< Subtask
+```
+
+- A `Week` has `isCurrent` (one active week per user) and start/end dates.
+- A `Goal` has a title and a position (1–5).
+- A `Subtask` has a title and `isDone`. Goal % = done / total subtasks.
+- Auth.js manages `User`, `Account`, `Session`, `VerificationToken`.
+
+## Setup
+
+### 1. Install
+
+```bash
+npm install
+```
+
+### 2. PostgreSQL
+
+Create a database and set the connection string. Local example:
+
+```bash
+createdb freshman_weekly
+```
+
+### 3. Environment variables
+
+Copy `.env.example` to `.env` and fill it in:
+
+```bash
+cp .env.example .env
+```
+
+- `DATABASE_URL` — your Postgres connection string.
+- `AUTH_SECRET` — generate with `npx auth secret`.
+- `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` — from a Google OAuth client (next step).
+
+### 4. Google OAuth credentials
+
+1. Go to the [Google Cloud Console → Credentials](https://console.cloud.google.com/apis/credentials).
+2. Create an **OAuth client ID** of type **Web application**.
+3. Add the **Authorized redirect URI**:
+   `http://localhost:3000/api/auth/callback/google`
+4. Copy the client ID and secret into `.env`.
+
+### 5. Migrate the database
+
+```bash
+npm run db:migrate
+```
+
+### 6. Run
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open <http://localhost:3000>. You'll be redirected to sign in with Google, then
+land on your weekly dashboard.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Scripts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Script               | Description                              |
+| -------------------- | ---------------------------------------- |
+| `npm run dev`        | Start the dev server                     |
+| `npm run build`      | Production build                         |
+| `npm start`          | Run the production build                 |
+| `npm run db:migrate` | Create/apply Prisma migrations           |
+| `npm run db:studio`  | Open Prisma Studio to inspect the data   |
 
-## Learn More
+## Project structure
 
-To learn more about Next.js, take a look at the following resources:
+```
+prisma/schema.prisma            Data model
+prisma.config.ts                Prisma 7 CLI config (datasource URL, migrations)
+src/
+  auth.config.ts                Edge-safe Auth.js config (providers, callbacks)
+  auth.ts                       Full Auth.js instance (Prisma adapter)
+  proxy.ts                      Route protection (Next 16 "proxy", was middleware)
+  lib/prisma.ts                 PrismaClient singleton (pg driver adapter)
+  lib/weeks.ts                  getOrCreateCurrentWeek, week bounds
+  lib/progress.ts               Pure %-calculation helpers
+  app/
+    signin/page.tsx             Google sign-in screen
+    api/auth/[...nextauth]/     Auth.js route handler
+    dashboard/
+      page.tsx                  Main weekly tracker
+      actions.ts                Server actions (goals/subtasks/new week)
+      _components/              GoalCard, ProfileMenu, WeekProgress, etc.
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Notes
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- The Prisma Client is generated into `src/generated/prisma` (git-ignored) and
+  regenerated on `postinstall`.
+- Goals do not carry over between weeks by default — "Start new week" begins a
+  clean slate and archives the previous week.

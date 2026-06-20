@@ -1,0 +1,72 @@
+"use client";
+
+import Image from "next/image";
+import { useEffect, useRef, useState } from "react";
+import { signOut } from "next-auth/react";
+
+type Props = {
+  name?: string | null;
+  email?: string | null;
+  image?: string | null;
+};
+
+export function ProfileMenu({ name, email, image }: Props) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, []);
+
+  const initial = (name ?? email ?? "?").charAt(0).toUpperCase();
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-line bg-brand-soft text-sm font-semibold text-brand transition hover:ring-2 hover:ring-brand-soft"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label="Account menu"
+      >
+        {image ? (
+          <Image src={image} alt="" width={40} height={40} />
+        ) : (
+          initial
+        )}
+      </button>
+
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 z-10 mt-2 w-56 rounded-xl border border-line bg-surface p-1 shadow-lg"
+        >
+          <div className="px-3 py-2">
+            <p className="truncate text-sm font-medium text-ink">
+              {name ?? "Student"}
+            </p>
+            {email && (
+              <p className="truncate text-xs text-muted-fg">{email}</p>
+            )}
+          </div>
+          <div className="my-1 border-t border-line" />
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => signOut({ redirectTo: "/signin" })}
+            className="w-full rounded-lg px-3 py-2 text-left text-sm text-ink transition hover:bg-canvas"
+          >
+            Sign out
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}

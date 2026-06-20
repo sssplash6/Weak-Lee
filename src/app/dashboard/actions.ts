@@ -1,0 +1,199 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
+import { getOrCreateCurrentWeek, getWeekBounds } from "@/lib/weeks";
+import { goalPercent } from "@/lib/progress";
+
+async function requireUserId(): Promise<string> {
+  const session = await auth();
+  if (!session?.user?.id) {
+    throw new Error("Not authenticated");
+  }
+  return session.user.id;
+}
+
+/** Confirm a goal belongs to the signed-in user; returns it or throws. */
+async function assertGoalOwned(goalId: string, userId: string) {
+  const goal = await prisma.goal.findFirst({
+    where: { id: goalId, week: { userId } },
+  });
+  if (!goal) throw new Error("Goal not found");
+  return goal;
+}
+
+/** Confirm a subtask belongs to the signed-in user; returns it or throws. */
+async function assertSubtaskOwned(subtaskId: string, userId: string) {
+  const subtask = await prisma.subtask.findFirst({
+    where: { id: subtaskId, goal: { week: { userId } } },
+  });
+  if (!subtask) throw new Error("Subtask not found");
+  return subtask;
+}
+
+export async function addGoal(formData: FormData) {
+  const userId = await requireUserId();
+  const title = String(formData.get("title") ?? "").trim();
+  if (!title) return;
+
+  const week = await getOrCreateCurrentWeek(userId);
+  const position = week.goals.length + 1;
+  await prisma.goal.create({
+    data: { weekId: week.id, title, position },
+  });
+  revalidatePath("/dashboard");
+}
+
+export async function renameGoal(goalId: string, title: string) {
+  const userId = await requireUserId();
+  const trimmed = title.trim();
+  if (!trimmed) return;
+  await assertGoalOwned(goalId, userId);
+  await prisma.goal.update({ where: { id: goalId }, data: { title: trimmed } });
+  revalidatePath("/dashboard");
+}
+
+export async function deleteGoal(goalId: string) {
+  const userId = await requireUserId();
+  await assertGoalOwned(goalId, userId);
+  await prisma.goal.delete({ where: { id: goalId } });
+  revalidatePath("/dashboard");
+}
+
+export async function addSubtask(goalId: string, title: string) {
+  const userId = await requireUserId();
+  const trimmed = title.trim();
+  if (!trimmed) return;
+  await assertGoalOwned(goalId, userId);
+
+  const count = await prisma.subtask.count({ where: { goalId } });
+  await prisma.subtask.create({
+    data: { goalId, title: trimmed, position: count + 1 },
+  });
+  revalidatePath("/dashboard");
+}
+
+export async function toggleSubtask(subtaskId: string, isDone: boolean) {
+  const userId = await requireUserId();
+  await assertSubtaskOwned(subtaskId, userId);
+  await prisma.subtask.update({ where: { id: subtaskId }, data: { isDone } });
+  revalidatePath("/dashboard");
+}
+
+export async function deleteSubtask(subtaskId: string) {
+  const userId = await requireUserId();
+  await assertSubtaskOwned(subtaskId, userId);
+  await prisma.subtask.delete({ where: { id: subtaskId } });
+  revalidatePath("/dashboard");
+}
+
+/**
+ * Delegate a subtask to another user. The original stays on the sender's list
+ * (marked "shared to X"); the recipient gets a linked copy added under the same
+ * goal (creating that goal in their current week if they don't have it yet).
+ */
+export async function shareSubtask(subtaskId: string, toUserId: string) {
+  const fromUserId = await requireUserId();
+  if (toUserId === fromUserId) return;
+
+  // Load the original subtask (owned by sender) along with its goal title.
+  const original = await prisma.subtask.findFirst({
+    where: { id: subtaskId, goal: { week: { userId: fromUserId } } },
+    include: { goal: true },
+  });
+  if (!original) throw new Error("Subtask not found");
+
+  const recipient = await prisma.user.findUnique({ where: { id: toUserId } });
+  if (!recipient) throw new Error("Recipient not found");
+
+  // Don't share the same subtask to the same person twice.
+  const already = await prisma.subtaskShare.findUnique({
+    where: {
+      originalSubtaskId_toUserId: { originalSubtaskId: subtaskId, toUserId },
+    },
+  });
+  if (already) return;
+
+  const recipientWeek = await getOrCreateCurrentWeek(toUserId);
+
+  // Find a goal with the same title in the recipient's week, or create one.
+  const existingGoal = recipientWeek.goals.find(
+    (g) => g.title === original.goal.title,
+  );
+  const targetGoalId =
+    existingGoal?.id ??
+    (
+      await prisma.goal.create({
+        data: {
+          weekId: recipientWeek.id,
+          title: original.goal.title,
+          position: recipientWeek.goals.length + 1,
+        },
+      })
+    ).id;
+
+  const subtaskCount = await prisma.subtask.count({
+    where: { goalId: targetGoalId },
+  });
+
+  // Create the recipient's copy and record the share.
+  await prisma.subtask.create({
+    data: {
+      goalId: targetGoalId,
+      title: original.title,
+      position: subtaskCount + 1,
+      shareIn: {
+        create: {
+          originalSubtaskId: subtaskId,
+          fromUserId,
+          toUserId,
+        },
+      },
+    },
+  });
+
+  revalidatePath("/dashboard");
+}
+
+/**
+ * Archive the current week and start a fresh, empty one. Every goal that didn't
+ * reach 100% must have a reflection reason — enforced here, not just in the UI.
+ */
+export async function startNewWeek(
+  reasons: { goalId: string; reason: string }[] = [],
+) {
+  const userId = await requireUserId();
+  const week = await getOrCreateCurrentWeek(userId);
+
+  const reasonByGoal = new Map(
+    reasons.map((r) => [r.goalId, r.reason.trim()]),
+  );
+
+  // Goals below 100% require a non-empty reason before the week can close.
+  const incomplete = week.goals.filter((g) => goalPercent(g.subtasks) < 100);
+  for (const goal of incomplete) {
+    if (!reasonByGoal.get(goal.id)) {
+      throw new Error("A reason is required for every unfinished goal.");
+    }
+  }
+
+  const { start, end } = getWeekBounds();
+
+  await prisma.$transaction([
+    ...incomplete.map((goal) =>
+      prisma.goal.update({
+        where: { id: goal.id },
+        data: { incompleteReason: reasonByGoal.get(goal.id) },
+      }),
+    ),
+    prisma.week.updateMany({
+      where: { userId, isCurrent: true },
+      data: { isCurrent: false },
+    }),
+    prisma.week.create({
+      data: { userId, startDate: start, endDate: end, isCurrent: true },
+    }),
+  ]);
+  revalidatePath("/dashboard");
+}

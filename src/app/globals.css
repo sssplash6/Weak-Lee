@@ -1,26 +1,28 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/* Brand palette — minimal: blue for chrome/actions, orange for progress, grey neutrals. */
+@theme {
+  --color-canvas: #f5f5f6; /* page background */
+  --color-surface: #ffffff; /* cards */
+  --color-line: #e6e6e7; /* borders / tracks */
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-brand: #124b84; /* deep blue */
+  --color-brand-dark: #0e3c6a; /* hover */
+  --color-brand-soft: #e7eef5; /* tint background */
+
+  --color-accent: #f18d05; /* orange */
+  --color-accent-dark: #ed7a2d; /* hover */
+  --color-accent-soft: #fdebcf; /* tint background */
+
+  --color-ink: #1a2733; /* primary text */
+  --color-muted-fg: #6b7480; /* secondary text */
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }

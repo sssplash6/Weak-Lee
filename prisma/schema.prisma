@@ -1,0 +1,132 @@
+// Prisma schema for freshman.academy weekly goal tracker.
+// Prisma 7 uses the new `prisma-client` generator with a required output path.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ----- Auth.js (NextAuth) models -----
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+
+  accounts Account[]
+  sessions Session[]
+  weeks    Week[]
+
+  sharesSent     SubtaskShare[] @relation("SharesFrom")
+  sharesReceived SubtaskShare[] @relation("SharesTo")
+}
+
+model Account {
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([provider, providerAccountId])
+}
+
+model Session {
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@id([identifier, token])
+}
+
+// ----- App models -----
+
+model Week {
+  id        String   @id @default(cuid())
+  userId    String
+  startDate DateTime
+  endDate   DateTime
+  isCurrent Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  goals Goal[]
+
+  @@index([userId])
+  @@index([userId, isCurrent])
+}
+
+model Goal {
+  id               String   @id @default(cuid())
+  weekId           String
+  title            String
+  position         Int
+  // Reflection captured when closing a week if this goal didn't reach 100%.
+  incompleteReason String?
+  createdAt        DateTime @default(now())
+
+  week     Week      @relation(fields: [weekId], references: [id], onDelete: Cascade)
+  subtasks Subtask[]
+
+  @@index([weekId])
+}
+
+model Subtask {
+  id        String   @id @default(cuid())
+  goalId    String
+  title     String
+  isDone    Boolean  @default(false)
+  position  Int
+  createdAt DateTime @default(now())
+
+  goal Goal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+
+  // Delegation: a subtask may be the original of several shares (shared out)
+  // and/or the copy created by a single incoming share (received).
+  sharesOut SubtaskShare[] @relation("ShareOriginal")
+  shareIn   SubtaskShare?  @relation("ShareCopy")
+
+  @@index([goalId])
+}
+
+// A delegation of a subtask from one user to another. The original stays on the
+// sender's list (marked "shared to X"); a linked copy is added to the recipient.
+model SubtaskShare {
+  id                String   @id @default(cuid())
+  originalSubtaskId String
+  copySubtaskId     String   @unique
+  fromUserId        String
+  toUserId          String
+  createdAt         DateTime @default(now())
+
+  originalSubtask Subtask @relation("ShareOriginal", fields: [originalSubtaskId], references: [id], onDelete: Cascade)
+  copySubtask     Subtask @relation("ShareCopy", fields: [copySubtaskId], references: [id], onDelete: Cascade)
+  fromUser        User    @relation("SharesFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUser          User    @relation("SharesTo", fields: [toUserId], references: [id], onDelete: Cascade)
+
+  @@unique([originalSubtaskId, toUserId])
+  @@index([originalSubtaskId])
+}
