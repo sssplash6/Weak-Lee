@@ -1,10 +1,17 @@
 import type { NextAuthConfig } from "next-auth";
 import Google from "next-auth/providers/google";
 
-// Edge-safe Auth.js config (no database adapter). Shared between the middleware
-// (edge runtime) and the full server config in `src/auth.ts`.
+// Show Google sign-in only when its credentials are configured, so a demo that
+// relies on dev login doesn't surface a broken button.
+export const googleEnabled = !!process.env.AUTH_GOOGLE_ID;
+
+// Edge-safe Auth.js config (no database adapter). Shared between the proxy
+// (route protection) and the full server config in `src/auth.ts`.
 export const authConfig = {
-  providers: [Google],
+  // trustHost is required when running behind a proxy (Render, etc.) so Auth.js
+  // builds correct callback URLs from the forwarded host headers.
+  trustHost: true,
+  providers: googleEnabled ? [Google] : [],
   pages: {
     signIn: "/signin",
   },

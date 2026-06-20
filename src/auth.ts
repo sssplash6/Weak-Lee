@@ -4,9 +4,18 @@ import Credentials from "next-auth/providers/credentials";
 import { prisma } from "@/lib/prisma";
 import { authConfig } from "@/auth.config";
 
-// Dev-only login: a one-click "Continue as test student" that bypasses Google.
-// Enabled only when ALLOW_DEV_LOGIN=true (never set this in production).
+// Dev-only login: a one-click "Continue as test student" that bypasses real
+// auth. Enabled only when ALLOW_DEV_LOGIN=true. Anyone with the URL can sign in
+// as a shared account, so only enable it for throwaway demos — never for a real
+// deployment with user data.
 export const devLoginEnabled = process.env.ALLOW_DEV_LOGIN === "true";
+
+if (devLoginEnabled && process.env.NODE_ENV === "production") {
+  console.warn(
+    "[auth] ALLOW_DEV_LOGIN is enabled in production — this is an auth bypass. " +
+      "Disable it once real sign-in is configured.",
+  );
+}
 
 const devProviders = devLoginEnabled
   ? [

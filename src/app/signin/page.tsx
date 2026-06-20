@@ -1,4 +1,5 @@
 import { signIn, devLoginEnabled } from "@/auth";
+import { googleEnabled } from "@/auth.config";
 
 export default function SignInPage() {
   return (
@@ -15,20 +16,22 @@ export default function SignInPage() {
           </p>
         </div>
 
-        <form
-          action={async () => {
-            "use server";
-            await signIn("google", { redirectTo: "/dashboard" });
-          }}
-        >
-          <button
-            type="submit"
-            className="flex w-full items-center justify-center gap-3 rounded-lg border border-line bg-surface px-4 py-3 text-sm font-medium text-ink transition-colors hover:bg-canvas"
+        {googleEnabled && (
+          <form
+            action={async () => {
+              "use server";
+              await signIn("google", { redirectTo: "/dashboard" });
+            }}
           >
-            <GoogleIcon />
-            Continue with Google
-          </button>
-        </form>
+            <button
+              type="submit"
+              className="flex w-full items-center justify-center gap-3 rounded-lg border border-line bg-surface px-4 py-3 text-sm font-medium text-ink transition-colors hover:bg-canvas"
+            >
+              <GoogleIcon />
+              Continue with Google
+            </button>
+          </form>
+        )}
 
         {devLoginEnabled && (
           <form

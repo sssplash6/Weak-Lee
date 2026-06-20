@@ -1,0 +1,39 @@
+# Render Blueprint — provisions a Postgres database and the Next.js web service.
+# Deploy: push this repo to GitHub, then in Render: New → Blueprint → pick the repo.
+databases:
+  - name: freshman-weekly-db
+    plan: free
+    databaseName: freshman_weekly
+    user: freshman
+
+services:
+  - type: web
+    name: freshman-weekly-tracker
+    runtime: node
+    plan: free
+    # postinstall runs `prisma generate`; we then apply migrations and build.
+    buildCommand: npm install && npx prisma migrate deploy && npm run build
+    startCommand: npm run start
+    healthCheckPath: /signin
+    envVars:
+      # Wired automatically from the database above.
+      - key: DATABASE_URL
+        fromDatabase:
+          name: freshman-weekly-db
+          property: connectionString
+      # Auth.js session secret — Render generates a strong random value.
+      - key: AUTH_SECRET
+        generateValue: true
+      - key: AUTH_TRUST_HOST
+        value: "true"
+      # One-click test login that BYPASSES real auth (anyone with the URL signs
+      # in as a shared test account). Left unset on purpose so the committed
+      # blueprint never ships a bypass. To demo without Google, set this to
+      # "true" in the Render dashboard; remove it once Google sign-in is set up.
+      - key: ALLOW_DEV_LOGIN
+        sync: false
+      # Optional: fill these in to enable "Continue with Google".
+      - key: AUTH_GOOGLE_ID
+        sync: false
+      - key: AUTH_GOOGLE_SECRET
+        sync: false
