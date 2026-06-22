@@ -55,6 +55,31 @@ export async function getOrCreateCurrentWeek(userId: string) {
   });
 }
 
+/**
+ * Past weeks (already closed out), newest first, with goals and subtasks loaded
+ * lean — just what the archive sidebar needs to show completion rates.
+ */
+export async function getArchivedWeeks(userId: string) {
+  return prisma.week.findMany({
+    where: { userId, isCurrent: false },
+    orderBy: { startDate: "desc" },
+    include: {
+      goals: {
+        orderBy: { position: "asc" },
+        select: {
+          id: true,
+          title: true,
+          incompleteReason: true,
+          subtasks: {
+            orderBy: { position: "asc" },
+            select: { id: true, title: true, isDone: true },
+          },
+        },
+      },
+    },
+  });
+}
+
 export type CurrentWeek = Awaited<ReturnType<typeof getOrCreateCurrentWeek>>;
 export type WeekGoal = CurrentWeek["goals"][number];
 export type GoalSubtask = WeekGoal["subtasks"][number];

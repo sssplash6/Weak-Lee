@@ -1,12 +1,13 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { getOrCreateCurrentWeek } from "@/lib/weeks";
+import { getArchivedWeeks, getOrCreateCurrentWeek } from "@/lib/weeks";
 import { goalPercent, weekPercent } from "@/lib/progress";
 import { GoalCard } from "./_components/GoalCard";
 import { AddGoalCard } from "./_components/AddGoalCard";
 import { ProfileMenu } from "./_components/ProfileMenu";
 import { WeekProgress } from "./_components/WeekProgress";
 import { StartNewWeekButton } from "./_components/StartNewWeekButton";
+import { WeekArchive } from "./_components/WeekArchive";
 
 function formatRange(start: Date, end: Date): string {
   const fmt = (d: Date) =>
@@ -22,13 +23,14 @@ export default async function DashboardPage() {
   const session = await auth();
   const userId = session!.user.id;
 
-  const [week, members] = await Promise.all([
+  const [week, members, archivedWeeks] = await Promise.all([
     getOrCreateCurrentWeek(userId),
     prisma.user.findMany({
       where: { id: { not: userId } },
       select: { id: true, name: true, email: true },
       orderBy: [{ name: "asc" }, { email: "asc" }],
     }),
+    getArchivedWeeks(userId),
   ]);
 
   const overall = weekPercent(week.goals);
@@ -52,9 +54,33 @@ export default async function DashboardPage() {
 
   const team = members.map((m) => ({ id: m.id, name: displayName(m) }));
 
+  const archive = archivedWeeks.map((w) => ({
+    id: w.id,
+    label: formatRange(w.startDate, w.endDate),
+    percent: weekPercent(w.goals),
+    goals: w.goals.map((g) => ({
+      id: g.id,
+      title: g.title,
+      percent: goalPercent(g.subtasks),
+      incompleteReason: g.incompleteReason,
+      subtasks: g.subtasks.map((s) => ({
+        id: s.id,
+        title: s.title,
+        isDone: s.isDone,
+      })),
+    })),
+  }));
+
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-5 py-8">
-      <header className="mb-8 flex items-start justify-between gap-4">
+    <div className="mx-auto flex w-full max-w-6xl flex-1 gap-6 px-4 py-8">
+      <aside className="hidden w-64 shrink-0 lg:block">
+        <div className="sticky top-8">
+          <WeekArchive weeks={archive} />
+        </div>
+      </aside>
+
+      <main className="flex w-full min-w-0 max-w-3xl flex-1 flex-col">
+        <header className="mb-8 flex items-start justify-between gap-4">
         <div>
           <div className="text-xs font-semibold uppercase tracking-widest text-brand">
             freshman.academy
@@ -87,9 +113,13 @@ export default async function DashboardPage() {
         )}
       </section>
 
-      <footer className="mt-10 border-t border-line pt-6">
-        <StartNewWeekButton incompleteGoals={incompleteGoals} />
-      </footer>
-    </main>
+        <footer className="mt-10 border-t border-line pt-6">
+          <StartNewWeekButton incompleteGoals={incompleteGoals} />
+        </footer>
+      </main>
+
+      {/* Reserved for the right-side panel (coming next). */}
+      <aside className="hidden w-64 shrink-0 xl:block" aria-hidden />
+    </div>
   );
 }
