@@ -18,8 +18,8 @@ const MONTHS = [
   "Dec",
 ];
 
-// One day-cell row is h-8 (32px) plus the grid's gap-1 (4px) below it.
-const ROW_HEIGHT = 36;
+// One week row is h-8 (32px) plus its separator margin/padding/border (~10px).
+const ROW_HEIGHT = 42;
 const MIN_WEEKS = 1;
 const MAX_WEEKS = 16;
 
@@ -87,10 +87,19 @@ export function WeekCalendar() {
           ))}
         </div>
 
-        <div ref={rowsRef} className="mt-1 grid grid-cols-7 gap-1 text-center">
+        <div ref={rowsRef} className="mt-1">
           {today ? (
-            buildDays(today, weeks).map((d) => (
-              <DayCell key={d.toISOString()} date={d} today={today} />
+            buildWeeks(today, weeks).map((week, wi) => (
+              <div
+                key={week[0].toISOString()}
+                className={`grid grid-cols-7 gap-1 text-center ${
+                  wi > 0 ? "mt-1.5 border-t border-line pt-1.5" : ""
+                }`}
+              >
+                {week.map((d) => (
+                  <DayCell key={d.toISOString()} date={d} today={today} />
+                ))}
+              </div>
             ))
           ) : (
             <Skeleton weeks={weeks} />
@@ -108,6 +117,11 @@ function buildDays(today: Date, weeks: number): Date[] {
     d.setDate(monday.getDate() + i);
     return d;
   });
+}
+
+function buildWeeks(today: Date, weeks: number): Date[][] {
+  const days = buildDays(today, weeks);
+  return Array.from({ length: weeks }, (_, w) => days.slice(w * 7, w * 7 + 7));
 }
 
 function Heading({ today, weeks }: { today: Date | null; weeks: number }) {
@@ -151,8 +165,17 @@ function DayCell({ date, today }: { date: Date; today: Date }) {
 function Skeleton({ weeks }: { weeks: number }) {
   return (
     <>
-      {Array.from({ length: weeks * 7 }, (_, i) => (
-        <div key={i} className="h-8 rounded-full bg-canvas" />
+      {Array.from({ length: weeks }, (_, w) => (
+        <div
+          key={w}
+          className={`grid grid-cols-7 gap-1 ${
+            w > 0 ? "mt-1.5 border-t border-line pt-1.5" : ""
+          }`}
+        >
+          {Array.from({ length: 7 }, (_, i) => (
+            <div key={i} className="h-8 rounded-full bg-canvas" />
+          ))}
+        </div>
       ))}
     </>
   );
