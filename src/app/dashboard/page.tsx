@@ -8,6 +8,7 @@ import { ProfileMenu } from "./_components/ProfileMenu";
 import { WeekProgress } from "./_components/WeekProgress";
 import { StartNewWeekButton } from "./_components/StartNewWeekButton";
 import { WeekArchive } from "./_components/WeekArchive";
+import { WeekCalendar } from "./_components/WeekCalendar";
 
 function formatRange(start: Date, end: Date): string {
   const fmt = (d: Date) =>
@@ -118,8 +119,11 @@ export default async function DashboardPage() {
         </footer>
       </main>
 
-      {/* Reserved for the right-side panel (coming next). */}
-      <aside className="hidden w-64 shrink-0 xl:block" aria-hidden />
+      <aside className="hidden w-64 shrink-0 xl:block">
+        <div className="sticky top-8">
+          <WeekCalendar />
+        </div>
+      </aside>
     </div>
   );
 }
