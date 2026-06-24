@@ -14,10 +14,12 @@ import {
   deleteSubtask,
   renameGoal,
   setGoalCompleted,
+  setGoalDeadline,
   shareSubtask,
   toggleSubtask,
 } from "../actions";
 import { CheckCircleIcon, ShareIcon, TrashIcon } from "./icons";
+import { DeadlinePicker } from "./DeadlinePicker";
 
 type SubtaskView = {
   id: string;
@@ -31,6 +33,7 @@ type GoalView = {
   id: string;
   title: string;
   completed: boolean;
+  deadline: string | null;
   subtasks: SubtaskView[];
 };
 
@@ -45,15 +48,21 @@ export function GoalCard({
   goal,
   index,
   team,
+  todayYmd,
 }: {
   goal: GoalView;
   index: number;
   team: TeamMember[];
+  todayYmd: string;
 }) {
   const [isPending, startTransition] = useTransition();
   const [completed, applyCompleted] = useOptimistic(
     goal.completed,
     (_state: boolean, next: boolean) => next,
+  );
+  const [deadline, applyDeadline] = useOptimistic(
+    goal.deadline,
+    (_state: string | null, next: string | null) => next,
   );
   const [subtasks, applyOptimistic] = useOptimistic(
     goal.subtasks,
@@ -104,6 +113,16 @@ export function GoalCard({
     });
   }
 
+  function onSetDeadline(next: string | null) {
+    startTransition(async () => {
+      applyDeadline(next);
+      await setGoalDeadline(goal.id, next);
+    });
+  }
+
+  // Overdue only matters while the goal is still open.
+  const overdue = !completed && deadline != null && deadline < todayYmd;
+
   return (
     <article
       className={`rounded-2xl border bg-surface p-5 shadow-sm transition-colors ${
@@ -118,6 +137,12 @@ export function GoalCard({
         <span className="ml-auto shrink-0 text-sm font-semibold tabular-nums text-accent">
           {percent}%
         </span>
+        <DeadlinePicker
+          value={deadline}
+          todayYmd={todayYmd}
+          overdue={overdue}
+          onChange={onSetDeadline}
+        />
         <CompleteButton
           completed={completed}
           allDone={percent === 100}
@@ -177,30 +202,28 @@ function CompleteButton({
       <button
         type="button"
         onClick={onToggle}
-        title="Mark as not completed"
-        className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-brand px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-brand-dark"
+        title="Completed — click to reopen"
+        aria-label="Mark goal as not completed"
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand text-white transition hover:bg-brand-dark"
       >
-        <CheckCircleIcon className="h-3.5 w-3.5" />
-        Completed
+        <CheckCircleIcon className="h-5 w-5" />
       </button>
     );
   }
 
-  // Not completed yet. Emphasize once every subtask is done — that's the moment
-  // a user is most likely to want to confirm the goal itself is finished.
+  // Not completed yet. Brighten the tick once every subtask is done — that's the
+  // moment a user is most likely to want to confirm the goal itself is finished.
   return (
     <button
       type="button"
       onClick={onToggle}
       title="Mark this goal as completed"
-      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold transition ${
-        allDone
-          ? "border-transparent bg-brand text-white hover:bg-brand-dark"
-          : "border-brand text-brand hover:bg-brand-soft"
+      aria-label="Mark goal as completed"
+      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition hover:bg-brand-soft ${
+        allDone ? "text-brand" : "text-muted-fg hover:text-brand"
       }`}
     >
-      <CheckCircleIcon className="h-3.5 w-3.5" />
-      Mark as completed
+      <CheckCircleIcon className="h-5 w-5" />
     </button>
   );
 }

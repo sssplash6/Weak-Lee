@@ -89,6 +89,8 @@ model Goal {
   // Set when the user explicitly marks the goal done. Finishing every subtask
   // does NOT complete a goal on its own — completion is always a deliberate act.
   completedAt      DateTime?
+  // Optional due date (stored at UTC midnight; the app treats it as date-only).
+  deadline         DateTime?
   createdAt        DateTime  @default(now())
 
   week     Week      @relation(fields: [weekId], references: [id], onDelete: Cascade)

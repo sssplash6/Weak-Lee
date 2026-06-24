@@ -2,6 +2,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { getArchivedWeeks, getOrCreateCurrentWeek } from "@/lib/weeks";
 import { goalPercent, isGoalComplete, weekPercent } from "@/lib/progress";
+import { toYmd } from "@/lib/dates";
 import { GoalCard } from "./_components/GoalCard";
 import { AddGoalCard } from "./_components/AddGoalCard";
 import { ProfileMenu } from "./_components/ProfileMenu";
@@ -40,11 +41,14 @@ export default async function DashboardPage() {
     .filter((g) => !isGoalComplete(g))
     .map((g) => ({ id: g.id, title: g.title, percent: goalPercent(g.subtasks) }));
 
+  const todayYmd = toYmd(new Date());
+
   // Flatten to a serializable shape for the client components.
   const goals = week.goals.map((goal) => ({
     id: goal.id,
     title: goal.title,
     completed: isGoalComplete(goal),
+    deadline: goal.deadline ? toYmd(goal.deadline) : null,
     subtasks: goal.subtasks.map((s) => ({
       id: s.id,
       title: s.title,
@@ -104,7 +108,13 @@ export default async function DashboardPage() {
 
       <section className="flex flex-col gap-4">
         {goals.map((goal, i) => (
-          <GoalCard key={goal.id} goal={goal} index={i + 1} team={team} />
+          <GoalCard
+            key={goal.id}
+            goal={goal}
+            index={i + 1}
+            team={team}
+            todayYmd={todayYmd}
+          />
         ))}
 
         <AddGoalCard nextIndex={goals.length + 1} />

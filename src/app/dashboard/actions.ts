@@ -68,6 +68,25 @@ export async function setGoalCompleted(goalId: string, completed: boolean) {
   revalidatePath("/dashboard");
 }
 
+/**
+ * Set or clear a goal's deadline. Accepts a "YYYY-MM-DD" string (stored at UTC
+ * midnight, treated as date-only) or null to remove the deadline.
+ */
+export async function setGoalDeadline(goalId: string, ymd: string | null) {
+  const userId = await requireUserId();
+  await assertGoalOwned(goalId, userId);
+
+  let deadline: Date | null = null;
+  if (ymd) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) throw new Error("Invalid date");
+    deadline = new Date(`${ymd}T00:00:00.000Z`);
+    if (Number.isNaN(deadline.getTime())) throw new Error("Invalid date");
+  }
+
+  await prisma.goal.update({ where: { id: goalId }, data: { deadline } });
+  revalidatePath("/dashboard");
+}
+
 export async function deleteGoal(goalId: string) {
   const userId = await requireUserId();
   await assertGoalOwned(goalId, userId);
