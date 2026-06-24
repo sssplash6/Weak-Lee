@@ -80,8 +80,8 @@ export function StartNewWeekButton({
             Reflect before you close the week
           </h2>
           <p className="mt-1 text-sm text-muted-fg">
-            These goals didn&rsquo;t reach 100%. Note why before starting a new
-            week — every goal needs a reason.
+            These goals weren&rsquo;t marked complete. Note why before starting a
+            new week — every goal needs a reason.
           </p>
 
           <div className="mt-4 flex flex-col gap-4">
@@ -101,7 +101,7 @@ export function StartNewWeekButton({
                     setReasons((r) => ({ ...r, [g.id]: e.target.value }))
                   }
                   rows={3}
-                  placeholder="What got in the way of reaching 100%?"
+                  placeholder="What got in the way of finishing this goal?"
                   className="mt-1.5 w-full resize-y rounded-lg border border-line px-3 py-2 text-sm text-ink placeholder:text-muted-fg focus:border-brand focus:outline-none"
                 />
               </div>

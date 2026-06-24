@@ -15,6 +15,17 @@ export function getWeekBounds(date = new Date()): { start: Date; end: Date } {
   return { start, end };
 }
 
+/**
+ * Bounds of the week immediately following the one that ends at `prevEnd`.
+ * Used when starting a new week so consecutive weeks get distinct, sequential
+ * date ranges instead of all reusing the current calendar week.
+ */
+export function nextWeekBounds(prevEnd: Date): { start: Date; end: Date } {
+  const next = new Date(prevEnd);
+  next.setDate(next.getDate() + 1); // step into the following week
+  return getWeekBounds(next);
+}
+
 // Loads a week with its goals, subtasks, and delegation info. Inlined at both
 // call sites so Prisma infers the full relation payload type.
 const weekInclude = {
@@ -70,6 +81,7 @@ export async function getArchivedWeeks(userId: string) {
           id: true,
           title: true,
           incompleteReason: true,
+          completedAt: true,
           subtasks: {
             orderBy: { position: "asc" },
             select: { id: true, title: true, isDone: true },

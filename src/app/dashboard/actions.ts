@@ -3,8 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { getOrCreateCurrentWeek, getWeekBounds } from "@/lib/weeks";
-import { goalPercent } from "@/lib/progress";
+import { getOrCreateCurrentWeek, nextWeekBounds } from "@/lib/weeks";
+import { isGoalComplete } from "@/lib/progress";
 
 async function requireUserId(): Promise<string> {
   const session = await auth();
@@ -51,6 +51,20 @@ export async function renameGoal(goalId: string, title: string) {
   if (!trimmed) return;
   await assertGoalOwned(goalId, userId);
   await prisma.goal.update({ where: { id: goalId }, data: { title: trimmed } });
+  revalidatePath("/dashboard");
+}
+
+/**
+ * Mark a goal complete (or reopen it). Completion is always a deliberate act —
+ * finishing every subtask does not complete the goal on its own.
+ */
+export async function setGoalCompleted(goalId: string, completed: boolean) {
+  const userId = await requireUserId();
+  await assertGoalOwned(goalId, userId);
+  await prisma.goal.update({
+    where: { id: goalId },
+    data: { completedAt: completed ? new Date() : null },
+  });
   revalidatePath("/dashboard");
 }
 
@@ -157,8 +171,8 @@ export async function shareSubtask(subtaskId: string, toUserId: string) {
 }
 
 /**
- * Archive the current week and start a fresh, empty one. Every goal that didn't
- * reach 100% must have a reflection reason — enforced here, not just in the UI.
+ * Archive the current week and start a fresh, empty one. Every goal that wasn't
+ * marked complete must have a reflection reason — enforced here, not just in the UI.
  */
 export async function startNewWeek(
   reasons: { goalId: string; reason: string }[] = [],
@@ -170,15 +184,17 @@ export async function startNewWeek(
     reasons.map((r) => [r.goalId, r.reason.trim()]),
   );
 
-  // Goals below 100% require a non-empty reason before the week can close.
-  const incomplete = week.goals.filter((g) => goalPercent(g.subtasks) < 100);
+  // Goals that weren't marked complete require a reason before the week can close.
+  const incomplete = week.goals.filter((g) => !isGoalComplete(g));
   for (const goal of incomplete) {
     if (!reasonByGoal.get(goal.id)) {
       throw new Error("A reason is required for every unfinished goal.");
     }
   }
 
-  const { start, end } = getWeekBounds();
+  // The new week follows the one being closed, so ranges stay sequential and
+  // never collide — even when several weeks are closed within one calendar week.
+  const { start, end } = nextWeekBounds(week.endDate);
 
   await prisma.$transaction([
     ...incomplete.map((goal) =>

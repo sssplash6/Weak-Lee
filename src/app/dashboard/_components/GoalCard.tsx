@@ -13,10 +13,11 @@ import {
   deleteGoal,
   deleteSubtask,
   renameGoal,
+  setGoalCompleted,
   shareSubtask,
   toggleSubtask,
 } from "../actions";
-import { ShareIcon, TrashIcon } from "./icons";
+import { CheckCircleIcon, ShareIcon, TrashIcon } from "./icons";
 
 type SubtaskView = {
   id: string;
@@ -29,6 +30,7 @@ type SubtaskView = {
 type GoalView = {
   id: string;
   title: string;
+  completed: boolean;
   subtasks: SubtaskView[];
 };
 
@@ -49,6 +51,10 @@ export function GoalCard({
   team: TeamMember[];
 }) {
   const [isPending, startTransition] = useTransition();
+  const [completed, applyCompleted] = useOptimistic(
+    goal.completed,
+    (_state: boolean, next: boolean) => next,
+  );
   const [subtasks, applyOptimistic] = useOptimistic(
     goal.subtasks,
     (state: SubtaskView[], action: OptAction) => {
@@ -90,16 +96,33 @@ export function GoalCard({
     });
   }
 
+  function onToggleCompleted() {
+    const next = !completed;
+    startTransition(async () => {
+      applyCompleted(next);
+      await setGoalCompleted(goal.id, next);
+    });
+  }
+
   return (
-    <article className="rounded-2xl border border-line bg-surface p-5 shadow-sm">
+    <article
+      className={`rounded-2xl border bg-surface p-5 shadow-sm transition-colors ${
+        completed ? "border-brand ring-1 ring-brand/20" : "border-line"
+      }`}
+    >
       <div className="flex items-center gap-3">
         <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-soft text-xs font-bold text-brand">
           {index}
         </span>
         <GoalTitle goalId={goal.id} title={goal.title} />
-        <span className="ml-auto text-sm font-semibold tabular-nums text-accent">
+        <span className="ml-auto shrink-0 text-sm font-semibold tabular-nums text-accent">
           {percent}%
         </span>
+        <CompleteButton
+          completed={completed}
+          allDone={percent === 100}
+          onToggle={onToggleCompleted}
+        />
         <DeleteGoalButton goalId={goal.id} />
       </div>
 
@@ -137,6 +160,48 @@ export function GoalCard({
         }
       />
     </article>
+  );
+}
+
+function CompleteButton({
+  completed,
+  allDone,
+  onToggle,
+}: {
+  completed: boolean;
+  allDone: boolean;
+  onToggle: () => void;
+}) {
+  if (completed) {
+    return (
+      <button
+        type="button"
+        onClick={onToggle}
+        title="Mark as not completed"
+        className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-brand px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-brand-dark"
+      >
+        <CheckCircleIcon className="h-3.5 w-3.5" />
+        Completed
+      </button>
+    );
+  }
+
+  // Not completed yet. Emphasize once every subtask is done — that's the moment
+  // a user is most likely to want to confirm the goal itself is finished.
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      title="Mark this goal as completed"
+      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold transition ${
+        allDone
+          ? "border-transparent bg-brand text-white hover:bg-brand-dark"
+          : "border-brand text-brand hover:bg-brand-soft"
+      }`}
+    >
+      <CheckCircleIcon className="h-3.5 w-3.5" />
+      Mark as completed
+    </button>
   );
 }
 

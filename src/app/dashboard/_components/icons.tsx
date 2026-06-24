@@ -25,6 +25,25 @@ export function TrashIcon({ className }: IconProps) {
   );
 }
 
+/** A circle with a check — used for the "mark as completed" action. */
+export function CheckCircleIcon({ className }: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="9" />
+      <path d="M8.5 12.2l2.4 2.4 4.6-4.8" />
+    </svg>
+  );
+}
+
 /** A small "send / delegate" icon (paper plane). */
 export function ShareIcon({ className }: IconProps) {
   return (

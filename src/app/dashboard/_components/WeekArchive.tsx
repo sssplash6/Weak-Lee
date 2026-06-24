@@ -8,6 +8,7 @@ type ArchivedGoal = {
   id: string;
   title: string;
   percent: number;
+  completed: boolean;
   incompleteReason: string | null;
   subtasks: ArchivedSubtask[];
 };
@@ -108,6 +109,11 @@ function GoalSummary({ goal }: { goal: ArchivedGoal }) {
         <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">
           {goal.title}
         </span>
+        {goal.completed && (
+          <span className="shrink-0 text-xs font-semibold text-brand">
+            ✓ Completed
+          </span>
+        )}
         <span className="shrink-0 text-xs font-semibold tabular-nums text-accent">
           {goal.percent}%
         </span>

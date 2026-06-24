@@ -1,7 +1,7 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { getArchivedWeeks, getOrCreateCurrentWeek } from "@/lib/weeks";
-import { goalPercent, weekPercent } from "@/lib/progress";
+import { goalPercent, isGoalComplete, weekPercent } from "@/lib/progress";
 import { GoalCard } from "./_components/GoalCard";
 import { AddGoalCard } from "./_components/AddGoalCard";
 import { ProfileMenu } from "./_components/ProfileMenu";
@@ -37,13 +37,14 @@ export default async function DashboardPage() {
   const overall = weekPercent(week.goals);
 
   const incompleteGoals = week.goals
-    .map((g) => ({ id: g.id, title: g.title, percent: goalPercent(g.subtasks) }))
-    .filter((g) => g.percent < 100);
+    .filter((g) => !isGoalComplete(g))
+    .map((g) => ({ id: g.id, title: g.title, percent: goalPercent(g.subtasks) }));
 
   // Flatten to a serializable shape for the client components.
   const goals = week.goals.map((goal) => ({
     id: goal.id,
     title: goal.title,
+    completed: isGoalComplete(goal),
     subtasks: goal.subtasks.map((s) => ({
       id: s.id,
       title: s.title,
@@ -63,6 +64,7 @@ export default async function DashboardPage() {
       id: g.id,
       title: g.title,
       percent: goalPercent(g.subtasks),
+      completed: isGoalComplete(g),
       incompleteReason: g.incompleteReason,
       subtasks: g.subtasks.map((s) => ({
         id: s.id,

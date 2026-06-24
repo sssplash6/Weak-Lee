@@ -84,9 +84,12 @@ model Goal {
   weekId           String
   title            String
   position         Int
-  // Reflection captured when closing a week if this goal didn't reach 100%.
+  // Reflection captured when closing a week if this goal wasn't marked complete.
   incompleteReason String?
-  createdAt        DateTime @default(now())
+  // Set when the user explicitly marks the goal done. Finishing every subtask
+  // does NOT complete a goal on its own — completion is always a deliberate act.
+  completedAt      DateTime?
+  createdAt        DateTime  @default(now())
 
   week     Week      @relation(fields: [weekId], references: [id], onDelete: Cascade)
   subtasks Subtask[]
