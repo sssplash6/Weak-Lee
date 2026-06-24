@@ -4,48 +4,42 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 const WEEKDAYS = ["M", "T", "W", "T", "F", "S", "S"];
 const MONTHS = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
 ];
 
-// One week row is h-8 (32px) plus its separator margin/padding/border (~10px).
-const ROW_HEIGHT = 42;
-const MIN_WEEKS = 1;
-const MAX_WEEKS = 16;
+// How many months to render around the current one so there's room to scroll.
+const MONTHS_BEFORE = 1;
+const MONTHS_AFTER = 13;
 
-/** Monday of the week containing `date` (weeks run Mon–Sun, like the tracker). */
-function mondayOf(date: Date): Date {
-  const d = new Date(date);
-  const diffToMonday = (d.getDay() + 6) % 7;
-  d.setDate(d.getDate() - diffToMonday);
-  d.setHours(0, 0, 0, 0);
-  return d;
+// Cap how many dots we draw under a day so a busy day doesn't overflow the cell.
+const MAX_DOTS = 4;
+
+function pad(n: number): string {
+  return String(n).padStart(2, "0");
 }
 
-function sameDay(a: Date, b: Date): boolean {
-  return a.toDateString() === b.toDateString();
+/** "YYYY-MM-DD" from calendar parts (month is 0-based). */
+function ymd(y: number, m: number, d: number): string {
+  return `${y}-${pad(m + 1)}-${pad(d)}`;
 }
+
+type Month = { y: number; m: number };
 
 // useLayoutEffect on the client, no-op on the server (avoids SSR warning).
 const useIsoLayoutEffect =
   typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
-export function WeekCalendar() {
-  // Resolve the date on the client so "today" matches the viewer's timezone.
-  // Render a skeleton until mounted to avoid a server/client hydration mismatch.
+export function WeekCalendar({
+  deadlines,
+}: {
+  deadlines: Record<string, number>;
+}) {
+  // Resolve "today" on the client so it matches the viewer's timezone. Render a
+  // skeleton until mounted to avoid a server/client hydration mismatch.
   const [today, setToday] = useState<Date | null>(null);
-  const [weeks, setWeeks] = useState(6);
-  const rowsRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [index, setIndex] = useState(MONTHS_BEFORE);
 
   useEffect(() => {
     // Read the wall clock once after mount (an external system, per the rule).
@@ -53,20 +47,29 @@ export function WeekCalendar() {
     setToday(new Date());
   }, []);
 
-  // Fit as many week rows as the available height below the grid allows.
+  const months = today ? buildMonths(today) : [];
+
+  // Jump to the current month once mounted (no smooth scroll on first paint).
   useIsoLayoutEffect(() => {
-    function measure() {
-      const el = rowsRef.current;
-      if (!el) return;
-      const top = el.getBoundingClientRect().top;
-      const available = window.innerHeight - top - 16; // leave a little breathing room
-      const fit = Math.floor(available / ROW_HEIGHT);
-      setWeeks(Math.max(MIN_WEEKS, Math.min(MAX_WEEKS, fit)));
-    }
-    measure();
-    window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
+    const el = scrollRef.current;
+    if (!el || !today) return;
+    el.scrollLeft = MONTHS_BEFORE * el.clientWidth;
+    setIndex(MONTHS_BEFORE);
   }, [today]);
+
+  function go(delta: number) {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollBy({ left: delta * el.clientWidth, behavior: "smooth" });
+  }
+
+  function onScroll() {
+    const el = scrollRef.current;
+    if (!el) return;
+    setIndex(Math.round(el.scrollLeft / el.clientWidth));
+  }
+
+  const heading = months[index];
 
   return (
     <div>
@@ -74,7 +77,13 @@ export function WeekCalendar() {
         Calendar
       </h2>
       <div className="mt-3 rounded-xl border border-line bg-surface p-3">
-        <Heading today={today} weeks={weeks} />
+        <div className="mb-2 flex items-center justify-between">
+          <NavButton onClick={() => go(-1)} dir="prev" disabled={!today} />
+          <span className="text-sm font-bold text-ink">
+            {heading ? `${MONTHS[heading.m]} ${heading.y}` : ""}
+          </span>
+          <NavButton onClick={() => go(1)} dir="next" disabled={!today} />
+        </div>
 
         <div className="grid grid-cols-7 gap-1 text-center">
           {WEEKDAYS.map((label, i) => (
@@ -87,96 +96,142 @@ export function WeekCalendar() {
           ))}
         </div>
 
-        <div ref={rowsRef} className="mt-1">
-          {today ? (
-            buildWeeks(today, weeks).map((week, wi) => (
-              <div
-                key={week[0].toISOString()}
-                className={`grid grid-cols-7 gap-1 text-center ${
-                  wi > 0 ? "mt-1.5 border-t border-line pt-1.5" : ""
-                }`}
-              >
-                {week.map((d) => (
-                  <DayCell key={d.toISOString()} date={d} today={today} />
-                ))}
-              </div>
-            ))
-          ) : (
-            <Skeleton weeks={weeks} />
-          )}
-        </div>
+        {today ? (
+          <div
+            ref={scrollRef}
+            onScroll={onScroll}
+            className="mt-1 flex snap-x snap-mandatory overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          >
+            {months.map((mo) => (
+              <MonthGrid
+                key={`${mo.y}-${mo.m}`}
+                month={mo}
+                today={today}
+                deadlines={deadlines}
+              />
+            ))}
+          </div>
+        ) : (
+          <Skeleton />
+        )}
       </div>
     </div>
   );
 }
 
-function buildDays(today: Date, weeks: number): Date[] {
-  const monday = mondayOf(today);
-  return Array.from({ length: weeks * 7 }, (_, i) => {
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + i);
-    return d;
-  });
-}
-
-function buildWeeks(today: Date, weeks: number): Date[][] {
-  const days = buildDays(today, weeks);
-  return Array.from({ length: weeks }, (_, w) => days.slice(w * 7, w * 7 + 7));
-}
-
-function Heading({ today, weeks }: { today: Date | null; weeks: number }) {
-  if (!today) return <div className="mb-2 h-5 w-24 rounded bg-line" />;
-
-  const days = buildDays(today, weeks);
-  const first = days[0];
-  const last = days[days.length - 1];
-  const sameYear = first.getFullYear() === last.getFullYear();
-  const sameMonth = sameYear && first.getMonth() === last.getMonth();
-
-  const text = sameMonth
-    ? `${MONTHS[first.getMonth()]} ${first.getFullYear()}`
-    : sameYear
-      ? `${MONTHS[first.getMonth()]} – ${MONTHS[last.getMonth()]} ${last.getFullYear()}`
-      : `${MONTHS[first.getMonth()]} ${first.getFullYear()} – ${MONTHS[last.getMonth()]} ${last.getFullYear()}`;
-
-  return <div className="mb-2 px-0.5 text-sm font-bold text-ink">{text}</div>;
-}
-
-function DayCell({ date, today }: { date: Date; today: Date }) {
-  const isToday = sameDay(date, today);
-  const isFirstOfMonth = date.getDate() === 1;
+function MonthGrid({
+  month,
+  today,
+  deadlines,
+}: {
+  month: Month;
+  today: Date;
+  deadlines: Record<string, number>;
+}) {
+  const todayYmd = ymd(today.getFullYear(), today.getMonth(), today.getDate());
 
   return (
-    <div
-      className={`relative flex h-8 items-center justify-center rounded-full text-sm tabular-nums ${
-        isToday ? "bg-brand font-bold text-white" : "font-medium text-ink"
-      }`}
-    >
-      {isFirstOfMonth && !isToday && (
-        <span className="absolute left-1/2 top-0 -translate-x-1/2 text-[8px] font-semibold uppercase leading-none text-brand">
-          {MONTHS[date.getMonth()]}
-        </span>
-      )}
-      {date.getDate()}
+    <div className="w-full shrink-0 snap-start">
+      <div className="grid grid-cols-7 gap-1 text-center">
+        {buildGrid(month.y, month.m).map((day, i) =>
+          day === null ? (
+            <div key={i} className="h-9" />
+          ) : (
+            <DayCell
+              key={i}
+              day={day}
+              cell={ymd(month.y, month.m, day)}
+              todayYmd={todayYmd}
+              count={deadlines[ymd(month.y, month.m, day)] ?? 0}
+            />
+          ),
+        )}
+      </div>
     </div>
   );
 }
 
-function Skeleton({ weeks }: { weeks: number }) {
+function DayCell({
+  day,
+  cell,
+  todayYmd,
+  count,
+}: {
+  day: number;
+  cell: string;
+  todayYmd: string;
+  count: number;
+}) {
+  const isToday = cell === todayYmd;
+  const dots = Math.min(count, MAX_DOTS);
+
   return (
-    <>
-      {Array.from({ length: weeks }, (_, w) => (
-        <div
-          key={w}
-          className={`grid grid-cols-7 gap-1 ${
-            w > 0 ? "mt-1.5 border-t border-line pt-1.5" : ""
-          }`}
-        >
-          {Array.from({ length: 7 }, (_, i) => (
-            <div key={i} className="h-8 rounded-full bg-canvas" />
-          ))}
-        </div>
-      ))}
-    </>
+    <div className="flex h-9 flex-col items-center justify-start pt-1">
+      <span
+        className={`text-sm tabular-nums ${
+          isToday ? "font-bold text-brand" : "font-medium text-ink"
+        }`}
+      >
+        {day}
+      </span>
+      <span className="mt-0.5 flex h-1.5 items-center justify-center gap-0.5">
+        {isToday && <span className="h-1.5 w-1.5 rounded-full bg-accent" />}
+        {Array.from({ length: dots }, (_, i) => (
+          <span key={i} className="h-1 w-1 rounded-full bg-brand" />
+        ))}
+      </span>
+    </div>
   );
+}
+
+function NavButton({
+  onClick,
+  dir,
+  disabled,
+}: {
+  onClick: () => void;
+  dir: "prev" | "next";
+  disabled: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={dir === "prev" ? "Previous month" : "Next month"}
+      className="flex h-6 w-6 items-center justify-center rounded text-muted-fg transition hover:bg-canvas hover:text-ink disabled:opacity-40"
+    >
+      {dir === "prev" ? "‹" : "›"}
+    </button>
+  );
+}
+
+function Skeleton() {
+  return (
+    <div className="mt-1 grid grid-cols-7 gap-1">
+      {Array.from({ length: 35 }, (_, i) => (
+        <div key={i} className="h-9 rounded bg-canvas" />
+      ))}
+    </div>
+  );
+}
+
+/** Months to render, oldest first: a window around `today`. */
+function buildMonths(today: Date): Month[] {
+  const base = new Date(today.getFullYear(), today.getMonth() - MONTHS_BEFORE, 1);
+  const total = MONTHS_BEFORE + 1 + MONTHS_AFTER;
+  return Array.from({ length: total }, (_, i) => {
+    const d = new Date(base.getFullYear(), base.getMonth() + i, 1);
+    return { y: d.getFullYear(), m: d.getMonth() };
+  });
+}
+
+/** Days of `month` laid out Mon–Sun, with leading nulls for alignment. */
+function buildGrid(year: number, month: number): (number | null)[] {
+  const first = new Date(year, month, 1);
+  const lead = (first.getDay() + 6) % 7; // Monday = 0
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const cells: (number | null)[] = Array.from({ length: lead }, () => null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+  return cells;
 }

@@ -43,6 +43,15 @@ export default async function DashboardPage() {
 
   const todayYmd = toYmd(new Date());
 
+  // Count open goals due on each day, keyed by "YYYY-MM-DD", for the calendar dots.
+  const deadlineCounts: Record<string, number> = {};
+  for (const g of week.goals) {
+    if (g.deadline && !isGoalComplete(g)) {
+      const key = toYmd(g.deadline);
+      deadlineCounts[key] = (deadlineCounts[key] ?? 0) + 1;
+    }
+  }
+
   // Flatten to a serializable shape for the client components.
   const goals = week.goals.map((goal) => ({
     id: goal.id,
@@ -133,7 +142,7 @@ export default async function DashboardPage() {
 
       <aside className="hidden w-64 shrink-0 xl:block">
         <div className="sticky top-8">
-          <WeekCalendar />
+          <WeekCalendar deadlines={deadlineCounts} />
         </div>
       </aside>
     </div>
