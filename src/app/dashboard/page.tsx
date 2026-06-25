@@ -144,9 +144,6 @@ export default async function DashboardPage() {
 
         <footer className="mt-10 border-t border-line pt-6">
           <StartNewWeekButton incompleteGoals={incompleteGoals} />
-          <div className="mt-4 flex justify-center">
-            <FeedbackButton />
-          </div>
         </footer>
       </main>
 
@@ -155,6 +152,8 @@ export default async function DashboardPage() {
           <WeekCalendar deadlines={deadlineDots} />
         </div>
       </aside>
+
+      <FeedbackButton />
     </div>
   );
 }

@@ -179,8 +179,8 @@ function DayCell({
   return (
     <div className="flex h-9 flex-col items-center justify-start pt-1">
       <span
-        className={`flex h-6 w-6 items-center justify-center rounded-full text-sm tabular-nums ${
-          isToday ? "bg-brand font-bold text-white" : "font-medium text-ink"
+        className={`flex h-6 w-6 items-center justify-center text-sm tabular-nums ${
+          isToday ? "font-bold text-brand" : "font-medium text-ink"
         }`}
       >
         {day}

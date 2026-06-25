@@ -53,7 +53,7 @@ export function FeedbackButton() {
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Share feedback"
-        className="group inline-flex items-center rounded-full border border-line bg-surface px-2.5 py-2 text-sm font-medium text-muted-fg shadow-sm transition hover:text-ink"
+        className="group fixed bottom-6 right-6 z-40 inline-flex items-center rounded-full border border-line bg-surface px-2.5 py-2 text-sm font-medium text-muted-fg shadow-md transition hover:text-ink"
       >
         <ChatIcon className="h-4 w-4 shrink-0" />
         <span className="ml-0 max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-300 ease-out group-hover:ml-2 group-hover:max-w-[8rem] group-hover:opacity-100">
