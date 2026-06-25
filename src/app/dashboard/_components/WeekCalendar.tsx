@@ -179,14 +179,13 @@ function DayCell({
   return (
     <div className="flex h-9 flex-col items-center justify-start pt-1">
       <span
-        className={`text-sm tabular-nums ${
-          isToday ? "font-bold text-brand" : "font-medium text-ink"
+        className={`flex h-6 w-6 items-center justify-center rounded-full text-sm tabular-nums ${
+          isToday ? "bg-brand font-bold text-white" : "font-medium text-ink"
         }`}
       >
         {day}
       </span>
       <span className="mt-0.5 flex h-1.5 items-center justify-center gap-0.5">
-        {isToday && <span className="h-1.5 w-1.5 rounded-full bg-accent" />}
         {dots.map((p, i) => (
           <span
             key={i}
