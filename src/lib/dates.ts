@@ -21,6 +21,32 @@ export function fromYmd(ymd: string): Date {
   return new Date(`${ymd}T00:00:00.000Z`);
 }
 
+/** A Date (or ISO string) → "HH:MM" using its UTC clock. */
+export function toHm(date: Date | string): string {
+  const d = typeof date === "string" ? new Date(date) : date;
+  return `${String(d.getUTCHours()).padStart(2, "0")}:${String(
+    d.getUTCMinutes(),
+  ).padStart(2, "0")}`;
+}
+
+/** A Date (or ISO string) → "YYYY-MM-DDTHH:MM" wall-clock stamp (UTC clock). */
+export function toStamp(date: Date | string): string {
+  return `${toYmd(date)}T${toHm(date)}`;
+}
+
+/** End-of-day sentinel time: a date-only deadline is "due by" this time. */
+export const END_OF_DAY = "23:59";
+
+/**
+ * "YYYY-MM-DDTHH:MM" → a short label like "30 Jun" or "30 Jun · 14:00".
+ * The time is omitted when it's the end-of-day sentinel (i.e. date-only).
+ */
+export function formatStamp(stamp: string, currentYear?: number): string {
+  const [date, time] = stamp.split("T");
+  const label = formatYmd(date, currentYear);
+  return time && time !== END_OF_DAY ? `${label} · ${time}` : label;
+}
+
 /** "YYYY-MM-DD" → a short human label like "30 Jun" (year added if not current). */
 export function formatYmd(ymd: string, currentYear?: number): string {
   const [y, m, d] = ymd.split("-").map(Number);

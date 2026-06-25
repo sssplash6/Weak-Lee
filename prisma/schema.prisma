@@ -64,6 +64,13 @@ model VerificationToken {
 
 // ----- App models -----
 
+// Goal priority, surfaced as colored flags (green / amber / red). Absent = none.
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
 model Week {
   id        String   @id @default(cuid())
   userId    String
@@ -91,6 +98,8 @@ model Goal {
   completedAt      DateTime?
   // Optional due date (stored at UTC midnight; the app treats it as date-only).
   deadline         DateTime?
+  // Optional priority flag (none when null).
+  priority         Priority?
   createdAt        DateTime  @default(now())
 
   week     Week      @relation(fields: [weekId], references: [id], onDelete: Cascade)

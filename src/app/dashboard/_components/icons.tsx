@@ -44,6 +44,31 @@ export function CheckCircleIcon({ className }: IconProps) {
   );
 }
 
+/** A flag icon — used for a goal's priority. `filled` tints the pennant. */
+export function FlagIcon({
+  className,
+  filled = false,
+}: IconProps & { filled?: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill={filled ? "currentColor" : "none"}
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M5 21V4" />
+      <path
+        d="M5 4.5h11.5l-2 3 2 3H5"
+        fill={filled ? "currentColor" : "none"}
+      />
+    </svg>
+  );
+}
+
 /** A calendar icon — used for setting a goal's deadline. */
 export function CalendarIcon({ className }: IconProps) {
   return (

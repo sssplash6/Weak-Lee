@@ -5,6 +5,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { getOrCreateCurrentWeek, nextWeekBounds } from "@/lib/weeks";
 import { isGoalComplete } from "@/lib/progress";
+import { isPriority, type Priority } from "@/lib/priority";
 
 async function requireUserId(): Promise<string> {
   const session = await auth();
@@ -69,21 +70,34 @@ export async function setGoalCompleted(goalId: string, completed: boolean) {
 }
 
 /**
- * Set or clear a goal's deadline. Accepts a "YYYY-MM-DD" string (stored at UTC
- * midnight, treated as date-only) or null to remove the deadline.
+ * Set or clear a goal's deadline. Accepts a "YYYY-MM-DDTHH:MM" wall-clock stamp
+ * (stored verbatim as UTC so the time shows back exactly as typed) or null.
  */
-export async function setGoalDeadline(goalId: string, ymd: string | null) {
+export async function setGoalDeadline(goalId: string, stamp: string | null) {
   const userId = await requireUserId();
   await assertGoalOwned(goalId, userId);
 
   let deadline: Date | null = null;
-  if (ymd) {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) throw new Error("Invalid date");
-    deadline = new Date(`${ymd}T00:00:00.000Z`);
-    if (Number.isNaN(deadline.getTime())) throw new Error("Invalid date");
+  if (stamp) {
+    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(stamp)) {
+      throw new Error("Invalid deadline");
+    }
+    deadline = new Date(`${stamp}:00.000Z`);
+    if (Number.isNaN(deadline.getTime())) throw new Error("Invalid deadline");
   }
 
   await prisma.goal.update({ where: { id: goalId }, data: { deadline } });
+  revalidatePath("/dashboard");
+}
+
+/** Set or clear a goal's priority flag. */
+export async function setGoalPriority(goalId: string, priority: Priority | null) {
+  const userId = await requireUserId();
+  if (priority !== null && !isPriority(priority)) {
+    throw new Error("Invalid priority");
+  }
+  await assertGoalOwned(goalId, userId);
+  await prisma.goal.update({ where: { id: goalId }, data: { priority } });
   revalidatePath("/dashboard");
 }
 

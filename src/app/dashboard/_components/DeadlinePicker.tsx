@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { formatYmd } from "@/lib/dates";
+import { END_OF_DAY, formatStamp } from "@/lib/dates";
 import { CalendarIcon } from "./icons";
 
 const WEEKDAYS = ["M", "T", "W", "T", "F", "S", "S"];
@@ -20,8 +20,9 @@ function ymd(y: number, m: number, d: number): string {
 }
 
 /**
- * A goal's due-date control: shows the date (or a calendar icon when unset) and
- * opens a popover with both a typed date input and a click-to-pick month grid.
+ * A goal's due-date control. The value is a "YYYY-MM-DDTHH:MM" wall-clock stamp
+ * (or null). The popover offers a typed date + time, plus a click-to-pick month
+ * grid. A date with no time chosen defaults to end of day.
  */
 export function DeadlinePicker({
   value,
@@ -32,14 +33,13 @@ export function DeadlinePicker({
   value: string | null;
   todayYmd: string;
   overdue: boolean;
-  onChange: (ymd: string | null) => void;
+  onChange: (stamp: string | null) => void;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  // The month currently shown in the grid — defaults to the deadline's month,
-  // or this month when none is set yet.
-  const anchor = value ?? todayYmd;
+  const [datePart, timePart] = value ? value.split("T") : [null, null];
+  const anchor = datePart ?? todayYmd;
   const [view, setView] = useState(() => {
     const [y, m] = anchor.split("-").map(Number);
     return { y, m: m - 1 };
@@ -56,15 +56,16 @@ export function DeadlinePicker({
   }, []);
 
   function openPicker() {
-    // Re-center the grid on the current value each time it opens.
     const [y, m] = anchor.split("-").map(Number);
     setView({ y, m: m - 1 });
     setOpen((v) => !v);
   }
 
-  function pick(next: string | null) {
-    onChange(next);
-    setOpen(false);
+  // Combine a date + time into a stamp. A deadline can't have a time with no
+  // date, and a date with no time falls back to end of day.
+  function emit(date: string | null, time: string | null) {
+    if (!date) return onChange(null);
+    onChange(`${date}T${time || END_OF_DAY}`);
   }
 
   const [curYear] = todayYmd.split("-").map(Number);
@@ -86,21 +87,29 @@ export function DeadlinePicker({
         }
       >
         <CalendarIcon className="h-4 w-4" />
-        {value && <span>{formatYmd(value, curYear)}</span>}
+        {value && <span>{formatStamp(value, curYear)}</span>}
       </button>
 
       {open && (
         <div className="absolute right-0 z-20 mt-1 w-64 rounded-xl border border-line bg-surface p-3 shadow-lg">
-          {/* Typed entry */}
+          {/* Typed date + time */}
           <label className="block text-[11px] font-semibold uppercase tracking-wide text-muted-fg">
             Deadline
           </label>
-          <input
-            type="date"
-            value={value ?? ""}
-            onChange={(e) => onChange(e.target.value || null)}
-            className="mt-1 w-full rounded-lg border border-line px-2.5 py-1.5 text-sm text-ink focus:border-brand focus:outline-none"
-          />
+          <div className="mt-1 flex gap-2">
+            <input
+              type="date"
+              value={datePart ?? ""}
+              onChange={(e) => emit(e.target.value || null, timePart)}
+              className="min-w-0 flex-1 rounded-lg border border-line px-2.5 py-1.5 text-sm text-ink focus:border-brand focus:outline-none"
+            />
+            <input
+              type="time"
+              value={timePart && timePart !== END_OF_DAY ? timePart : ""}
+              onChange={(e) => emit(datePart ?? todayYmd, e.target.value || null)}
+              className="w-24 shrink-0 rounded-lg border border-line px-2 py-1.5 text-sm text-ink focus:border-brand focus:outline-none"
+            />
+          </div>
 
           {/* Month grid */}
           <div className="mt-3 flex items-center justify-between">
@@ -150,9 +159,9 @@ export function DeadlinePicker({
                   key={i}
                   cell={ymd(view.y, view.m, day)}
                   day={day}
-                  value={value}
+                  selected={datePart}
                   todayYmd={todayYmd}
-                  onPick={pick}
+                  onPick={(date) => emit(date, timePart)}
                 />
               ),
             )}
@@ -161,7 +170,10 @@ export function DeadlinePicker({
           {value && (
             <button
               type="button"
-              onClick={() => pick(null)}
+              onClick={() => {
+                onChange(null);
+                setOpen(false);
+              }}
               className="mt-3 w-full rounded-lg px-2 py-1.5 text-xs font-medium text-red-500 transition hover:bg-red-50"
             >
               Clear deadline
@@ -176,17 +188,17 @@ export function DeadlinePicker({
 function DayButton({
   cell,
   day,
-  value,
+  selected,
   todayYmd,
   onPick,
 }: {
   cell: string;
   day: number;
-  value: string | null;
+  selected: string | null;
   todayYmd: string;
   onPick: (ymd: string) => void;
 }) {
-  const isSelected = cell === value;
+  const isSelected = cell === selected;
   const isToday = cell === todayYmd;
 
   return (

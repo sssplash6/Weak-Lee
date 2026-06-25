@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { PRIORITY_BG, type Priority } from "@/lib/priority";
 
 const WEEKDAYS = ["M", "T", "W", "T", "F", "S", "S"];
 const MONTHS = [
@@ -14,6 +15,16 @@ const MONTHS_AFTER = 13;
 
 // Cap how many dots we draw under a day so a busy day doesn't overflow the cell.
 const MAX_DOTS = 4;
+
+// Draw the most urgent goals first when a day has more deadlines than dots.
+const PRIORITY_RANK: Record<Priority, number> = { HIGH: 0, MEDIUM: 1, LOW: 2 };
+
+function sortByPriority(priorities: (Priority | null)[]): (Priority | null)[] {
+  return [...priorities].sort(
+    (a, b) =>
+      (a ? PRIORITY_RANK[a] : 3) - (b ? PRIORITY_RANK[b] : 3),
+  );
+}
 
 function pad(n: number): string {
   return String(n).padStart(2, "0");
@@ -33,7 +44,7 @@ const useIsoLayoutEffect =
 export function WeekCalendar({
   deadlines,
 }: {
-  deadlines: Record<string, number>;
+  deadlines: Record<string, (Priority | null)[]>;
 }) {
   // Resolve "today" on the client so it matches the viewer's timezone. Render a
   // skeleton until mounted to avoid a server/client hydration mismatch.
@@ -126,7 +137,7 @@ function MonthGrid({
 }: {
   month: Month;
   today: Date;
-  deadlines: Record<string, number>;
+  deadlines: Record<string, (Priority | null)[]>;
 }) {
   const todayYmd = ymd(today.getFullYear(), today.getMonth(), today.getDate());
 
@@ -142,7 +153,7 @@ function MonthGrid({
               day={day}
               cell={ymd(month.y, month.m, day)}
               todayYmd={todayYmd}
-              count={deadlines[ymd(month.y, month.m, day)] ?? 0}
+              priorities={deadlines[ymd(month.y, month.m, day)] ?? []}
             />
           ),
         )}
@@ -155,15 +166,15 @@ function DayCell({
   day,
   cell,
   todayYmd,
-  count,
+  priorities,
 }: {
   day: number;
   cell: string;
   todayYmd: string;
-  count: number;
+  priorities: (Priority | null)[];
 }) {
   const isToday = cell === todayYmd;
-  const dots = Math.min(count, MAX_DOTS);
+  const dots = sortByPriority(priorities).slice(0, MAX_DOTS);
 
   return (
     <div className="flex h-9 flex-col items-center justify-start pt-1">
@@ -176,8 +187,11 @@ function DayCell({
       </span>
       <span className="mt-0.5 flex h-1.5 items-center justify-center gap-0.5">
         {isToday && <span className="h-1.5 w-1.5 rounded-full bg-accent" />}
-        {Array.from({ length: dots }, (_, i) => (
-          <span key={i} className="h-1 w-1 rounded-full bg-brand" />
+        {dots.map((p, i) => (
+          <span
+            key={i}
+            className={`h-1 w-1 rounded-full ${p ? PRIORITY_BG[p] : "bg-brand"}`}
+          />
         ))}
       </span>
     </div>

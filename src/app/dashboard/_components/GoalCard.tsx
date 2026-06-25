@@ -15,11 +15,14 @@ import {
   renameGoal,
   setGoalCompleted,
   setGoalDeadline,
+  setGoalPriority,
   shareSubtask,
   toggleSubtask,
 } from "../actions";
+import type { Priority } from "@/lib/priority";
 import { CheckCircleIcon, ShareIcon, TrashIcon } from "./icons";
 import { DeadlinePicker } from "./DeadlinePicker";
+import { PriorityPicker } from "./PriorityPicker";
 
 type SubtaskView = {
   id: string;
@@ -34,6 +37,7 @@ type GoalView = {
   title: string;
   completed: boolean;
   deadline: string | null;
+  priority: Priority | null;
   subtasks: SubtaskView[];
 };
 
@@ -49,11 +53,13 @@ export function GoalCard({
   index,
   team,
   todayYmd,
+  nowStamp,
 }: {
   goal: GoalView;
   index: number;
   team: TeamMember[];
   todayYmd: string;
+  nowStamp: string;
 }) {
   const [isPending, startTransition] = useTransition();
   const [completed, applyCompleted] = useOptimistic(
@@ -63,6 +69,10 @@ export function GoalCard({
   const [deadline, applyDeadline] = useOptimistic(
     goal.deadline,
     (_state: string | null, next: string | null) => next,
+  );
+  const [priority, applyPriority] = useOptimistic(
+    goal.priority,
+    (_state: Priority | null, next: Priority | null) => next,
   );
   const [subtasks, applyOptimistic] = useOptimistic(
     goal.subtasks,
@@ -120,8 +130,15 @@ export function GoalCard({
     });
   }
 
+  function onSetPriority(next: Priority | null) {
+    startTransition(async () => {
+      applyPriority(next);
+      await setGoalPriority(goal.id, next);
+    });
+  }
+
   // Overdue only matters while the goal is still open.
-  const overdue = !completed && deadline != null && deadline < todayYmd;
+  const overdue = !completed && deadline != null && deadline < nowStamp;
 
   return (
     <article
@@ -137,6 +154,7 @@ export function GoalCard({
         <span className="ml-auto shrink-0 text-sm font-semibold tabular-nums text-accent">
           {percent}%
         </span>
+        <PriorityPicker value={priority} onChange={onSetPriority} />
         <DeadlinePicker
           value={deadline}
           todayYmd={todayYmd}

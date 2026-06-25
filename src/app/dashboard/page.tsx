@@ -2,7 +2,8 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { getArchivedWeeks, getOrCreateCurrentWeek } from "@/lib/weeks";
 import { goalPercent, isGoalComplete, weekPercent } from "@/lib/progress";
-import { toYmd } from "@/lib/dates";
+import { toStamp, toYmd } from "@/lib/dates";
+import type { Priority } from "@/lib/priority";
 import { GoalCard } from "./_components/GoalCard";
 import { AddGoalCard } from "./_components/AddGoalCard";
 import { ProfileMenu } from "./_components/ProfileMenu";
@@ -41,14 +42,17 @@ export default async function DashboardPage() {
     .filter((g) => !isGoalComplete(g))
     .map((g) => ({ id: g.id, title: g.title, percent: goalPercent(g.subtasks) }));
 
-  const todayYmd = toYmd(new Date());
+  const now = new Date();
+  const todayYmd = toYmd(now);
+  const nowStamp = toStamp(now);
 
-  // Count open goals due on each day, keyed by "YYYY-MM-DD", for the calendar dots.
-  const deadlineCounts: Record<string, number> = {};
+  // Open goals due on each day, keyed by "YYYY-MM-DD", as a list of their
+  // priorities (null = no flag) so the calendar can color each dot.
+  const deadlineDots: Record<string, (Priority | null)[]> = {};
   for (const g of week.goals) {
     if (g.deadline && !isGoalComplete(g)) {
       const key = toYmd(g.deadline);
-      deadlineCounts[key] = (deadlineCounts[key] ?? 0) + 1;
+      (deadlineDots[key] ??= []).push(g.priority ?? null);
     }
   }
 
@@ -57,7 +61,8 @@ export default async function DashboardPage() {
     id: goal.id,
     title: goal.title,
     completed: isGoalComplete(goal),
-    deadline: goal.deadline ? toYmd(goal.deadline) : null,
+    deadline: goal.deadline ? toStamp(goal.deadline) : null,
+    priority: goal.priority ?? null,
     subtasks: goal.subtasks.map((s) => ({
       id: s.id,
       title: s.title,
@@ -123,6 +128,7 @@ export default async function DashboardPage() {
             index={i + 1}
             team={team}
             todayYmd={todayYmd}
+            nowStamp={nowStamp}
           />
         ))}
 
@@ -142,7 +148,7 @@ export default async function DashboardPage() {
 
       <aside className="hidden w-64 shrink-0 xl:block">
         <div className="sticky top-8">
-          <WeekCalendar deadlines={deadlineCounts} />
+          <WeekCalendar deadlines={deadlineDots} />
         </div>
       </aside>
     </div>
