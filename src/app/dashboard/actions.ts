@@ -101,6 +101,26 @@ export async function setGoalPriority(goalId: string, priority: Priority | null)
   revalidatePath("/dashboard");
 }
 
+/**
+ * Record a piece of product feedback (destined for tech@freshman.academy).
+ * Stored in the database — there's no mail provider — with the submitter's
+ * email captured so it can be followed up. Returns false on an empty message.
+ */
+export async function submitFeedback(message: string): Promise<boolean> {
+  const session = await auth();
+  const trimmed = message.trim();
+  if (!trimmed) return false;
+
+  await prisma.feedback.create({
+    data: {
+      message: trimmed.slice(0, 5000),
+      userId: session?.user?.id ?? null,
+      userEmail: session?.user?.email ?? null,
+    },
+  });
+  return true;
+}
+
 export async function deleteGoal(goalId: string) {
   const userId = await requireUserId();
   await assertGoalOwned(goalId, userId);

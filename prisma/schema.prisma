@@ -26,6 +26,7 @@ model User {
 
   sharesSent     SubtaskShare[] @relation("SharesFrom")
   sharesReceived SubtaskShare[] @relation("SharesTo")
+  feedback       Feedback[]
 }
 
 model Account {
@@ -143,4 +144,19 @@ model SubtaskShare {
 
   @@unique([originalSubtaskId, toUserId])
   @@index([originalSubtaskId])
+}
+
+// Product feedback addressed to tech@freshman.academy. Stored here rather than
+// emailed (no mail provider configured); read straight from the table. The
+// submitter's email is captured at write time so it survives user deletion.
+model Feedback {
+  id        String   @id @default(cuid())
+  message   String
+  userId    String?
+  userEmail String?
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
 }
