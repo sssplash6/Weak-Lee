@@ -20,6 +20,12 @@ model User {
   image         String?
   createdAt     DateTime  @default(now())
 
+  // Collected during onboarding after the first Google sign-in. All four are
+  // required before a user reaches the dashboard (see lib/profile.ts).
+  workPhone        String?
+  telegramUsername String?
+  department       String?
+
   accounts Account[]
   sessions Session[]
   weeks    Week[]

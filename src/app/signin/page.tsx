@@ -1,7 +1,13 @@
 import { signIn, devLoginEnabled } from "@/auth";
-import { googleEnabled } from "@/auth.config";
+import { googleEnabled, ALLOWED_EMAIL_DOMAIN } from "@/auth.config";
 
-export default function SignInPage() {
+export default async function SignInPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
+  const { error } = await searchParams;
+
   return (
     <main className="flex flex-1 items-center justify-center bg-canvas px-6">
       <div className="w-full max-w-sm rounded-2xl border border-line bg-surface p-8 shadow-sm">
@@ -15,6 +21,13 @@ export default function SignInPage() {
             there.
           </p>
         </div>
+
+        {error === "AccessDenied" && (
+          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+            Use your <span className="font-semibold">@{ALLOWED_EMAIL_DOMAIN}</span>{" "}
+            account to sign in.
+          </div>
+        )}
 
         {googleEnabled && (
           <form

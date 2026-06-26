@@ -1,5 +1,7 @@
+import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { isProfileComplete } from "@/lib/profile";
 import { getArchivedWeeks, getOrCreateCurrentWeek } from "@/lib/weeks";
 import { goalPercent, isGoalComplete, weekPercent } from "@/lib/progress";
 import { toStamp, toYmd } from "@/lib/dates";
@@ -26,6 +28,18 @@ function displayName(u: { name: string | null; email: string | null }): string {
 export default async function DashboardPage() {
   const session = await auth();
   const userId = session!.user.id;
+
+  // Require a completed profile before showing the dashboard.
+  const profile = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      name: true,
+      workPhone: true,
+      telegramUsername: true,
+      department: true,
+    },
+  });
+  if (!profile || !isProfileComplete(profile)) redirect("/onboarding");
 
   const [week, members, archivedWeeks] = await Promise.all([
     getOrCreateCurrentWeek(userId),
