@@ -105,9 +105,22 @@ export default async function AdminPage() {
         </div>
         <Link
           href="/dashboard"
-          className="shrink-0 rounded-lg border border-line bg-surface px-4 py-2 text-sm font-medium text-ink transition hover:bg-canvas"
+          className="group inline-flex shrink-0 items-center gap-2 rounded-lg border border-line bg-surface px-4 py-2 text-sm font-medium text-ink transition hover:border-brand/40 hover:bg-canvas hover:text-brand"
         >
-          ← My dashboard
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="h-4 w-4 transition-transform duration-200 ease-out group-hover:-translate-x-0.5"
+            aria-hidden="true"
+          >
+            <path d="M11 5 4 12l7 7" />
+            <path d="M4 12h16" />
+          </svg>
+          My dashboard
         </Link>
       </header>
 

@@ -26,6 +26,12 @@ services:
         generateValue: true
       - key: AUTH_TRUST_HOST
         value: "true"
+      # Public URL Auth.js uses to build OAuth callback + redirect URLs. Without
+      # this, the app guesses from request headers and can pick up Render's
+      # internal host (localhost:10000), causing redirect_uri / Configuration
+      # errors on sign-in. Must match the domain users actually visit.
+      - key: AUTH_URL
+        value: "https://www.freshweek.org"
       # One-click test login that BYPASSES real auth (anyone with the URL signs
       # in as a shared test account). Left unset on purpose so the committed
       # blueprint never ships a bypass. To demo without Google, set this to
