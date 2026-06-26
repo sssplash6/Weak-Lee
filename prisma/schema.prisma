@@ -84,6 +84,10 @@ model Week {
   startDate DateTime
   endDate   DateTime
   isCurrent Boolean  @default(true)
+  // True when the week was started (previous week closed + new goals submitted)
+  // after the Sunday 12:00 Tashkent deadline. Set when a week is explicitly
+  // started; auto-created first weeks stay false. See lib/lateness.ts.
+  submittedLate Boolean @default(false)
   createdAt DateTime @default(now())
 
   user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)

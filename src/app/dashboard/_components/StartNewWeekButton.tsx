@@ -33,6 +33,7 @@ export function StartNewWeekButton({
   const [reasons, setReasons] = useState<Record<string, string>>({});
   const [start, setStart] = useState(defaultStart);
   const [end, setEnd] = useState(defaultEnd);
+  const [firstGoal, setFirstGoal] = useState("");
   const [isPending, startTransition] = useTransition();
 
   const hasUnfinished = incompleteGoals.length > 0;
@@ -40,12 +41,14 @@ export function StartNewWeekButton({
     (g) => (reasons[g.id] ?? "").trim().length > 0,
   );
   const validRange = !!start && !!end && start <= end;
+  const hasFirstGoal = firstGoal.trim().length > 0;
 
   function close() {
     setOpen(false);
     setReasons({});
     setStart(defaultStart);
     setEnd(defaultEnd);
+    setFirstGoal("");
   }
 
   // Close on Escape and lock body scroll while the modal is open.
@@ -64,13 +67,13 @@ export function StartNewWeekButton({
   }, [open, isPending]);
 
   function submit() {
-    if ((hasUnfinished && !allFilled) || !validRange) return;
+    if ((hasUnfinished && !allFilled) || !validRange || !hasFirstGoal) return;
     const payload = incompleteGoals.map((g) => ({
       goalId: g.id,
       reason: (reasons[g.id] ?? "").trim(),
     }));
     startTransition(async () => {
-      await startNewWeek(payload, { start, end });
+      await startNewWeek(payload, { start, end }, firstGoal.trim());
       close();
     });
   }
@@ -136,6 +139,22 @@ export function StartNewWeekButton({
               The end date must be on or after the start date.
             </p>
           )}
+
+          <label className="mt-4 block">
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted-fg">
+              First goal for the new week
+            </span>
+            <input
+              type="text"
+              value={firstGoal}
+              onChange={(e) => setFirstGoal(e.target.value)}
+              placeholder="e.g. Ship the onboarding flow"
+              className="mt-1 w-full rounded-lg border border-line px-3 py-2 text-sm text-ink placeholder:text-muted-fg focus:border-brand focus:outline-none"
+            />
+            <span className="mt-1 block text-xs text-muted-fg">
+              Every new week needs at least one goal. You can add more after.
+            </span>
+          </label>
         </div>
 
         {hasUnfinished ? (
@@ -189,7 +208,9 @@ export function StartNewWeekButton({
         </button>
         <button
           type="button"
-          disabled={isPending || (hasUnfinished && !allFilled) || !validRange}
+          disabled={
+            isPending || (hasUnfinished && !allFilled) || !validRange || !hasFirstGoal
+          }
           onClick={submit}
           className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white transition hover:bg-accent-dark disabled:cursor-not-allowed disabled:opacity-50"
         >

@@ -16,6 +16,7 @@ export type AdminUser = {
   email: string | null;
   department: string | null;
   weekLabel: string | null;
+  late: boolean;
   percent: number;
   goalCount: number;
   completedCount: number;
@@ -54,8 +55,18 @@ function UserRow({ user: u }: { user: AdminUser }) {
         </span>
 
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold text-ink">
-            {u.name ?? "—"}
+          <p className="flex items-center gap-2 truncate text-sm font-semibold text-ink">
+            <span className="truncate">{u.name ?? "—"}</span>
+            {u.late && (
+              <span className="shrink-0 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-600">
+                Late
+              </span>
+            )}
+            {u.goalCount === 0 && (
+              <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-600">
+                No goals
+              </span>
+            )}
           </p>
           <p className="truncate text-xs text-muted-fg">
             {u.email ?? "no email"}

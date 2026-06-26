@@ -18,7 +18,7 @@ export default async function AdminPage() {
   if (!session?.user?.id) redirect("/signin");
   if (!isAdmin(session.user.email)) redirect("/dashboard");
 
-  const [rawUsers, feedback] = await Promise.all([
+  const [rawUsers, feedback, lateWeeks] = await Promise.all([
     prisma.user.findMany({
       orderBy: [{ name: "asc" }, { email: "asc" }],
       select: {
@@ -32,6 +32,7 @@ export default async function AdminPage() {
           select: {
             startDate: true,
             endDate: true,
+            submittedLate: true,
             goals: {
               orderBy: { position: "asc" },
               select: {
@@ -51,6 +52,18 @@ export default async function AdminPage() {
       take: 20,
       select: { id: true, message: true, userEmail: true, createdAt: true },
     }),
+    prisma.week.findMany({
+      where: { submittedLate: true },
+      orderBy: { createdAt: "desc" },
+      take: 25,
+      select: {
+        id: true,
+        startDate: true,
+        endDate: true,
+        createdAt: true,
+        user: { select: { name: true, email: true } },
+      },
+    }),
   ]);
 
   const users: AdminUser[] = rawUsers.map((u) => {
@@ -62,6 +75,7 @@ export default async function AdminPage() {
       email: u.email,
       department: u.department,
       weekLabel: week ? fmtRange(week.startDate, week.endDate) : null,
+      late: week?.submittedLate ?? false,
       percent: weekPercent(goals),
       goalCount: goals.length,
       completedCount: goals.filter(isGoalComplete).length,
@@ -83,12 +97,15 @@ export default async function AdminPage() {
     ? Math.round(active.reduce((s, u) => s + u.percent, 0) / active.length)
     : 0;
 
+  const lateThisWeek = users.filter((u) => u.late).length;
+
   const stats = [
     { label: "Users", value: users.length },
     { label: "Active this week", value: active.length },
     { label: "Goals set", value: totalGoals },
     { label: "Goals completed", value: totalCompleted },
     { label: "Avg completion", value: `${avgCompletion}%` },
+    { label: "Late this week", value: lateThisWeek },
   ];
 
   return (
@@ -124,7 +141,7 @@ export default async function AdminPage() {
         </Link>
       </header>
 
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {stats.map((s) => (
           <div
             key={s.label}
@@ -145,6 +162,50 @@ export default async function AdminPage() {
           People ({users.length})
         </h2>
         <AdminUserList users={users} />
+      </section>
+
+      <section className="mt-10">
+        <h2 className="mb-3 px-1 text-sm font-semibold text-ink">
+          Late submissions ({lateWeeks.length})
+        </h2>
+        <p className="mb-3 px-1 text-xs text-muted-fg">
+          Weeks closed and re-opened after the Sunday 12:00 (Tashkent) deadline.
+        </p>
+        {lateWeeks.length === 0 ? (
+          <p className="px-1 text-sm text-muted-fg">
+            No late submissions. 🎉
+          </p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {lateWeeks.map((w) => (
+              <li
+                key={w.id}
+                className="flex items-center gap-3 rounded-xl border border-line bg-surface p-4"
+              >
+                <span className="shrink-0 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-600">
+                  Late
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-ink">
+                    {w.user.name ?? w.user.email ?? "—"}
+                  </p>
+                  <p className="truncate text-xs text-muted-fg">
+                    Week {fmtRange(w.startDate, w.endDate)}
+                  </p>
+                </div>
+                <span className="shrink-0 text-xs text-muted-fg">
+                  submitted{" "}
+                  {w.createdAt.toLocaleString(undefined, {
+                    day: "numeric",
+                    month: "short",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       <section className="mt-10">

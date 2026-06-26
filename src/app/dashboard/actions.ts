@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { getOrCreateCurrentWeek, nextWeekBounds } from "@/lib/weeks";
+import { isLateSubmission } from "@/lib/lateness";
 import { isGoalComplete } from "@/lib/progress";
 import { isPriority, type Priority } from "@/lib/priority";
 
@@ -230,9 +231,16 @@ export async function shareSubtask(subtaskId: string, toUserId: string) {
 export async function startNewWeek(
   reasons: { goalId: string; reason: string }[] = [],
   range?: { start: string; end: string },
+  firstGoal?: string,
 ) {
   const userId = await requireUserId();
   const week = await getOrCreateCurrentWeek(userId);
+
+  // The new week must be opened with at least one goal.
+  const firstGoalTitle = (firstGoal ?? "").trim();
+  if (!firstGoalTitle) {
+    throw new Error("Add at least one goal for the new week.");
+  }
 
   const reasonByGoal = new Map(
     reasons.map((r) => [r.goalId, r.reason.trim()]),
@@ -267,20 +275,30 @@ export async function startNewWeek(
     ({ start, end } = nextWeekBounds(week.endDate));
   }
 
-  await prisma.$transaction([
-    ...incomplete.map((goal) =>
-      prisma.goal.update({
-        where: { id: goal.id },
-        data: { incompleteReason: reasonByGoal.get(goal.id) },
-      }),
-    ),
-    prisma.week.updateMany({
+  // Late if this submission happens after the Sunday-midday (Tashkent) deadline
+  // for the new week — i.e. the week wasn't closed and re-opened on time.
+  const submittedLate = isLateSubmission(new Date(), start);
+
+  await prisma.$transaction(async (tx) => {
+    await Promise.all(
+      incomplete.map((goal) =>
+        tx.goal.update({
+          where: { id: goal.id },
+          data: { incompleteReason: reasonByGoal.get(goal.id) },
+        }),
+      ),
+    );
+    await tx.week.updateMany({
       where: { userId, isCurrent: true },
       data: { isCurrent: false },
-    }),
-    prisma.week.create({
-      data: { userId, startDate: start, endDate: end, isCurrent: true },
-    }),
-  ]);
+    });
+    const newWeek = await tx.week.create({
+      data: { userId, startDate: start, endDate: end, isCurrent: true, submittedLate },
+    });
+    // Seed the new week with its required first goal.
+    await tx.goal.create({
+      data: { weekId: newWeek.id, title: firstGoalTitle, position: 1 },
+    });
+  });
   revalidatePath("/dashboard");
 }
