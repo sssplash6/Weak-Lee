@@ -101,14 +101,27 @@ function WeekRow({
 }
 
 function GoalSummary({ goal }: { goal: ArchivedGoal }) {
+  const [open, setOpen] = useState(false);
   const done = goal.subtasks.filter((s) => s.isDone).length;
+  const hasSubtasks = goal.subtasks.length > 0;
 
   return (
     <li>
       <div className="flex items-baseline gap-2">
-        <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">
-          {goal.title}
-        </span>
+        <button
+          type="button"
+          onClick={() => hasSubtasks && setOpen((v) => !v)}
+          aria-expanded={open}
+          disabled={!hasSubtasks}
+          className={`flex min-w-0 flex-1 items-baseline gap-1.5 text-left ${
+            hasSubtasks ? "cursor-pointer" : "cursor-default"
+          }`}
+        >
+          {hasSubtasks && <Chevron open={open} />}
+          <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">
+            {goal.title}
+          </span>
+        </button>
         {goal.completed && (
           <span className="shrink-0 text-xs font-semibold text-brand">
             ✓ Completed
@@ -126,7 +139,7 @@ function GoalSummary({ goal }: { goal: ArchivedGoal }) {
         />
       </div>
 
-      {goal.subtasks.length > 0 && (
+      {open && hasSubtasks && (
         <ul className="mt-2 flex flex-col gap-0.5">
           {goal.subtasks.map((s) => (
             <li key={s.id} className="flex items-start gap-1.5 text-xs">
