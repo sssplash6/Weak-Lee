@@ -20,7 +20,7 @@ import {
   toggleSubtask,
 } from "../actions";
 import type { Priority } from "@/lib/priority";
-import { CheckCircleIcon, ShareIcon, TrashIcon } from "./icons";
+import { CheckCircleIcon, ChevronIcon, ShareIcon, TrashIcon } from "./icons";
 import { DeadlinePicker } from "./DeadlinePicker";
 import { PriorityPicker } from "./PriorityPicker";
 
@@ -62,6 +62,8 @@ export function GoalCard({
   nowStamp: string;
 }) {
   const [isPending, startTransition] = useTransition();
+  const [tasksOpen, setTasksOpen] = useState(true);
+  const [confirmComplete, setConfirmComplete] = useState(false);
   const [completed, applyCompleted] = useOptimistic(
     goal.completed,
     (_state: boolean, next: boolean) => next,
@@ -105,6 +107,24 @@ export function GoalCard({
     startTransition(async () => {
       applyOptimistic({ type: "toggle", id, isDone });
       await toggleSubtask(id, isDone);
+    });
+
+    // When checking a subtask just brought every subtask to done — and the goal
+    // isn't already marked complete — prompt the user to confirm completion.
+    const willAllBeDone =
+      subtasks.length > 0 &&
+      subtasks.every((s) => (s.id === id ? isDone : s.isDone));
+    if (isDone && willAllBeDone && !completed) {
+      setConfirmComplete(true);
+    }
+  }
+
+  function confirmCompletion() {
+    setConfirmComplete(false);
+    if (completed) return;
+    startTransition(async () => {
+      applyCompleted(true);
+      await setGoalCompleted(goal.id, true);
     });
   }
 
@@ -151,7 +171,24 @@ export function GoalCard({
           {index}
         </span>
         <GoalTitle goalId={goal.id} title={goal.title} />
-        <span className="ml-auto shrink-0 text-sm font-semibold tabular-nums text-accent">
+        <button
+          type="button"
+          onClick={() => setTasksOpen((v) => !v)}
+          aria-expanded={tasksOpen}
+          aria-label={tasksOpen ? "Hide subtasks" : "Show subtasks"}
+          title={tasksOpen ? "Hide subtasks" : "Show subtasks"}
+          className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-muted-fg transition hover:bg-canvas hover:text-ink"
+        >
+          <ChevronIcon
+            className={`h-3.5 w-3.5 transition-transform ${
+              tasksOpen ? "rotate-90" : ""
+            }`}
+          />
+          <span className="text-xs font-semibold tabular-nums">
+            {subtasks.length}
+          </span>
+        </button>
+        <span className="shrink-0 text-sm font-semibold tabular-nums text-accent">
           {percent}%
         </span>
         <PriorityPicker value={priority} onChange={onSetPriority} />
@@ -177,31 +214,72 @@ export function GoalCard({
         />
       </div>
 
-      {/* subtasks */}
-      <ul className="mt-4 flex flex-col gap-1">
-        {subtasks.map((s) => (
-          <SubtaskRow
-            key={s.id}
-            subtask={s}
-            team={team}
-            onToggle={onToggle}
-            onDelete={onDeleteSubtask}
-          />
-        ))}
-        {subtasks.length === 0 && (
-          <li className="px-1 py-1 text-sm text-muted-fg">
-            No subtasks yet — add one to start tracking progress.
-          </li>
-        )}
-      </ul>
+      {tasksOpen && (
+        <>
+          {/* subtasks */}
+          <ul className="mt-4 flex flex-col gap-1">
+            {subtasks.map((s) => (
+              <SubtaskRow
+                key={s.id}
+                subtask={s}
+                team={team}
+                onToggle={onToggle}
+                onDelete={onDeleteSubtask}
+              />
+            ))}
+            {subtasks.length === 0 && (
+              <li className="px-1 py-1 text-sm text-muted-fg">
+                No subtasks yet — add one to start tracking progress.
+              </li>
+            )}
+          </ul>
 
-      <AddSubtaskForm
-        goalId={goal.id}
-        disabled={isPending}
-        onOptimisticAdd={(id, title) =>
-          startTransition(() => applyOptimistic({ type: "add", id, title }))
-        }
-      />
+          <AddSubtaskForm
+            goalId={goal.id}
+            disabled={isPending}
+            onOptimisticAdd={(id, title) =>
+              startTransition(() => applyOptimistic({ type: "add", id, title }))
+            }
+          />
+        </>
+      )}
+
+      {confirmComplete && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/30 p-4 backdrop-blur-sm"
+          onClick={() => setConfirmComplete(false)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl border border-line bg-surface p-6 text-center shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-base font-bold text-ink">
+              Do you confirm the goal completion?
+            </h2>
+            <p className="mt-1 text-sm text-muted-fg">
+              All subtasks for “{goal.title}” are done.
+            </p>
+            <div className="mt-5 flex items-center justify-center gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmComplete(false)}
+                className="rounded-lg px-4 py-2 text-sm font-medium text-muted-fg transition hover:bg-canvas"
+              >
+                Not yet
+              </button>
+              <button
+                type="button"
+                onClick={confirmCompletion}
+                className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-dark"
+              >
+                Confirm completion
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </article>
   );
 }

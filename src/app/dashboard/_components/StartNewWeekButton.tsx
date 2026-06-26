@@ -5,23 +5,47 @@ import { startNewWeek } from "../actions";
 
 type IncompleteGoal = { id: string; title: string; percent: number };
 
+const MONTHS = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+/** "2026-07-06","2026-07-13" → "Jul 6–13" (or "Jul 6 – Aug 2" across months). */
+function formatRangeLabel(startYmd: string, endYmd: string): string {
+  const [sy, sm, sd] = startYmd.split("-").map(Number);
+  const [ey, em, ed] = endYmd.split("-").map(Number);
+  const startStr = `${MONTHS[sm - 1]} ${sd}`;
+  const endStr =
+    sm === em && sy === ey ? `${ed}` : `${MONTHS[em - 1]} ${ed}`;
+  return `${startStr}–${endStr}`;
+}
+
 export function StartNewWeekButton({
   incompleteGoals,
+  defaultStart,
+  defaultEnd,
 }: {
   incompleteGoals: IncompleteGoal[];
+  defaultStart: string;
+  defaultEnd: string;
 }) {
   const [open, setOpen] = useState(false);
   const [reasons, setReasons] = useState<Record<string, string>>({});
+  const [start, setStart] = useState(defaultStart);
+  const [end, setEnd] = useState(defaultEnd);
   const [isPending, startTransition] = useTransition();
 
   const hasUnfinished = incompleteGoals.length > 0;
   const allFilled = incompleteGoals.every(
     (g) => (reasons[g.id] ?? "").trim().length > 0,
   );
+  const validRange = !!start && !!end && start <= end;
 
   function close() {
     setOpen(false);
     setReasons({});
+    setStart(defaultStart);
+    setEnd(defaultEnd);
   }
 
   // Close on Escape and lock body scroll while the modal is open.
@@ -40,13 +64,13 @@ export function StartNewWeekButton({
   }, [open, isPending]);
 
   function submit() {
-    if (hasUnfinished && !allFilled) return;
+    if ((hasUnfinished && !allFilled) || !validRange) return;
     const payload = incompleteGoals.map((g) => ({
       goalId: g.id,
       reason: (reasons[g.id] ?? "").trim(),
     }));
     startTransition(async () => {
-      await startNewWeek(payload);
+      await startNewWeek(payload, { start, end });
       close();
     });
   }
@@ -58,7 +82,7 @@ export function StartNewWeekButton({
         onClick={() => setOpen(true)}
         className="w-full rounded-xl border border-accent bg-surface px-4 py-3 text-sm font-semibold text-accent transition hover:bg-accent-soft"
       >
-        Start new week
+        Start new week ({formatRangeLabel(defaultStart, defaultEnd)})
       </button>
     );
   }
@@ -74,6 +98,46 @@ export function StartNewWeekButton({
         className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-line bg-surface p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Editable date range for the new week */}
+        <div className="mb-5">
+          <h2 className="text-base font-bold text-ink">Start a new week</h2>
+          <p className="mt-1 text-sm text-muted-fg">
+            Set the dates for the upcoming week.
+          </p>
+          <div className="mt-3 flex items-end gap-3">
+            <label className="flex-1">
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted-fg">
+                Start
+              </span>
+              <input
+                type="date"
+                value={start}
+                max={end || undefined}
+                onChange={(e) => setStart(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-line px-3 py-2 text-sm text-ink focus:border-brand focus:outline-none"
+              />
+            </label>
+            <span className="pb-2.5 text-muted-fg">→</span>
+            <label className="flex-1">
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted-fg">
+                End
+              </span>
+              <input
+                type="date"
+                value={end}
+                min={start || undefined}
+                onChange={(e) => setEnd(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-line px-3 py-2 text-sm text-ink focus:border-brand focus:outline-none"
+              />
+            </label>
+          </div>
+          {!validRange && (
+            <p className="mt-2 text-xs text-red-600">
+              The end date must be on or after the start date.
+            </p>
+          )}
+        </div>
+
         {hasUnfinished ? (
         <>
           <h2 className="text-base font-bold text-ink">
@@ -125,11 +189,15 @@ export function StartNewWeekButton({
         </button>
         <button
           type="button"
-          disabled={isPending || (hasUnfinished && !allFilled)}
+          disabled={isPending || (hasUnfinished && !allFilled) || !validRange}
           onClick={submit}
           className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white transition hover:bg-accent-dark disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {isPending ? "Starting…" : "Start new week"}
+          {isPending
+            ? "Starting…"
+            : validRange
+              ? `Start week (${formatRangeLabel(start, end)})`
+              : "Start week"}
         </button>
         </div>
       </div>

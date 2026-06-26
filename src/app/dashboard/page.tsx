@@ -3,7 +3,11 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { isProfileComplete } from "@/lib/profile";
 import { isAdmin } from "@/lib/admin";
-import { getArchivedWeeks, getOrCreateCurrentWeek } from "@/lib/weeks";
+import {
+  getArchivedWeeks,
+  getOrCreateCurrentWeek,
+  nextWeekBounds,
+} from "@/lib/weeks";
 import { goalPercent, isGoalComplete, weekPercent } from "@/lib/progress";
 import { toStamp, toYmd } from "@/lib/dates";
 import type { Priority } from "@/lib/priority";
@@ -24,6 +28,14 @@ function formatRange(start: Date, end: Date): string {
 
 function displayName(u: { name: string | null; email: string | null }): string {
   return u.name ?? u.email ?? "Someone";
+}
+
+/** A Date → "YYYY-MM-DD" using its local calendar day (matches week bounds). */
+function toLocalYmd(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 export default async function DashboardPage() {
@@ -61,6 +73,11 @@ export default async function DashboardPage() {
   const now = new Date();
   const todayYmd = toYmd(now);
   const nowStamp = toStamp(now);
+
+  // Default date range for the next week (editable in the Start-new-week dialog).
+  const nextBounds = nextWeekBounds(week.endDate);
+  const defaultWeekStart = toLocalYmd(nextBounds.start);
+  const defaultWeekEnd = toLocalYmd(nextBounds.end);
 
   // Open goals due on each day, keyed by "YYYY-MM-DD", as a list of their
   // priorities (null = no flag) so the calendar can color each dot.
@@ -159,7 +176,11 @@ export default async function DashboardPage() {
       </section>
 
         <footer className="mt-10 border-t border-line pt-6">
-          <StartNewWeekButton incompleteGoals={incompleteGoals} />
+          <StartNewWeekButton
+            incompleteGoals={incompleteGoals}
+            defaultStart={defaultWeekStart}
+            defaultEnd={defaultWeekEnd}
+          />
         </footer>
       </main>
 

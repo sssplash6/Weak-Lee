@@ -229,6 +229,7 @@ export async function shareSubtask(subtaskId: string, toUserId: string) {
  */
 export async function startNewWeek(
   reasons: { goalId: string; reason: string }[] = [],
+  range?: { start: string; end: string },
 ) {
   const userId = await requireUserId();
   const week = await getOrCreateCurrentWeek(userId);
@@ -245,9 +246,26 @@ export async function startNewWeek(
     }
   }
 
-  // The new week follows the one being closed, so ranges stay sequential and
-  // never collide — even when several weeks are closed within one calendar week.
-  const { start, end } = nextWeekBounds(week.endDate);
+  // The new week's date range: either an explicit one chosen in the UI, or, by
+  // default, the week immediately following the one being closed (so ranges stay
+  // sequential and never collide, even when several weeks close in one calendar week).
+  let start: Date;
+  let end: Date;
+  if (range) {
+    const ymd = /^\d{4}-\d{2}-\d{2}$/;
+    if (!ymd.test(range.start) || !ymd.test(range.end)) {
+      throw new Error("Invalid week dates");
+    }
+    const [sy, sm, sd] = range.start.split("-").map(Number);
+    const [ey, em, ed] = range.end.split("-").map(Number);
+    start = new Date(sy, sm - 1, sd, 0, 0, 0, 0);
+    end = new Date(ey, em - 1, ed, 23, 59, 59, 999);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) {
+      throw new Error("Invalid week dates");
+    }
+  } else {
+    ({ start, end } = nextWeekBounds(week.endDate));
+  }
 
   await prisma.$transaction([
     ...incomplete.map((goal) =>
