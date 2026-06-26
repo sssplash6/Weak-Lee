@@ -49,9 +49,12 @@ export const authConfig = {
       const isLoggedIn = !!auth?.user;
       const isOnDashboard = nextUrl.pathname.startsWith("/dashboard");
       const isOnOnboarding = nextUrl.pathname.startsWith("/onboarding");
+      const isOnAdmin = nextUrl.pathname.startsWith("/admin");
       const isOnSignin = nextUrl.pathname.startsWith("/signin");
 
-      if (isOnDashboard || isOnOnboarding) {
+      // Require a session for protected areas. /admin additionally checks the
+      // admin allowlist inside the page (needs DB/email, not available here).
+      if (isOnDashboard || isOnOnboarding || isOnAdmin) {
         return isLoggedIn; // redirected to signIn page when false
       }
       if (isOnSignin && isLoggedIn) {

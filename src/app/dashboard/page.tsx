@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { isProfileComplete } from "@/lib/profile";
+import { isAdmin } from "@/lib/admin";
 import { getArchivedWeeks, getOrCreateCurrentWeek } from "@/lib/weeks";
 import { goalPercent, isGoalComplete, weekPercent } from "@/lib/progress";
 import { toStamp, toYmd } from "@/lib/dates";
@@ -131,6 +132,7 @@ export default async function DashboardPage() {
             name={session!.user.name}
             email={session!.user.email}
             image={session!.user.image}
+            isAdmin={isAdmin(session!.user.email)}
           />
         </div>
       </header>

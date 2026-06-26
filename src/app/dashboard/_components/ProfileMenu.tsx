@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { signOut } from "next-auth/react";
 
@@ -8,9 +9,10 @@ type Props = {
   name?: string | null;
   email?: string | null;
   image?: string | null;
+  isAdmin?: boolean;
 };
 
-export function ProfileMenu({ name, email, image }: Props) {
+export function ProfileMenu({ name, email, image, isAdmin }: Props) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -57,6 +59,16 @@ export function ProfileMenu({ name, email, image }: Props) {
             )}
           </div>
           <div className="my-1 border-t border-line" />
+          {isAdmin && (
+            <Link
+              href="/admin"
+              role="menuitem"
+              onClick={() => setOpen(false)}
+              className="block rounded-lg px-3 py-2 text-left text-sm font-medium text-brand transition hover:bg-canvas"
+            >
+              Admin panel
+            </Link>
+          )}
           <button
             type="button"
             role="menuitem"
