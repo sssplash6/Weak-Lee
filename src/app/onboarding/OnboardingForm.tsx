@@ -28,7 +28,7 @@ export function OnboardingForm({ defaults }: { defaults: Defaults }) {
         label="Work phone number"
         name="workPhone"
         defaultValue={defaults.workPhone}
-        placeholder="+1 555 123 4567"
+        placeholder="+998 90 123 45 67"
         type="tel"
         autoComplete="tel"
       />
@@ -36,14 +36,14 @@ export function OnboardingForm({ defaults }: { defaults: Defaults }) {
         label="Telegram username"
         name="telegramUsername"
         defaultValue={defaults.telegramUsername}
-        placeholder="@janedoe"
+        placeholder="@gapyearingdoesntsuck"
         prefixHint="We'll store it without the @."
       />
       <Field
         label="Department"
         name="department"
         defaultValue={defaults.department}
-        placeholder="Engineering"
+        placeholder="Tech"
       />
 
       {state.error && (
