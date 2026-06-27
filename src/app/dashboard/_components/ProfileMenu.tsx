@@ -1,9 +1,9 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { signOut } from "next-auth/react";
+import { presetAvatar } from "@/lib/avatar";
 
 type Props = {
   name?: string | null;
@@ -12,7 +12,7 @@ type Props = {
   isAdmin?: boolean;
 };
 
-export function ProfileMenu({ name, email, image, isAdmin }: Props) {
+export function ProfileMenu({ name, email, isAdmin }: Props) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -26,23 +26,19 @@ export function ProfileMenu({ name, email, image, isAdmin }: Props) {
     return () => document.removeEventListener("mousedown", onClick);
   }, []);
 
-  const initial = (name ?? email ?? "?").charAt(0).toUpperCase();
+  const avatar = presetAvatar(email ?? name);
 
   return (
     <div className="relative" ref={ref}>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-line bg-brand-soft text-sm font-semibold text-brand transition hover:ring-2 hover:ring-brand-soft"
+        className={`flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-line text-lg transition hover:ring-2 hover:ring-brand-soft ${avatar.bg}`}
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label="Account menu"
       >
-        {image ? (
-          <Image src={image} alt="" width={40} height={40} />
-        ) : (
-          initial
-        )}
+        <span aria-hidden="true">{avatar.emoji}</span>
       </button>
 
       {open && (

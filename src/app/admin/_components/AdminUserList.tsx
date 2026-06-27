@@ -1,6 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
+import { presetAvatar } from "@/lib/avatar";
+import { TrashIcon } from "../../dashboard/_components/icons";
+import { deleteUser } from "../actions";
 
 export type AdminGoal = {
   id: string;
@@ -23,35 +26,45 @@ export type AdminUser = {
   goals: AdminGoal[];
 };
 
-export function AdminUserList({ users }: { users: AdminUser[] }) {
+export function AdminUserList({
+  users,
+  currentUserId,
+}: {
+  users: AdminUser[];
+  currentUserId: string;
+}) {
   if (users.length === 0) {
     return <p className="px-1 text-sm text-muted-fg">No users yet.</p>;
   }
   return (
     <ul className="flex flex-col gap-2">
       {users.map((u) => (
-        <UserRow key={u.id} user={u} />
+        <UserRow key={u.id} user={u} isSelf={u.id === currentUserId} />
       ))}
     </ul>
   );
 }
 
-function UserRow({ user: u }: { user: AdminUser }) {
+function UserRow({ user: u, isSelf }: { user: AdminUser; isSelf: boolean }) {
   const [open, setOpen] = useState(false);
   const canExpand = u.goalCount > 0;
-  const initial = (u.name ?? u.email ?? "?").charAt(0).toUpperCase();
+  const avatar = presetAvatar(u.email ?? u.id);
 
   return (
     <li className="rounded-xl border border-line bg-surface">
+      <div className="flex items-center">
       <button
         type="button"
         onClick={() => canExpand && setOpen((v) => !v)}
-        className={`flex w-full items-center gap-3 p-4 text-left ${
+        className={`flex min-w-0 flex-1 items-center gap-3 p-4 text-left ${
           canExpand ? "cursor-pointer" : "cursor-default"
         }`}
       >
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-soft text-sm font-semibold text-brand">
-          {initial}
+        <span
+          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-lg ${avatar.bg}`}
+          aria-hidden="true"
+        >
+          {avatar.emoji}
         </span>
 
         <div className="min-w-0 flex-1">
@@ -109,6 +122,9 @@ function UserRow({ user: u }: { user: AdminUser }) {
         )}
       </button>
 
+      {!isSelf && <DeleteUserButton userId={u.id} name={u.name ?? u.email} />}
+      </div>
+
       {open && canExpand && (
         <ul className="border-t border-line px-4 py-2">
           {u.goals.map((g) => (
@@ -139,5 +155,55 @@ function UserRow({ user: u }: { user: AdminUser }) {
         </ul>
       )}
     </li>
+  );
+}
+
+function DeleteUserButton({
+  userId,
+  name,
+}: {
+  userId: string;
+  name: string | null;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const [isPending, startTransition] = useTransition();
+
+  if (confirming) {
+    return (
+      <span className="flex shrink-0 items-center gap-1 pr-4 text-xs">
+        <button
+          type="button"
+          disabled={isPending}
+          onClick={() =>
+            startTransition(async () => {
+              await deleteUser(userId);
+            })
+          }
+          className="rounded bg-red-500 px-2 py-1 font-medium text-white transition hover:bg-red-600 disabled:opacity-50"
+        >
+          {isPending ? "Deleting…" : "Delete"}
+        </button>
+        <button
+          type="button"
+          disabled={isPending}
+          onClick={() => setConfirming(false)}
+          className="rounded px-2 py-1 text-muted-fg transition hover:bg-canvas"
+        >
+          Cancel
+        </button>
+      </span>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => setConfirming(true)}
+      className="shrink-0 px-4 text-muted-fg transition hover:text-red-500"
+      aria-label={`Delete ${name ?? "user"}`}
+      title="Delete user"
+    >
+      <TrashIcon className="h-4 w-4" />
+    </button>
   );
 }

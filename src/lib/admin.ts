@@ -1,7 +1,11 @@
 // Server-only: which accounts may reach the admin panel. tech@freshman.academy
 // is always an admin; add more (comma-separated) via the ADMIN_EMAILS env var.
 
-const BUILT_IN_ADMINS = ["tech@freshman.academy"];
+const BUILT_IN_ADMINS = [
+  "tech@freshman.academy",
+  "valera@freshman.academy",
+  "shakhzod@freshman.academy",
+];
 
 function adminEmails(): string[] {
   const fromEnv = (process.env.ADMIN_EMAILS ?? "")

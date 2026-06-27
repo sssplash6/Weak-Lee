@@ -161,7 +161,7 @@ export default async function AdminPage() {
         <h2 className="mb-3 px-1 text-sm font-semibold text-ink">
           People ({users.length})
         </h2>
-        <AdminUserList users={users} />
+        <AdminUserList users={users} currentUserId={session.user.id} />
       </section>
 
       <section className="mt-10">
