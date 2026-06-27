@@ -26,6 +26,9 @@ model User {
   telegramUsername String?
   department       String?
 
+  // Assigned preset animal avatar (emoji). Unique so no two users share one.
+  avatar String? @unique
+
   accounts Account[]
   sessions Session[]
   weeks    Week[]

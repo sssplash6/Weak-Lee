@@ -29,10 +29,34 @@ const AVATARS: Avatar[] = [
   { emoji: "🦙", bg: "bg-gray-100" },
 ];
 
-/** Deterministically pick a preset avatar for a seed (e.g. user id or email). */
-export function presetAvatar(seed: string | null | undefined): Avatar {
+/** Every available avatar emoji, in order. */
+export const AVATAR_EMOJIS: string[] = AVATARS.map((a) => a.emoji);
+
+/** A stable non-negative hash of a seed string. */
+export function hashSeed(seed: string | null | undefined): number {
   const s = seed ?? "";
   let h = 0;
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
-  return AVATARS[h % AVATARS.length];
+  return h;
+}
+
+/** Deterministically pick a preset avatar for a seed (e.g. user id or email). */
+export function presetAvatar(seed: string | null | undefined): Avatar {
+  return AVATARS[hashSeed(seed) % AVATARS.length];
+}
+
+/**
+ * Resolve a user's avatar: the one assigned to them if present (and known),
+ * otherwise a deterministic fallback derived from the seed. Each assigned emoji
+ * is unique per user (enforced in the DB), so display stays one-animal-one-user.
+ */
+export function resolveAvatar(
+  assigned: string | null | undefined,
+  seed: string | null | undefined,
+): Avatar {
+  if (assigned) {
+    const found = AVATARS.find((a) => a.emoji === assigned);
+    if (found) return found;
+  }
+  return presetAvatar(seed);
 }
