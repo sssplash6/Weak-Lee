@@ -47,9 +47,16 @@ const weekInclude = {
   },
 } as const;
 
+// Launch exception: seed each user's first auto-created week as the *upcoming*
+// week rather than the current (nearly-over) calendar week, so people who sign
+// up at launch land on a fresh full week. Set back to false (or delete) once the
+// launch week has started.
+const LAUNCH_START_NEXT_WEEK = true;
+
 /**
  * Return the user's current week, loaded with goals and subtasks (ordered).
- * Creates an empty week for the current calendar week if none is marked current.
+ * Creates an empty week for the current calendar week if none is marked current
+ * (or the upcoming week while LAUNCH_START_NEXT_WEEK is on).
  */
 export async function getOrCreateCurrentWeek(userId: string) {
   const existing = await prisma.week.findFirst({
@@ -59,7 +66,9 @@ export async function getOrCreateCurrentWeek(userId: string) {
 
   if (existing) return existing;
 
-  const { start, end } = getWeekBounds();
+  const { start, end } = LAUNCH_START_NEXT_WEEK
+    ? nextWeekBounds(getWeekBounds().end)
+    : getWeekBounds();
   return prisma.week.create({
     data: { userId, startDate: start, endDate: end, isCurrent: true },
     include: weekInclude,
