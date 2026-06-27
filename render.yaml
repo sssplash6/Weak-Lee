@@ -2,7 +2,7 @@
 # Deploy: push this repo to GitHub, then in Render: New → Blueprint → pick the repo.
 databases:
   - name: freshman-weekly-db
-    plan: free
+    plan: standard
     databaseName: freshman_weekly
     user: freshman
 
