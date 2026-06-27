@@ -2,9 +2,9 @@
 // person always gets the same one). No profile customization yet; this is just
 // a playful stand-in for the plain initial.
 
-type Avatar = { emoji: string; bg: string };
+export type Avatar = { emoji: string; bg: string };
 
-const AVATARS: Avatar[] = [
+export const AVATARS: Avatar[] = [
   { emoji: "🦊", bg: "bg-orange-100" },
   { emoji: "🐼", bg: "bg-slate-100" },
   { emoji: "🐸", bg: "bg-green-100" },

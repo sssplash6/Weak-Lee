@@ -3,6 +3,7 @@ import { PrismaAdapter } from "@auth/prisma-adapter";
 import Credentials from "next-auth/providers/credentials";
 import { prisma } from "@/lib/prisma";
 import { authConfig } from "@/auth.config";
+import { ensureAvatar } from "@/lib/assignAvatar";
 
 // Dev-only login: a one-click "Continue as test student" that bypasses real
 // auth. Enabled only when ALLOW_DEV_LOGIN=true. Anyone with the URL can sign in
@@ -30,6 +31,7 @@ const devProviders = devLoginEnabled
             update: {},
             create: { email: "dev@freshman.academy", name: "Test Student" },
           });
+          await ensureAvatar(user.id, user.email);
           return { id: user.id, name: user.name, email: user.email };
         },
       }),
@@ -43,4 +45,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   session: { strategy: "jwt" },
   ...authConfig,
   providers: [...authConfig.providers, ...devProviders],
+  events: {
+    // Give every newly-created (OAuth) user a unique animal avatar up front.
+    async createUser({ user }) {
+      if (user.id) await ensureAvatar(user.id, user.email ?? user.name);
+    },
+  },
 });

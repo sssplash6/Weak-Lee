@@ -1,19 +1,30 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { signOut } from "next-auth/react";
-import { presetAvatar } from "@/lib/avatar";
+import { AVATARS, resolveAvatar } from "@/lib/avatar";
+import { setAvatar } from "../actions";
 
 type Props = {
   name?: string | null;
   email?: string | null;
-  image?: string | null;
+  avatar?: string | null;
+  takenAvatars?: string[];
   isAdmin?: boolean;
 };
 
-export function ProfileMenu({ name, email, isAdmin }: Props) {
+export function ProfileMenu({
+  name,
+  email,
+  avatar: assigned,
+  takenAvatars = [],
+  isAdmin,
+}: Props) {
   const [open, setOpen] = useState(false);
+  const [current, setCurrent] = useState<string | null>(assigned ?? null);
+  const [error, setError] = useState(false);
+  const [isPending, startTransition] = useTransition();
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -26,7 +37,26 @@ export function ProfileMenu({ name, email, isAdmin }: Props) {
     return () => document.removeEventListener("mousedown", onClick);
   }, []);
 
-  const avatar = presetAvatar(email ?? name);
+  const avatar = resolveAvatar(current, email ?? name);
+
+  // Animals taken by other users (so the current pick stays selectable).
+  const takenByOthers = new Set(
+    takenAvatars.filter((e) => e !== current),
+  );
+
+  function choose(emoji: string) {
+    if (emoji === current || takenByOthers.has(emoji)) return;
+    const prev = current;
+    setError(false);
+    setCurrent(emoji); // optimistic
+    startTransition(async () => {
+      const res = await setAvatar(emoji);
+      if (!res.ok) {
+        setCurrent(prev);
+        setError(true);
+      }
+    });
+  }
 
   return (
     <div className="relative" ref={ref}>
@@ -44,7 +74,7 @@ export function ProfileMenu({ name, email, isAdmin }: Props) {
       {open && (
         <div
           role="menu"
-          className="absolute right-0 z-10 mt-2 w-56 rounded-xl border border-line bg-surface p-1 shadow-lg"
+          className="absolute right-0 z-10 mt-2 w-64 rounded-xl border border-line bg-surface p-1 shadow-lg"
         >
           <div className="px-3 py-2">
             <p className="truncate text-sm font-medium text-ink">
@@ -54,7 +84,50 @@ export function ProfileMenu({ name, email, isAdmin }: Props) {
               <p className="truncate text-xs text-muted-fg">{email}</p>
             )}
           </div>
+
           <div className="my-1 border-t border-line" />
+
+          {/* Avatar picker */}
+          <div className="px-3 py-2">
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-fg">
+              Your animal
+            </p>
+            <div className="grid grid-cols-6 gap-1">
+              {AVATARS.map((a) => {
+                const isCurrent = a.emoji === current;
+                const taken = takenByOthers.has(a.emoji);
+                return (
+                  <button
+                    key={a.emoji}
+                    type="button"
+                    disabled={taken || isPending}
+                    onClick={() => choose(a.emoji)}
+                    title={taken ? "Taken" : undefined}
+                    aria-label={isCurrent ? "Current avatar" : "Choose avatar"}
+                    className={`flex h-8 w-8 items-center justify-center rounded-full text-base transition ${
+                      a.bg
+                    } ${
+                      isCurrent
+                        ? "ring-2 ring-brand"
+                        : taken
+                          ? "cursor-not-allowed opacity-30"
+                          : "hover:ring-2 hover:ring-brand-soft"
+                    }`}
+                  >
+                    <span aria-hidden="true">{a.emoji}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {error && (
+              <p className="mt-2 text-xs text-red-600">
+                That one was just taken — pick another.
+              </p>
+            )}
+          </div>
+
+          <div className="my-1 border-t border-line" />
+
           {isAdmin && (
             <Link
               href="/admin"

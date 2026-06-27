@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { presetAvatar } from "@/lib/avatar";
+import { resolveAvatar } from "@/lib/avatar";
 import { TrashIcon } from "../../dashboard/_components/icons";
 import { deleteUser } from "../actions";
 
@@ -18,6 +18,7 @@ export type AdminUser = {
   name: string | null;
   email: string | null;
   department: string | null;
+  avatar: string | null;
   weekLabel: string | null;
   late: boolean;
   percent: number;
@@ -48,7 +49,7 @@ export function AdminUserList({
 function UserRow({ user: u, isSelf }: { user: AdminUser; isSelf: boolean }) {
   const [open, setOpen] = useState(false);
   const canExpand = u.goalCount > 0;
-  const avatar = presetAvatar(u.email ?? u.id);
+  const avatar = resolveAvatar(u.avatar, u.email ?? u.id);
 
   return (
     <li className="rounded-xl border border-line bg-surface">

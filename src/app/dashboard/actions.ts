@@ -7,6 +7,7 @@ import { getOrCreateCurrentWeek, nextWeekBounds } from "@/lib/weeks";
 import { isLateSubmission } from "@/lib/lateness";
 import { isGoalComplete } from "@/lib/progress";
 import { isPriority, type Priority } from "@/lib/priority";
+import { AVATAR_EMOJIS } from "@/lib/avatar";
 
 async function requireUserId(): Promise<string> {
   const session = await auth();
@@ -120,6 +121,30 @@ export async function submitFeedback(message: string): Promise<boolean> {
     },
   });
   return true;
+}
+
+export type SetAvatarResult =
+  | { ok: true; emoji: string }
+  | { ok: false; error: "taken" | "invalid" };
+
+/**
+ * Set the signed-in user's avatar to `emoji`. Each animal is unique across
+ * users (DB constraint), so if someone else just took it we report "taken".
+ */
+export async function setAvatar(emoji: string): Promise<SetAvatarResult> {
+  const userId = await requireUserId();
+  if (!AVATAR_EMOJIS.includes(emoji)) return { ok: false, error: "invalid" };
+
+  try {
+    await prisma.user.update({ where: { id: userId }, data: { avatar: emoji } });
+  } catch (e) {
+    if (e && typeof e === "object" && "code" in e && e.code === "P2002") {
+      return { ok: false, error: "taken" };
+    }
+    throw e;
+  }
+  revalidatePath("/dashboard");
+  return { ok: true, emoji };
 }
 
 export async function deleteGoal(goalId: string) {

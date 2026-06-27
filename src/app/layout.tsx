@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Weekly Goal Tracker — freshman.academy",
+  title: "FreshWeek",
   description: "Track up to 5 weekly goals and their subtasks.",
 };
 

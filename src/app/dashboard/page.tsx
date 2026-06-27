@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { isProfileComplete } from "@/lib/profile";
 import { isAdmin } from "@/lib/admin";
+import { ensureAvatar } from "@/lib/assignAvatar";
 import {
   getArchivedWeeks,
   getOrCreateCurrentWeek,
@@ -50,9 +51,22 @@ export default async function DashboardPage() {
       workPhone: true,
       telegramUsername: true,
       department: true,
+      avatar: true,
     },
   });
   if (!profile || !isProfileComplete(profile)) redirect("/onboarding");
+
+  // Backfill a unique avatar for users created before avatars existed.
+  const avatar =
+    profile.avatar ?? (await ensureAvatar(userId, session!.user.email));
+
+  // Animals already taken (by anyone) — used to grey out the picker.
+  const takenAvatars = (
+    await prisma.user.findMany({
+      where: { avatar: { not: null } },
+      select: { avatar: true },
+    })
+  ).map((u) => u.avatar as string);
 
   const [week, members, archivedWeeks] = await Promise.all([
     getOrCreateCurrentWeek(userId),
@@ -148,7 +162,8 @@ export default async function DashboardPage() {
           <ProfileMenu
             name={session!.user.name}
             email={session!.user.email}
-            image={session!.user.image}
+            avatar={avatar}
+            takenAvatars={takenAvatars}
             isAdmin={isAdmin(session!.user.email)}
           />
         </div>

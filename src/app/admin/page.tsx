@@ -26,6 +26,7 @@ export default async function AdminPage() {
         name: true,
         email: true,
         department: true,
+        avatar: true,
         createdAt: true,
         weeks: {
           where: { isCurrent: true },
@@ -74,6 +75,7 @@ export default async function AdminPage() {
       name: u.name,
       email: u.email,
       department: u.department,
+      avatar: u.avatar,
       weekLabel: week ? fmtRange(week.startDate, week.endDate) : null,
       late: week?.submittedLate ?? false,
       percent: weekPercent(goals),
