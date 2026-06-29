@@ -20,11 +20,22 @@ import { StartNewWeekButton } from "./_components/StartNewWeekButton";
 import { FeedbackButton } from "./_components/FeedbackButton";
 import { WeekArchive } from "./_components/WeekArchive";
 import { WeekCalendar } from "./_components/WeekCalendar";
+import { WeekSubmit } from "./_components/WeekSubmit";
 
 function formatRange(start: Date, end: Date): string {
   const fmt = (d: Date) =>
     d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
   return `${fmt(start)} – ${fmt(end)}`;
+}
+
+function formatDateTime(d: Date): string {
+  return d.toLocaleString(undefined, {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function displayName(u: { name: string | null; email: string | null }): string {
@@ -79,6 +90,10 @@ export default async function DashboardPage() {
   ]);
 
   const overall = weekPercent(week.goals);
+  const submitted = week.submittedAt != null;
+  const submittedAtLabel = week.submittedAt
+    ? formatDateTime(week.submittedAt)
+    : null;
 
   const incompleteGoals = week.goals
     .filter((g) => !isGoalComplete(g))
@@ -169,6 +184,12 @@ export default async function DashboardPage() {
         </div>
       </header>
 
+      <WeekSubmit
+        submitted={submitted}
+        submittedAtLabel={submittedAtLabel}
+        goalCount={goals.length}
+      />
+
       <section className="flex flex-col gap-4">
         {goals.map((goal, i) => (
           <GoalCard
@@ -178,10 +199,11 @@ export default async function DashboardPage() {
             team={team}
             todayYmd={todayYmd}
             nowStamp={nowStamp}
+            locked={submitted}
           />
         ))}
 
-        <AddGoalCard nextIndex={goals.length + 1} />
+        {!submitted && <AddGoalCard nextIndex={goals.length + 1} todayYmd={todayYmd} />}
 
         {goals.length === 0 && (
           <p className="px-1 text-sm text-muted-fg">
@@ -195,6 +217,7 @@ export default async function DashboardPage() {
             incompleteGoals={incompleteGoals}
             defaultStart={defaultWeekStart}
             defaultEnd={defaultWeekEnd}
+            todayYmd={todayYmd}
           />
         </footer>
       </main>

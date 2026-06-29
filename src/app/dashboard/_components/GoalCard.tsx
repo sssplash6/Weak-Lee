@@ -2,25 +2,39 @@
 
 import {
   useEffect,
+  useLayoutEffect,
   useOptimistic,
   useRef,
   useState,
   useTransition,
 } from "react";
 import { goalPercent } from "@/lib/progress";
+import { formatStamp } from "@/lib/dates";
 import {
   addSubtask,
   deleteGoal,
   deleteSubtask,
   renameGoal,
+  renameSubtask,
   setGoalCompleted,
   setGoalDeadline,
   setGoalPriority,
   shareSubtask,
   toggleSubtask,
 } from "../actions";
-import type { Priority } from "@/lib/priority";
-import { CheckCircleIcon, ChevronIcon, ShareIcon, TrashIcon } from "./icons";
+import {
+  PRIORITY_LABEL,
+  PRIORITY_TEXT,
+  type Priority,
+} from "@/lib/priority";
+import {
+  CalendarIcon,
+  CheckCircleIcon,
+  ChevronIcon,
+  FlagIcon,
+  ShareIcon,
+  TrashIcon,
+} from "./icons";
 import { DeadlinePicker } from "./DeadlinePicker";
 import { PriorityPicker } from "./PriorityPicker";
 
@@ -46,6 +60,7 @@ type TeamMember = { id: string; name: string };
 type OptAction =
   | { type: "toggle"; id: string; isDone: boolean }
   | { type: "add"; id: string; title: string }
+  | { type: "rename"; id: string; title: string }
   | { type: "delete"; id: string };
 
 export function GoalCard({
@@ -54,12 +69,14 @@ export function GoalCard({
   team,
   todayYmd,
   nowStamp,
+  locked,
 }: {
   goal: GoalView;
   index: number;
   team: TeamMember[];
   todayYmd: string;
   nowStamp: string;
+  locked: boolean;
 }) {
   const [isPending, startTransition] = useTransition();
   const [tasksOpen, setTasksOpen] = useState(true);
@@ -95,6 +112,10 @@ export function GoalCard({
               receivedFrom: null,
             },
           ];
+        case "rename":
+          return state.map((s) =>
+            s.id === action.id ? { ...s, title: action.title } : s,
+          );
         case "delete":
           return state.filter((s) => s.id !== action.id);
       }
@@ -125,6 +146,13 @@ export function GoalCard({
     startTransition(async () => {
       applyCompleted(true);
       await setGoalCompleted(goal.id, true);
+    });
+  }
+
+  function onRenameSubtask(id: string, title: string) {
+    startTransition(async () => {
+      applyOptimistic({ type: "rename", id, title });
+      await renameSubtask(id, title);
     });
   }
 
@@ -159,6 +187,7 @@ export function GoalCard({
 
   // Overdue only matters while the goal is still open.
   const overdue = !completed && deadline != null && deadline < nowStamp;
+  const [curYear] = todayYmd.split("-").map(Number);
 
   return (
     <article
@@ -166,18 +195,18 @@ export function GoalCard({
         completed ? "border-brand ring-1 ring-brand/20" : "border-line"
       }`}
     >
-      <div className="flex items-center gap-3">
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-soft text-xs font-bold text-brand">
+      <div className="flex items-start gap-3">
+        <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-soft text-xs font-bold text-brand">
           {index}
         </span>
-        <GoalTitle goalId={goal.id} title={goal.title} />
+        <GoalTitle goalId={goal.id} title={goal.title} readOnly={locked} />
         <button
           type="button"
           onClick={() => setTasksOpen((v) => !v)}
           aria-expanded={tasksOpen}
           aria-label={tasksOpen ? "Hide subtasks" : "Show subtasks"}
           title={tasksOpen ? "Hide subtasks" : "Show subtasks"}
-          className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-muted-fg transition hover:bg-canvas hover:text-ink"
+          className="ml-auto mt-0.5 inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-muted-fg transition hover:bg-canvas hover:text-ink"
         >
           <ChevronIcon
             className={`h-3.5 w-3.5 transition-transform ${
@@ -188,22 +217,59 @@ export function GoalCard({
             {subtasks.length}
           </span>
         </button>
-        <span className="shrink-0 text-sm font-semibold tabular-nums text-accent">
+        <span className="mt-1 shrink-0 text-sm font-semibold tabular-nums text-accent">
           {percent}%
         </span>
-        <PriorityPicker value={priority} onChange={onSetPriority} />
-        <DeadlinePicker
-          value={deadline}
-          todayYmd={todayYmd}
-          overdue={overdue}
-          onChange={onSetDeadline}
-        />
-        <CompleteButton
-          completed={completed}
-          allDone={percent === 100}
-          onToggle={onToggleCompleted}
-        />
-        <DeleteGoalButton goalId={goal.id} />
+
+        {locked ? (
+          <div className="mt-0.5 flex shrink-0 items-center gap-2">
+            {priority && (
+              <span
+                className={`inline-flex items-center gap-1 text-xs font-semibold ${PRIORITY_TEXT[priority]}`}
+                title={`Priority: ${PRIORITY_LABEL[priority]}`}
+              >
+                <FlagIcon className="h-4 w-4" filled />
+                {PRIORITY_LABEL[priority]}
+              </span>
+            )}
+            {deadline && (
+              <span
+                className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold tabular-nums ${
+                  overdue
+                    ? "bg-red-50 text-red-600"
+                    : "bg-brand-soft text-brand"
+                }`}
+                title="Deadline"
+              >
+                <CalendarIcon className="h-4 w-4" />
+                {formatStamp(deadline, curYear)}
+              </span>
+            )}
+          </div>
+        ) : (
+          <div className="mt-0.5 flex shrink-0 items-center gap-2">
+            <PriorityPicker value={priority} onChange={onSetPriority} />
+            <DeadlinePicker
+              value={deadline}
+              todayYmd={todayYmd}
+              overdue={overdue}
+              onChange={onSetDeadline}
+            />
+          </div>
+        )}
+
+        <span className="mt-0.5 shrink-0">
+          <CompleteButton
+            completed={completed}
+            allDone={percent === 100}
+            onToggle={onToggleCompleted}
+          />
+        </span>
+        {!locked && (
+          <span className="mt-1 shrink-0">
+            <DeleteGoalButton goalId={goal.id} />
+          </span>
+        )}
       </div>
 
       {/* progress bar */}
@@ -223,24 +289,29 @@ export function GoalCard({
                 key={s.id}
                 subtask={s}
                 team={team}
+                locked={locked}
                 onToggle={onToggle}
+                onRename={onRenameSubtask}
                 onDelete={onDeleteSubtask}
               />
             ))}
             {subtasks.length === 0 && (
               <li className="px-1 py-1 text-sm text-muted-fg">
-                No subtasks yet — add one to start tracking progress.
+                No subtasks yet
+                {locked ? "." : " — add one to start tracking progress."}
               </li>
             )}
           </ul>
 
-          <AddSubtaskForm
-            goalId={goal.id}
-            disabled={isPending}
-            onOptimisticAdd={(id, title) =>
-              startTransition(() => applyOptimistic({ type: "add", id, title }))
-            }
-          />
+          {!locked && (
+            <AddSubtaskForm
+              goalId={goal.id}
+              disabled={isPending}
+              onOptimisticAdd={(id, title) =>
+                startTransition(() => applyOptimistic({ type: "add", id, title }))
+              }
+            />
+          )}
         </>
       )}
 
@@ -327,12 +398,16 @@ function CompleteButton({
 function SubtaskRow({
   subtask: s,
   team,
+  locked,
   onToggle,
+  onRename,
   onDelete,
 }: {
   subtask: SubtaskView;
   team: TeamMember[];
+  locked: boolean;
   onToggle: (id: string, isDone: boolean) => void;
+  onRename: (id: string, title: string) => void;
   onDelete: (id: string) => void;
 }) {
   const isTemp = s.id.startsWith("temp-");
@@ -343,16 +418,18 @@ function SubtaskRow({
         type="checkbox"
         checked={s.isDone}
         onChange={(e) => onToggle(s.id, e.target.checked)}
-        className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer rounded border-line accent-brand focus:ring-brand"
+        className="mt-1 h-4 w-4 shrink-0 cursor-pointer rounded border-line accent-brand focus:ring-brand"
       />
       <div className="min-w-0 flex-1">
-        <span
-          className={`block text-sm ${
+        <EditableText
+          value={s.title}
+          readOnly={locked || isTemp}
+          ariaLabel="Subtask title"
+          onCommit={(title) => onRename(s.id, title)}
+          className={`block w-full text-sm ${
             s.isDone ? "text-muted-fg line-through" : "text-ink"
           }`}
-        >
-          {s.title}
-        </span>
+        />
         {(s.receivedFrom || s.sharedTo.length > 0) && (
           <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
             {s.receivedFrom && (
@@ -373,14 +450,16 @@ function SubtaskRow({
         <SharePicker subtaskId={s.id} team={team} alreadyShared={s.sharedTo} />
       )}
 
-      <button
-        type="button"
-        onClick={() => onDelete(s.id)}
-        className="text-red-500 transition hover:text-red-600"
-        aria-label="Delete subtask"
-      >
-        <TrashIcon className="h-4 w-4" />
-      </button>
+      {!locked && (
+        <button
+          type="button"
+          onClick={() => onDelete(s.id)}
+          className="mt-0.5 text-red-500 transition hover:text-red-600"
+          aria-label="Delete subtask"
+        >
+          <TrashIcon className="h-4 w-4" />
+        </button>
+      )}
     </li>
   );
 }
@@ -416,7 +495,7 @@ function SharePicker({
   }
 
   return (
-    <div className="relative" ref={ref}>
+    <div className="relative mt-0.5" ref={ref}>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -458,32 +537,101 @@ function SharePicker({
   );
 }
 
-function GoalTitle({ goalId, title }: { goalId: string; title: string }) {
-  const [value, setValue] = useState(title);
+function GoalTitle({
+  goalId,
+  title,
+  readOnly,
+}: {
+  goalId: string;
+  title: string;
+  readOnly: boolean;
+}) {
+  return (
+    <EditableText
+      value={title}
+      readOnly={readOnly}
+      ariaLabel="Goal title"
+      onCommit={(next) => renameGoal(goalId, next)}
+      className="min-w-0 flex-1 text-base font-semibold text-ink"
+    />
+  );
+}
+
+/**
+ * An auto-growing textarea that reads as plain text but edits inline. Wraps to
+ * show the full value (so long goals/subtasks are fully readable), commits on
+ * blur or Enter, and reverts on Escape. Read-only renders the same wrapped text
+ * without editing affordances.
+ */
+function EditableText({
+  value,
+  onCommit,
+  readOnly,
+  className,
+  ariaLabel,
+}: {
+  value: string;
+  onCommit: (next: string) => void;
+  readOnly: boolean;
+  className: string;
+  ariaLabel: string;
+}) {
+  const [text, setText] = useState(value);
+  const ref = useRef<HTMLTextAreaElement>(null);
+
+  // Reconcile with the value from the server when it changes underneath us
+  // (e.g. after a rename revalidates) — without an effect. See:
+  // https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes
+  const [lastValue, setLastValue] = useState(value);
+  if (value !== lastValue) {
+    setLastValue(value);
+    setText(value);
+  }
+
+  function resize() {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }
+
+  // Size to content on mount and whenever the text changes.
+  useLayoutEffect(resize, []);
+  useLayoutEffect(resize, [text]);
 
   function commit() {
-    const trimmed = value.trim();
-    if (!trimmed || trimmed === title) {
-      setValue(title);
+    const trimmed = text.trim();
+    if (!trimmed || trimmed === value) {
+      setText(value);
       return;
     }
-    renameGoal(goalId, trimmed);
+    onCommit(trimmed);
   }
 
   return (
-    <input
-      value={value}
-      onChange={(e) => setValue(e.target.value)}
+    <textarea
+      ref={ref}
+      rows={1}
+      value={text}
+      readOnly={readOnly}
+      onChange={(e) => setText(e.target.value)}
       onBlur={commit}
       onKeyDown={(e) => {
-        if (e.key === "Enter") e.currentTarget.blur();
+        if (e.key === "Enter") {
+          e.preventDefault();
+          e.currentTarget.blur();
+        }
         if (e.key === "Escape") {
-          setValue(title);
+          setText(value);
           e.currentTarget.blur();
         }
       }}
-      className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1 py-0.5 text-base font-semibold text-ink hover:border-line focus:border-brand focus:bg-surface focus:outline-none"
-      aria-label="Goal title"
+      aria-label={ariaLabel}
+      className={`resize-none overflow-hidden break-words rounded border border-transparent bg-transparent px-1 py-0.5 focus:outline-none ${
+        readOnly
+          ? "cursor-default focus:border-transparent"
+          : "hover:border-line focus:border-brand focus:bg-surface"
+      } ${className}`}
     />
   );
 }

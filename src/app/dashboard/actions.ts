@@ -26,6 +26,23 @@ async function assertGoalOwned(goalId: string, userId: string) {
   return goal;
 }
 
+/**
+ * Like `assertGoalOwned`, but also rejects edits while the week is submitted.
+ * Used for actions that change a goal's *definition* (title, priority, deadline,
+ * subtasks) — progress actions (toggling, completing) stay allowed when locked.
+ */
+async function assertGoalEditable(goalId: string, userId: string) {
+  const goal = await prisma.goal.findFirst({
+    where: { id: goalId, week: { userId } },
+    include: { week: { select: { submittedAt: true } } },
+  });
+  if (!goal) throw new Error("Goal not found");
+  if (goal.week.submittedAt) {
+    throw new Error("Goals are locked. Click Edit to make changes.");
+  }
+  return goal;
+}
+
 /** Confirm a subtask belongs to the signed-in user; returns it or throws. */
 async function assertSubtaskOwned(subtaskId: string, userId: string) {
   const subtask = await prisma.subtask.findFirst({
@@ -35,15 +52,80 @@ async function assertSubtaskOwned(subtaskId: string, userId: string) {
   return subtask;
 }
 
-export async function addGoal(formData: FormData) {
+/** Like `assertSubtaskOwned`, but rejects edits while the week is submitted. */
+async function assertSubtaskEditable(subtaskId: string, userId: string) {
+  const subtask = await prisma.subtask.findFirst({
+    where: { id: subtaskId, goal: { week: { userId } } },
+    include: { goal: { select: { week: { select: { submittedAt: true } } } } },
+  });
+  if (!subtask) throw new Error("Subtask not found");
+  if (subtask.goal.week.submittedAt) {
+    throw new Error("Goals are locked. Click Edit to make changes.");
+  }
+  return subtask;
+}
+
+/**
+ * Parse a required "YYYY-MM-DDTHH:MM" wall-clock deadline stamp into a Date,
+ * stored verbatim as UTC so it reads back exactly as typed. Throws if missing
+ * or malformed — deadlines are required when setting a goal.
+ */
+function parseRequiredDeadline(stamp: string): Date {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(stamp)) {
+    throw new Error("A deadline is required.");
+  }
+  const deadline = new Date(`${stamp}:00.000Z`);
+  if (Number.isNaN(deadline.getTime())) throw new Error("Invalid deadline");
+  return deadline;
+}
+
+/**
+ * Add a goal to the current week. Priority and deadline are required parts of
+ * setting a goal (enforced here as well as in the UI).
+ */
+export async function addGoal(input: {
+  title: string;
+  priority: Priority;
+  deadline: string;
+}) {
   const userId = await requireUserId();
-  const title = String(formData.get("title") ?? "").trim();
-  if (!title) return;
+  const title = input.title.trim();
+  if (!title) throw new Error("A goal needs a title.");
+  if (!isPriority(input.priority)) throw new Error("A priority is required.");
+  const deadline = parseRequiredDeadline(input.deadline);
 
   const week = await getOrCreateCurrentWeek(userId);
+  if (week.submittedAt) {
+    throw new Error("Goals are locked. Click Edit to make changes.");
+  }
   const position = week.goals.length + 1;
   await prisma.goal.create({
-    data: { weekId: week.id, title, position },
+    data: { weekId: week.id, title, position, priority: input.priority, deadline },
+  });
+  revalidatePath("/dashboard");
+}
+
+/** Confirm ("submit") the current week's goals — locks them and timestamps it. */
+export async function submitWeek() {
+  const userId = await requireUserId();
+  const week = await getOrCreateCurrentWeek(userId);
+  if (week.goals.length === 0) {
+    throw new Error("Add at least one goal before submitting.");
+  }
+  await prisma.week.update({
+    where: { id: week.id },
+    data: { submittedAt: new Date() },
+  });
+  revalidatePath("/dashboard");
+}
+
+/** Re-open the current week's goals for editing (clears the submission). */
+export async function reopenWeek() {
+  const userId = await requireUserId();
+  const week = await getOrCreateCurrentWeek(userId);
+  await prisma.week.update({
+    where: { id: week.id },
+    data: { submittedAt: null },
   });
   revalidatePath("/dashboard");
 }
@@ -52,7 +134,7 @@ export async function renameGoal(goalId: string, title: string) {
   const userId = await requireUserId();
   const trimmed = title.trim();
   if (!trimmed) return;
-  await assertGoalOwned(goalId, userId);
+  await assertGoalEditable(goalId, userId);
   await prisma.goal.update({ where: { id: goalId }, data: { title: trimmed } });
   revalidatePath("/dashboard");
 }
@@ -77,7 +159,7 @@ export async function setGoalCompleted(goalId: string, completed: boolean) {
  */
 export async function setGoalDeadline(goalId: string, stamp: string | null) {
   const userId = await requireUserId();
-  await assertGoalOwned(goalId, userId);
+  await assertGoalEditable(goalId, userId);
 
   let deadline: Date | null = null;
   if (stamp) {
@@ -98,7 +180,7 @@ export async function setGoalPriority(goalId: string, priority: Priority | null)
   if (priority !== null && !isPriority(priority)) {
     throw new Error("Invalid priority");
   }
-  await assertGoalOwned(goalId, userId);
+  await assertGoalEditable(goalId, userId);
   await prisma.goal.update({ where: { id: goalId }, data: { priority } });
   revalidatePath("/dashboard");
 }
@@ -149,7 +231,7 @@ export async function setAvatar(emoji: string): Promise<SetAvatarResult> {
 
 export async function deleteGoal(goalId: string) {
   const userId = await requireUserId();
-  await assertGoalOwned(goalId, userId);
+  await assertGoalEditable(goalId, userId);
   await prisma.goal.delete({ where: { id: goalId } });
   revalidatePath("/dashboard");
 }
@@ -158,11 +240,24 @@ export async function addSubtask(goalId: string, title: string) {
   const userId = await requireUserId();
   const trimmed = title.trim();
   if (!trimmed) return;
-  await assertGoalOwned(goalId, userId);
+  await assertGoalEditable(goalId, userId);
 
   const count = await prisma.subtask.count({ where: { goalId } });
   await prisma.subtask.create({
     data: { goalId, title: trimmed, position: count + 1 },
+  });
+  revalidatePath("/dashboard");
+}
+
+/** Rename a subtask in place (so users can edit instead of delete-and-retype). */
+export async function renameSubtask(subtaskId: string, title: string) {
+  const userId = await requireUserId();
+  const trimmed = title.trim();
+  if (!trimmed) return;
+  await assertSubtaskEditable(subtaskId, userId);
+  await prisma.subtask.update({
+    where: { id: subtaskId },
+    data: { title: trimmed },
   });
   revalidatePath("/dashboard");
 }
@@ -176,7 +271,7 @@ export async function toggleSubtask(subtaskId: string, isDone: boolean) {
 
 export async function deleteSubtask(subtaskId: string) {
   const userId = await requireUserId();
-  await assertSubtaskOwned(subtaskId, userId);
+  await assertSubtaskEditable(subtaskId, userId);
   await prisma.subtask.delete({ where: { id: subtaskId } });
   revalidatePath("/dashboard");
 }
@@ -256,16 +351,21 @@ export async function shareSubtask(subtaskId: string, toUserId: string) {
 export async function startNewWeek(
   reasons: { goalId: string; reason: string }[] = [],
   range?: { start: string; end: string },
-  firstGoal?: string,
+  firstGoal?: { title: string; priority: Priority; deadline: string },
 ) {
   const userId = await requireUserId();
   const week = await getOrCreateCurrentWeek(userId);
 
-  // The new week must be opened with at least one goal.
-  const firstGoalTitle = (firstGoal ?? "").trim();
+  // The new week must be opened with at least one goal — with the same required
+  // priority and deadline as any other goal.
+  const firstGoalTitle = (firstGoal?.title ?? "").trim();
   if (!firstGoalTitle) {
     throw new Error("Add at least one goal for the new week.");
   }
+  if (!firstGoal || !isPriority(firstGoal.priority)) {
+    throw new Error("A priority is required for the first goal.");
+  }
+  const firstGoalDeadline = parseRequiredDeadline(firstGoal.deadline);
 
   const reasonByGoal = new Map(
     reasons.map((r) => [r.goalId, r.reason.trim()]),
@@ -320,9 +420,15 @@ export async function startNewWeek(
     const newWeek = await tx.week.create({
       data: { userId, startDate: start, endDate: end, isCurrent: true, submittedLate },
     });
-    // Seed the new week with its required first goal.
+    // Seed the new week with its required first goal (priority + deadline set).
     await tx.goal.create({
-      data: { weekId: newWeek.id, title: firstGoalTitle, position: 1 },
+      data: {
+        weekId: newWeek.id,
+        title: firstGoalTitle,
+        position: 1,
+        priority: firstGoal.priority,
+        deadline: firstGoalDeadline,
+      },
     });
   });
   revalidatePath("/dashboard");

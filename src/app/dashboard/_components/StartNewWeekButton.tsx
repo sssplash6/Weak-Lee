@@ -2,6 +2,9 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { startNewWeek } from "../actions";
+import { PRIORITY_LABEL, type Priority } from "@/lib/priority";
+import { DeadlinePicker } from "./DeadlinePicker";
+import { PriorityPicker } from "./PriorityPicker";
 
 type IncompleteGoal = { id: string; title: string; percent: number };
 
@@ -24,16 +27,20 @@ export function StartNewWeekButton({
   incompleteGoals,
   defaultStart,
   defaultEnd,
+  todayYmd,
 }: {
   incompleteGoals: IncompleteGoal[];
   defaultStart: string;
   defaultEnd: string;
+  todayYmd: string;
 }) {
   const [open, setOpen] = useState(false);
   const [reasons, setReasons] = useState<Record<string, string>>({});
   const [start, setStart] = useState(defaultStart);
   const [end, setEnd] = useState(defaultEnd);
   const [firstGoal, setFirstGoal] = useState("");
+  const [priority, setPriority] = useState<Priority | null>(null);
+  const [deadline, setDeadline] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const hasUnfinished = incompleteGoals.length > 0;
@@ -41,7 +48,8 @@ export function StartNewWeekButton({
     (g) => (reasons[g.id] ?? "").trim().length > 0,
   );
   const validRange = !!start && !!end && start <= end;
-  const hasFirstGoal = firstGoal.trim().length > 0;
+  const hasFirstGoal =
+    firstGoal.trim().length > 0 && priority != null && deadline != null;
 
   function close() {
     setOpen(false);
@@ -49,6 +57,8 @@ export function StartNewWeekButton({
     setStart(defaultStart);
     setEnd(defaultEnd);
     setFirstGoal("");
+    setPriority(null);
+    setDeadline(null);
   }
 
   // Close on Escape and lock body scroll while the modal is open.
@@ -68,12 +78,17 @@ export function StartNewWeekButton({
 
   function submit() {
     if ((hasUnfinished && !allFilled) || !validRange || !hasFirstGoal) return;
+    if (priority == null || deadline == null) return;
     const payload = incompleteGoals.map((g) => ({
       goalId: g.id,
       reason: (reasons[g.id] ?? "").trim(),
     }));
     startTransition(async () => {
-      await startNewWeek(payload, { start, end }, firstGoal.trim());
+      await startNewWeek(
+        payload,
+        { start, end },
+        { title: firstGoal.trim(), priority, deadline },
+      );
       close();
     });
   }
@@ -140,21 +155,32 @@ export function StartNewWeekButton({
             </p>
           )}
 
-          <label className="mt-4 block">
+          <div className="mt-4">
             <span className="text-xs font-semibold uppercase tracking-wide text-muted-fg">
               First goal for the new week
             </span>
-            <input
-              type="text"
-              value={firstGoal}
-              onChange={(e) => setFirstGoal(e.target.value)}
-              placeholder="e.g. Ship the onboarding flow"
-              className="mt-1 w-full rounded-lg border border-line px-3 py-2 text-sm text-ink placeholder:text-muted-fg focus:border-brand focus:outline-none"
-            />
+            <div className="mt-1 flex items-center gap-2 rounded-lg border border-line px-3 py-2 focus-within:border-brand">
+              <input
+                type="text"
+                value={firstGoal}
+                onChange={(e) => setFirstGoal(e.target.value)}
+                placeholder="e.g. Ship the onboarding flow"
+                className="min-w-0 flex-1 bg-transparent text-sm text-ink placeholder:text-muted-fg focus:outline-none"
+              />
+              <PriorityPicker value={priority} onChange={setPriority} />
+              <DeadlinePicker
+                value={deadline}
+                todayYmd={todayYmd}
+                overdue={false}
+                onChange={setDeadline}
+              />
+            </div>
             <span className="mt-1 block text-xs text-muted-fg">
-              Every new week needs at least one goal. You can add more after.
+              Every new week needs at least one goal — with a priority and
+              deadline.
+              {priority != null && ` Priority: ${PRIORITY_LABEL[priority]}.`}
             </span>
-          </label>
+          </div>
         </div>
 
         {hasUnfinished ? (

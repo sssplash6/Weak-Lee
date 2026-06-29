@@ -4,12 +4,22 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/admin";
 import { goalPercent, isGoalComplete, weekPercent } from "@/lib/progress";
+import { formatStamp, toStamp } from "@/lib/dates";
 import { AdminUserList, type AdminUser } from "./_components/AdminUserList";
 
 function fmtRange(start: Date, end: Date): string {
   const f = (d: Date) =>
     d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
   return `${f(start)} – ${f(end)}`;
+}
+
+function fmtDateTime(d: Date): string {
+  return d.toLocaleString(undefined, {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 export default async function AdminPage() {
@@ -34,6 +44,7 @@ export default async function AdminPage() {
             startDate: true,
             endDate: true,
             submittedLate: true,
+            submittedAt: true,
             goals: {
               orderBy: { position: "asc" },
               select: {
@@ -78,6 +89,7 @@ export default async function AdminPage() {
       avatar: u.avatar,
       weekLabel: week ? fmtRange(week.startDate, week.endDate) : null,
       late: week?.submittedLate ?? false,
+      submittedAtLabel: week?.submittedAt ? fmtDateTime(week.submittedAt) : null,
       percent: weekPercent(goals),
       goalCount: goals.length,
       completedCount: goals.filter(isGoalComplete).length,
@@ -86,7 +98,7 @@ export default async function AdminPage() {
         title: g.title,
         percent: goalPercent(g.subtasks),
         completed: isGoalComplete(g),
-        hasDeadline: g.deadline != null,
+        deadlineLabel: g.deadline ? formatStamp(toStamp(g.deadline)) : null,
       })),
     };
   });

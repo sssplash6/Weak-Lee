@@ -10,7 +10,7 @@ export type AdminGoal = {
   title: string;
   percent: number;
   completed: boolean;
-  hasDeadline: boolean;
+  deadlineLabel: string | null;
 };
 
 export type AdminUser = {
@@ -21,6 +21,7 @@ export type AdminUser = {
   avatar: string | null;
   weekLabel: string | null;
   late: boolean;
+  submittedAtLabel: string | null;
   percent: number;
   goalCount: number;
   completedCount: number;
@@ -81,10 +82,26 @@ function UserRow({ user: u, isSelf }: { user: AdminUser; isSelf: boolean }) {
                 No goals
               </span>
             )}
+            {u.submittedAtLabel ? (
+              <span className="shrink-0 rounded-full bg-brand-soft px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand">
+                Submitted
+              </span>
+            ) : (
+              u.goalCount > 0 && (
+                <span className="shrink-0 rounded-full bg-line px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted-fg">
+                  Draft
+                </span>
+              )
+            )}
           </p>
           <p className="truncate text-xs text-muted-fg">
             {u.email ?? "no email"}
             {u.department ? ` · ${u.department}` : ""}
+          </p>
+          <p className="truncate text-xs text-muted-fg">
+            {u.submittedAtLabel
+              ? `Goals submitted ${u.submittedAtLabel}`
+              : "Goals not submitted yet"}
           </p>
         </div>
 
@@ -145,8 +162,10 @@ function UserRow({ user: u, isSelf }: { user: AdminUser; isSelf: boolean }) {
               >
                 {g.title}
               </span>
-              {g.hasDeadline && (
-                <span className="shrink-0 text-xs text-muted-fg">due</span>
+              {g.deadlineLabel && (
+                <span className="shrink-0 rounded-full bg-canvas px-2 py-0.5 text-[11px] font-medium text-muted-fg">
+                  Due {g.deadlineLabel}
+                </span>
               )}
               <span className="shrink-0 text-xs font-semibold tabular-nums text-accent">
                 {g.percent}%
