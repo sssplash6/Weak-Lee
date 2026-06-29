@@ -10,7 +10,7 @@ import {
   nextWeekBounds,
 } from "@/lib/weeks";
 import { goalPercent, isGoalComplete, weekPercent } from "@/lib/progress";
-import { formatDateTimeTz, toStamp, toYmd } from "@/lib/dates";
+import { formatDateTimeTz, formatYmd, toStamp, toYmd } from "@/lib/dates";
 import type { Priority } from "@/lib/priority";
 import { GoalCard } from "./_components/GoalCard";
 import { AddGoalCard } from "./_components/AddGoalCard";
@@ -22,10 +22,10 @@ import { WeekArchive } from "./_components/WeekArchive";
 import { WeekCalendar } from "./_components/WeekCalendar";
 import { WeekSubmit } from "./_components/WeekSubmit";
 
+// Render by the UTC calendar date the bounds were stored at, so the week label
+// doesn't drift by the viewer's timezone.
 function formatRange(start: Date, end: Date): string {
-  const fmt = (d: Date) =>
-    d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
-  return `${fmt(start)} – ${fmt(end)}`;
+  return `${formatYmd(toYmd(start))} – ${formatYmd(toYmd(end))}`;
 }
 
 

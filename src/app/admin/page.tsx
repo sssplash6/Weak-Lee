@@ -4,13 +4,20 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/admin";
 import { goalPercent, isGoalComplete, weekPercent } from "@/lib/progress";
-import { formatDateTimeTz, formatStamp, toStamp } from "@/lib/dates";
+import { getWeekBounds } from "@/lib/weeks";
+import {
+  formatDateTimeTz,
+  formatStamp,
+  formatYmd,
+  toStamp,
+  toYmd,
+} from "@/lib/dates";
 import { AdminUserList, type AdminUser } from "./_components/AdminUserList";
 
+// Render week ranges by their UTC calendar date (matching how week bounds are
+// stored) so the dates don't drift by the viewer's timezone.
 function fmtRange(start: Date, end: Date): string {
-  const f = (d: Date) =>
-    d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
-  return `${f(start)} – ${f(end)}`;
+  return `${formatYmd(toYmd(start))} – ${formatYmd(toYmd(end))}`;
 }
 
 export default async function AdminPage() {
@@ -69,6 +76,10 @@ export default async function AdminPage() {
     }),
   ]);
 
+  // The current calendar week's Monday — used to flag users whose active week is
+  // dated ahead of it (e.g. the launch "start next week" artifact).
+  const thisWeekStart = getWeekBounds(new Date()).start;
+
   const users: AdminUser[] = rawUsers.map((u) => {
     const week = u.weeks[0];
     const goals = week?.goals ?? [];
@@ -79,6 +90,7 @@ export default async function AdminPage() {
       department: u.department,
       avatar: u.avatar,
       weekLabel: week ? fmtRange(week.startDate, week.endDate) : null,
+      misdated: week ? week.startDate.getTime() > thisWeekStart.getTime() : false,
       late: week?.submittedLate ?? false,
       submittedAtLabel: week?.submittedAt
         ? formatDateTimeTz(week.submittedAt)

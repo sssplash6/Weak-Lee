@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { resolveAvatar } from "@/lib/avatar";
 import { TrashIcon } from "../../dashboard/_components/icons";
-import { deleteUser } from "../actions";
+import { deleteUser, moveUserWeekToCurrent } from "../actions";
 
 export type AdminGoal = {
   id: string;
@@ -20,6 +20,7 @@ export type AdminUser = {
   department: string | null;
   avatar: string | null;
   weekLabel: string | null;
+  misdated: boolean;
   late: boolean;
   submittedAtLabel: string | null;
   percent: number;
@@ -82,6 +83,11 @@ function UserRow({ user: u, isSelf }: { user: AdminUser; isSelf: boolean }) {
                 No goals
               </span>
             )}
+            {u.misdated && (
+              <span className="shrink-0 rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-orange-600">
+                Next week
+              </span>
+            )}
             {u.submittedAtLabel ? (
               <span className="shrink-0 rounded-full bg-brand-soft px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand">
                 Submitted
@@ -140,6 +146,7 @@ function UserRow({ user: u, isSelf }: { user: AdminUser; isSelf: boolean }) {
         )}
       </button>
 
+      {u.misdated && <FixWeekButton userId={u.id} weekLabel={u.weekLabel} />}
       {!isSelf && <DeleteUserButton userId={u.id} name={u.name ?? u.email} />}
       </div>
 
@@ -175,6 +182,57 @@ function UserRow({ user: u, isSelf }: { user: AdminUser; isSelf: boolean }) {
         </ul>
       )}
     </li>
+  );
+}
+
+function FixWeekButton({
+  userId,
+  weekLabel,
+}: {
+  userId: string;
+  weekLabel: string | null;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const [isPending, startTransition] = useTransition();
+
+  if (confirming) {
+    return (
+      <span className="flex shrink-0 items-center gap-1 pr-3 text-xs">
+        <button
+          type="button"
+          disabled={isPending}
+          onClick={() =>
+            startTransition(async () => {
+              await moveUserWeekToCurrent(userId);
+              setConfirming(false);
+            })
+          }
+          className="rounded bg-brand px-2 py-1 font-medium text-white transition hover:bg-brand-dark disabled:opacity-50"
+          title={`Re-date${weekLabel ? ` (${weekLabel})` : ""} to the current week`}
+        >
+          {isPending ? "Moving…" : "Move to this week"}
+        </button>
+        <button
+          type="button"
+          disabled={isPending}
+          onClick={() => setConfirming(false)}
+          className="rounded px-2 py-1 text-muted-fg transition hover:bg-canvas"
+        >
+          Cancel
+        </button>
+      </span>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => setConfirming(true)}
+      className="shrink-0 rounded-lg border border-orange-200 px-2.5 py-1 text-xs font-medium text-orange-600 transition hover:bg-orange-50"
+      title="Move this user's week to the current calendar week (keeps all goals)"
+    >
+      Fix week
+    </button>
   );
 }
 
