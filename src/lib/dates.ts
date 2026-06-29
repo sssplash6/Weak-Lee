@@ -37,6 +37,27 @@ export function toStamp(date: Date | string): string {
 /** End-of-day sentinel time: a date-only deadline is "due by" this time. */
 export const END_OF_DAY = "23:59";
 
+/** The company timezone (Tashkent, GMT+5, no DST). All submission times shown in it. */
+export const COMPANY_TIME_ZONE = "Asia/Tashkent";
+
+/**
+ * A Date (or ISO string) → "Mon, Jun 29, 09:32 AM" rendered in the company
+ * timezone (GMT+5), so submission times read the same for everyone regardless
+ * of where the viewer (or server) is.
+ */
+export function formatDateTimeTz(date: Date | string): string {
+  const d = typeof date === "string" ? new Date(date) : date;
+  return d.toLocaleString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+    timeZone: COMPANY_TIME_ZONE,
+  });
+}
+
 /**
  * "YYYY-MM-DDTHH:MM" → a short label like "30 Jun" or "30 Jun · 14:00".
  * The time is omitted when it's the end-of-day sentinel (i.e. date-only).

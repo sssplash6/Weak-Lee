@@ -91,11 +91,13 @@ model Week {
   // after the Sunday 12:00 Tashkent deadline. Set when a week is explicitly
   // started; auto-created first weeks stay false. See lib/lateness.ts.
   submittedLate Boolean @default(false)
-  // When the user confirmed ("submitted") their goals for the week. Null while
-  // the goal list is still a draft. Goals are locked from editing once set; the
-  // user can re-open with "Edit" (clears this) and submit again. Surfaced to
-  // admins as the goal-submission timestamp.
+  // The *first* time the user submitted their goals for this week. Set once and
+  // never overwritten or cleared — re-submitting after an edit keeps the
+  // original time. Null until the first submit. Surfaced to admins.
   submittedAt DateTime?
+  // Whether the goal list is currently locked (submitted state). Submitting sets
+  // this true; "Edit goals" sets it false without touching submittedAt.
+  goalsLocked Boolean @default(false)
   createdAt DateTime @default(now())
 
   user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)

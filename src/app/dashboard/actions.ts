@@ -34,10 +34,10 @@ async function assertGoalOwned(goalId: string, userId: string) {
 async function assertGoalEditable(goalId: string, userId: string) {
   const goal = await prisma.goal.findFirst({
     where: { id: goalId, week: { userId } },
-    include: { week: { select: { submittedAt: true } } },
+    include: { week: { select: { goalsLocked: true } } },
   });
   if (!goal) throw new Error("Goal not found");
-  if (goal.week.submittedAt) {
+  if (goal.week.goalsLocked) {
     throw new Error("Goals are locked. Click Edit to make changes.");
   }
   return goal;
@@ -56,10 +56,10 @@ async function assertSubtaskOwned(subtaskId: string, userId: string) {
 async function assertSubtaskEditable(subtaskId: string, userId: string) {
   const subtask = await prisma.subtask.findFirst({
     where: { id: subtaskId, goal: { week: { userId } } },
-    include: { goal: { select: { week: { select: { submittedAt: true } } } } },
+    include: { goal: { select: { week: { select: { goalsLocked: true } } } } },
   });
   if (!subtask) throw new Error("Subtask not found");
-  if (subtask.goal.week.submittedAt) {
+  if (subtask.goal.week.goalsLocked) {
     throw new Error("Goals are locked. Click Edit to make changes.");
   }
   return subtask;
@@ -95,7 +95,7 @@ export async function addGoal(input: {
   const deadline = parseRequiredDeadline(input.deadline);
 
   const week = await getOrCreateCurrentWeek(userId);
-  if (week.submittedAt) {
+  if (week.goalsLocked) {
     throw new Error("Goals are locked. Click Edit to make changes.");
   }
   const position = week.goals.length + 1;
@@ -105,7 +105,11 @@ export async function addGoal(input: {
   revalidatePath("/dashboard");
 }
 
-/** Confirm ("submit") the current week's goals — locks them and timestamps it. */
+/**
+ * Confirm ("submit") the current week's goals — locks them for editing. The
+ * submission time is fixed to the *first* submit on this week: it's recorded
+ * only when not already set, so re-submitting after an edit keeps the original.
+ */
 export async function submitWeek() {
   const userId = await requireUserId();
   const week = await getOrCreateCurrentWeek(userId);
@@ -114,18 +118,22 @@ export async function submitWeek() {
   }
   await prisma.week.update({
     where: { id: week.id },
-    data: { submittedAt: new Date() },
+    data: {
+      goalsLocked: true,
+      // Only stamp the first time — never overwrite an existing submission time.
+      ...(week.submittedAt ? {} : { submittedAt: new Date() }),
+    },
   });
   revalidatePath("/dashboard");
 }
 
-/** Re-open the current week's goals for editing (clears the submission). */
+/** Re-open the current week's goals for editing. Keeps the first-submit time. */
 export async function reopenWeek() {
   const userId = await requireUserId();
   const week = await getOrCreateCurrentWeek(userId);
   await prisma.week.update({
     where: { id: week.id },
-    data: { submittedAt: null },
+    data: { goalsLocked: false },
   });
   revalidatePath("/dashboard");
 }

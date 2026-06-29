@@ -51,7 +51,10 @@ const weekInclude = {
 // week rather than the current (nearly-over) calendar week, so people who sign
 // up at launch land on a fresh full week. Set back to false (or delete) once the
 // launch week has started.
-const LAUNCH_START_NEXT_WEEK = true;
+//
+// Turned off now that the launch week has started: new users were landing on
+// next week's dates and entering goals there thinking it was the current week.
+const LAUNCH_START_NEXT_WEEK = false;
 
 /**
  * Return the user's current week, loaded with goals and subtasks (ordered).

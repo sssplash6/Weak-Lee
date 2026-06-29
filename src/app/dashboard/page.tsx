@@ -10,7 +10,7 @@ import {
   nextWeekBounds,
 } from "@/lib/weeks";
 import { goalPercent, isGoalComplete, weekPercent } from "@/lib/progress";
-import { toStamp, toYmd } from "@/lib/dates";
+import { formatDateTimeTz, toStamp, toYmd } from "@/lib/dates";
 import type { Priority } from "@/lib/priority";
 import { GoalCard } from "./_components/GoalCard";
 import { AddGoalCard } from "./_components/AddGoalCard";
@@ -28,15 +28,6 @@ function formatRange(start: Date, end: Date): string {
   return `${fmt(start)} – ${fmt(end)}`;
 }
 
-function formatDateTime(d: Date): string {
-  return d.toLocaleString(undefined, {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 function displayName(u: { name: string | null; email: string | null }): string {
   return u.name ?? u.email ?? "Someone";
@@ -90,9 +81,9 @@ export default async function DashboardPage() {
   ]);
 
   const overall = weekPercent(week.goals);
-  const submitted = week.submittedAt != null;
+  const locked = week.goalsLocked;
   const submittedAtLabel = week.submittedAt
-    ? formatDateTime(week.submittedAt)
+    ? formatDateTimeTz(week.submittedAt)
     : null;
 
   const incompleteGoals = week.goals
@@ -185,7 +176,7 @@ export default async function DashboardPage() {
       </header>
 
       <WeekSubmit
-        submitted={submitted}
+        locked={locked}
         submittedAtLabel={submittedAtLabel}
         goalCount={goals.length}
       />
@@ -199,11 +190,11 @@ export default async function DashboardPage() {
             team={team}
             todayYmd={todayYmd}
             nowStamp={nowStamp}
-            locked={submitted}
+            locked={locked}
           />
         ))}
 
-        {!submitted && <AddGoalCard nextIndex={goals.length + 1} todayYmd={todayYmd} />}
+        {!locked && <AddGoalCard nextIndex={goals.length + 1} todayYmd={todayYmd} />}
 
         {goals.length === 0 && (
           <p className="px-1 text-sm text-muted-fg">
