@@ -108,7 +108,7 @@ export default async function AdminPage() {
         id: true,
         attendances: { select: { userId: true, status: true } },
         penalties: {
-          where: { type: "MEETING_SKIPPED" },
+          where: { type: { in: ["MEETING_SKIPPED", "MEETING_LATE"] } },
           select: { userId: true, amount: true },
         },
       },

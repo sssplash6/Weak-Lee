@@ -8,6 +8,7 @@ import { getWeekBounds } from "@/lib/weeks";
 import { currentMeetingSlot } from "@/lib/meetings";
 import {
   MAX_PENALTY,
+  MEETING_LATE_PENALTY,
   meetingPenaltyAmount,
   type AttendanceStatus,
 } from "@/lib/penalties";
@@ -116,7 +117,12 @@ export async function setAttendance(userId: string, status: AttendanceStatus) {
   if (!isAdmin(session?.user?.email)) {
     throw new Error("Not authorized");
   }
-  if (status !== "ATTENDED" && status !== "SKIPPED" && status !== "EXCUSED") {
+  if (
+    status !== "ATTENDED" &&
+    status !== "LATE" &&
+    status !== "SKIPPED" &&
+    status !== "EXCUSED"
+  ) {
     throw new Error("Invalid status");
   }
   const issuedById = session!.user.id;
@@ -141,11 +147,12 @@ export async function setAttendance(userId: string, status: AttendanceStatus) {
 }
 
 /**
- * Reconcile a user's MEETING_SKIPPED fines from their attendance history.
- * Walks meetings oldest-first tracking the consecutive-skip streak (ATTENDED or
- * EXCUSED resets it), then ensures exactly one correctly-priced fine per skipped
- * meeting — updating amounts in place (preserving timestamps) and removing fines
- * for meetings that are no longer skipped.
+ * Reconcile a user's meeting-attendance fines from their attendance history.
+ * Walks meetings oldest-first tracking the consecutive-skip streak — SKIPPED
+ * escalates the streak fine; LATE is a flat fine that counts as present (resets
+ * the streak); ATTENDED/EXCUSED reset it with no fine. Ensures exactly one
+ * correctly-typed, correctly-priced fine per fined meeting (updating in place to
+ * preserve timestamps) and removes fines for meetings that no longer warrant one.
  */
 async function recomputeMeetingPenalties(
   tx: Prisma.TransactionClient,
@@ -159,41 +166,49 @@ async function recomputeMeetingPenalties(
   });
 
   const existing = await tx.penalty.findMany({
-    where: { userId, type: "MEETING_SKIPPED" },
+    where: { userId, type: { in: ["MEETING_SKIPPED", "MEETING_LATE"] } },
   });
   const byMeeting = new Map(existing.map((p) => [p.meetingId, p]));
 
   let streak = 0;
   for (const a of attendances) {
+    let desired: { type: "MEETING_SKIPPED" | "MEETING_LATE"; amount: number } | null =
+      null;
     if (a.status === "SKIPPED") {
       streak += 1;
-      const amount = meetingPenaltyAmount(streak);
-      const current = byMeeting.get(a.meetingId);
-      if (current) {
-        if (current.amount !== amount) {
-          await tx.penalty.update({
-            where: { id: current.id },
-            data: { amount },
-          });
-        }
-        byMeeting.delete(a.meetingId);
-      } else {
-        await tx.penalty.create({
-          data: {
-            userId,
-            type: "MEETING_SKIPPED",
-            amount,
-            meetingId: a.meetingId,
-            issuedById,
-          },
-        });
-      }
+      desired = { type: "MEETING_SKIPPED", amount: meetingPenaltyAmount(streak) };
+    } else if (a.status === "LATE") {
+      streak = 0;
+      desired = { type: "MEETING_LATE", amount: MEETING_LATE_PENALTY };
     } else {
       streak = 0;
     }
+
+    if (!desired) continue;
+
+    const current = byMeeting.get(a.meetingId);
+    if (current) {
+      if (current.amount !== desired.amount || current.type !== desired.type) {
+        await tx.penalty.update({
+          where: { id: current.id },
+          data: { amount: desired.amount, type: desired.type },
+        });
+      }
+      byMeeting.delete(a.meetingId);
+    } else {
+      await tx.penalty.create({
+        data: {
+          userId,
+          type: desired.type,
+          amount: desired.amount,
+          meetingId: a.meetingId,
+          issuedById,
+        },
+      });
+    }
   }
 
-  // Any leftover fines point at meetings that are no longer skipped — remove them.
+  // Any leftover fines point at meetings that no longer warrant one — remove them.
   const stale = [...byMeeting.values()].map((p) => p.id);
   if (stale.length > 0) {
     await tx.penalty.deleteMany({ where: { id: { in: stale } } });

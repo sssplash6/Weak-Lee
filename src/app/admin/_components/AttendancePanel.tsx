@@ -17,7 +17,7 @@ export type RosterEntry = {
   fine: number | null;
 };
 
-const STATUSES: AttendanceStatus[] = ["ATTENDED", "SKIPPED", "EXCUSED"];
+const STATUSES: AttendanceStatus[] = ["ATTENDED", "LATE", "SKIPPED", "EXCUSED"];
 
 export function AttendancePanel({
   meetingLabel,
@@ -94,7 +94,7 @@ function RosterRow({
       </span>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium text-ink">{r.name}</p>
-        {r.status === "SKIPPED" && r.fine != null && (
+        {(r.status === "SKIPPED" || r.status === "LATE") && r.fine != null && (
           <p className="text-xs font-medium text-red-600">
             Fined {formatMoney(r.fine)}
           </p>
@@ -115,9 +115,11 @@ function RosterRow({
                 active
                   ? s === "SKIPPED"
                     ? "bg-red-500 text-white"
-                    : s === "EXCUSED"
-                      ? "bg-amber-500 text-white"
-                      : "bg-brand text-white"
+                    : s === "LATE"
+                      ? "bg-orange-500 text-white"
+                      : s === "EXCUSED"
+                        ? "bg-amber-500 text-white"
+                        : "bg-brand text-white"
                   : "border border-line text-muted-fg hover:bg-canvas hover:text-ink"
               }`}
             >

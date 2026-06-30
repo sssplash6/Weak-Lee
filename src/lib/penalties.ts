@@ -10,6 +10,9 @@ export const PENALTY_CURRENCY = "USD";
 export const MEETING_PENALTY_BASE = 40; // first skip
 export const MEETING_PENALTY_STEP = 20; // added for every further skip in a row
 
+/** Flat fine for showing up late to a meeting (counts as present, no escalation). */
+export const MEETING_LATE_PENALTY = 20;
+
 /** Flat fine auto-applied when a week's goals are submitted after the deadline. */
 export const LATE_SUBMISSION_PENALTY = 20;
 
@@ -26,18 +29,24 @@ export function meetingPenaltyAmount(consecutive: number): number {
 
 // ----- Types & labels -----
 
-export type PenaltyType = "MEETING_SKIPPED" | "LATE_SUBMISSION" | "OTHER";
+export type PenaltyType =
+  | "MEETING_SKIPPED"
+  | "MEETING_LATE"
+  | "LATE_SUBMISSION"
+  | "OTHER";
 
 export const PENALTY_LABEL: Record<PenaltyType, string> = {
   MEETING_SKIPPED: "Skipped meeting",
+  MEETING_LATE: "Late to meeting",
   LATE_SUBMISSION: "Late submission",
   OTHER: "Fine",
 };
 
-export type AttendanceStatus = "ATTENDED" | "SKIPPED" | "EXCUSED";
+export type AttendanceStatus = "ATTENDED" | "LATE" | "SKIPPED" | "EXCUSED";
 
 export const ATTENDANCE_LABEL: Record<AttendanceStatus, string> = {
   ATTENDED: "Attended",
+  LATE: "Late",
   SKIPPED: "Skipped",
   EXCUSED: "Excused",
 };

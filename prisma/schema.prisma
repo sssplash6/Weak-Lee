@@ -90,6 +90,7 @@ enum Priority {
 // OTHER is a manual admin fine for anything else.
 enum PenaltyType {
   MEETING_SKIPPED
+  MEETING_LATE
   LATE_SUBMISSION
   OTHER
 }
@@ -130,9 +131,11 @@ model Meeting {
 
 // Whether a person attended a meeting. There's no automatic arrival detection —
 // an admin (Shakhzod) marks each person. EXCUSED = no fine and resets the
-// consecutive-skip streak.
+// consecutive-skip streak. LATE = flat fine but counts as present, so it also
+// resets the streak.
 enum AttendanceStatus {
   ATTENDED
+  LATE
   SKIPPED
   EXCUSED
 }
