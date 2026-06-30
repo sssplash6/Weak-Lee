@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import {
   ATTENDANCE_LABEL,
   formatMoney,
@@ -26,15 +26,46 @@ export function AttendancePanel({
   meetingLabel: string;
   roster: RosterEntry[];
 }) {
+  const [open, setOpen] = useState(false);
+
   if (roster.length === 0) {
     return <p className="px-1 text-sm text-muted-fg">No people yet.</p>;
   }
+
+  const marked = roster.filter((r) => r.status != null).length;
+  const skipped = roster.filter((r) => r.status === "SKIPPED").length;
+
   return (
-    <ul className="flex flex-col gap-2">
-      {roster.map((r) => (
-        <RosterRow key={r.id} entry={r} meetingLabel={meetingLabel} />
-      ))}
-    </ul>
+    <div className="rounded-xl border border-line bg-surface">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between gap-3 p-3 text-left"
+      >
+        <span className="text-sm font-medium text-ink">
+          {marked}/{roster.length} marked
+          {skipped > 0 && (
+            <span className="ml-2 text-xs font-medium text-red-600">
+              {skipped} skipped
+            </span>
+          )}
+        </span>
+        <span
+          className={`shrink-0 text-muted-fg transition-transform ${open ? "rotate-180" : ""}`}
+          aria-hidden="true"
+        >
+          ▾
+        </span>
+      </button>
+      {open && (
+        <ul className="flex flex-col gap-2 border-t border-line p-2">
+          {roster.map((r) => (
+            <RosterRow key={r.id} entry={r} meetingLabel={meetingLabel} />
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
