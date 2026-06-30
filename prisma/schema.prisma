@@ -36,6 +36,10 @@ model User {
   sharesSent     SubtaskShare[] @relation("SharesFrom")
   sharesReceived SubtaskShare[] @relation("SharesTo")
   feedback       Feedback[]
+
+  penalties       Penalty[] @relation("PenaltiesReceived")
+  penaltiesIssued Penalty[] @relation("PenaltiesIssued")
+  attendances     Attendance[]
 }
 
 model Account {
@@ -81,6 +85,73 @@ enum Priority {
   HIGH
 }
 
+// Why a penalty was issued. MEETING_SKIPPED fines are driven by meeting
+// attendance (escalating); LATE_SUBMISSION is auto-applied to a late week;
+// OTHER is a manual admin fine for anything else.
+enum PenaltyType {
+  MEETING_SKIPPED
+  LATE_SUBMISSION
+  OTHER
+}
+
+// A fine issued to a user. Amount is a whole number in the app's configured
+// currency (see lib/penalties.ts). Optionally linked to the week and/or meeting
+// it relates to so it can surface in the right view and be recomputed.
+model Penalty {
+  id         String      @id @default(cuid())
+  userId     String
+  type       PenaltyType @default(OTHER)
+  amount     Int
+  note       String?
+  weekId     String?
+  meetingId  String?
+  issuedById String?
+  createdAt  DateTime    @default(now())
+
+  user     User     @relation("PenaltiesReceived", fields: [userId], references: [id], onDelete: Cascade)
+  issuedBy User?    @relation("PenaltiesIssued", fields: [issuedById], references: [id], onDelete: SetNull)
+  week     Week?    @relation(fields: [weekId], references: [id], onDelete: SetNull)
+  meeting  Meeting? @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([weekId])
+  @@index([meetingId])
+}
+
+// A recurring team meeting (Monday 11:00 company time). One row per time slot.
+model Meeting {
+  id          String   @id @default(cuid())
+  scheduledAt DateTime @unique
+  createdAt   DateTime @default(now())
+
+  attendances Attendance[]
+  penalties   Penalty[]
+}
+
+// Whether a person attended a meeting. There's no automatic arrival detection —
+// an admin (Shakhzod) marks each person. EXCUSED = no fine and resets the
+// consecutive-skip streak.
+enum AttendanceStatus {
+  ATTENDED
+  SKIPPED
+  EXCUSED
+}
+
+model Attendance {
+  id        String           @id @default(cuid())
+  meetingId String
+  userId    String
+  status    AttendanceStatus
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([meetingId, userId])
+  @@index([userId])
+}
+
 model Week {
   id        String   @id @default(cuid())
   userId    String
@@ -100,8 +171,9 @@ model Week {
   goalsLocked Boolean @default(false)
   createdAt DateTime @default(now())
 
-  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  goals Goal[]
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  goals     Goal[]
+  penalties Penalty[]
 
   @@index([userId])
   @@index([userId, isCurrent])

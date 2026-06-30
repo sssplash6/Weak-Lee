@@ -21,6 +21,8 @@ import { FeedbackButton } from "./_components/FeedbackButton";
 import { WeekArchive } from "./_components/WeekArchive";
 import { WeekCalendar } from "./_components/WeekCalendar";
 import { WeekSubmit } from "./_components/WeekSubmit";
+import { PenaltyNotice } from "./_components/PenaltyNotice";
+import { PENALTY_LABEL } from "@/lib/penalties";
 
 // Render by the UTC calendar date the bounds were stored at, so the week label
 // doesn't drift by the viewer's timezone.
@@ -70,7 +72,7 @@ export default async function DashboardPage() {
     })
   ).map((u) => u.avatar as string);
 
-  const [week, members, archivedWeeks] = await Promise.all([
+  const [week, members, archivedWeeks, penalties] = await Promise.all([
     getOrCreateCurrentWeek(userId),
     prisma.user.findMany({
       where: { id: { not: userId } },
@@ -78,7 +80,41 @@ export default async function DashboardPage() {
       orderBy: [{ name: "asc" }, { email: "asc" }],
     }),
     getArchivedWeeks(userId),
+    prisma.penalty.findMany({
+      where: { userId },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        type: true,
+        amount: true,
+        note: true,
+        createdAt: true,
+        meeting: { select: { scheduledAt: true } },
+      },
+    }),
   ]);
+
+  // The user's own fines: a running total, plus this week's broken out so
+  // they're shown front-and-centre. A fine's "date" is the meeting it relates
+  // to (for skips) or when it was recorded (late submissions / manual fines).
+  const penaltyTotal = penalties.reduce((s, p) => s + p.amount, 0);
+  const weekStartMs = week.startDate.getTime();
+  const weekEndMs = week.endDate.getTime();
+  const penaltyDate = (p: (typeof penalties)[number]) =>
+    p.meeting?.scheduledAt ?? p.createdAt;
+  const weekPenalties = penalties
+    .filter((p) => {
+      const d = penaltyDate(p).getTime();
+      return d >= weekStartMs && d <= weekEndMs;
+    })
+    .map((p) => ({
+      id: p.id,
+      label: PENALTY_LABEL[p.type],
+      amount: p.amount,
+      note: p.note,
+      dateLabel: formatDateTimeTz(penaltyDate(p)),
+    }));
+  const weekPenaltyTotal = weekPenalties.reduce((s, p) => s + p.amount, 0);
 
   const overall = weekPercent(week.goals);
   const locked = week.goalsLocked;
@@ -174,6 +210,14 @@ export default async function DashboardPage() {
           />
         </div>
       </header>
+
+      {penaltyTotal > 0 && (
+        <PenaltyNotice
+          weekPenalties={weekPenalties}
+          weekTotal={weekPenaltyTotal}
+          allTimeTotal={penaltyTotal}
+        />
+      )}
 
       <WeekSubmit
         locked={locked}

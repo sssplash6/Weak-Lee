@@ -2,8 +2,18 @@
 
 import { useState, useTransition } from "react";
 import { resolveAvatar } from "@/lib/avatar";
+import {
+  DEFAULT_MANUAL_PENALTY,
+  formatMoney,
+  PENALTY_CURRENCY,
+} from "@/lib/penalties";
 import { TrashIcon } from "../../dashboard/_components/icons";
-import { deleteUser, moveUserWeekToCurrent } from "../actions";
+import {
+  addManualPenalty,
+  deletePenalty,
+  deleteUser,
+  moveUserWeekToCurrent,
+} from "../actions";
 
 export type AdminGoal = {
   id: string;
@@ -11,6 +21,14 @@ export type AdminGoal = {
   percent: number;
   completed: boolean;
   deadlineLabel: string | null;
+};
+
+export type AdminPenalty = {
+  id: string;
+  label: string;
+  amount: number;
+  note: string | null;
+  dateLabel: string;
 };
 
 export type AdminUser = {
@@ -26,6 +44,8 @@ export type AdminUser = {
   percent: number;
   goalCount: number;
   completedCount: number;
+  penaltyTotal: number;
+  penalties: AdminPenalty[];
   goals: AdminGoal[];
 };
 
@@ -50,7 +70,8 @@ export function AdminUserList({
 
 function UserRow({ user: u, isSelf }: { user: AdminUser; isSelf: boolean }) {
   const [open, setOpen] = useState(false);
-  const canExpand = u.goalCount > 0;
+  const [addingFine, setAddingFine] = useState(false);
+  const canExpand = u.goalCount > 0 || u.penalties.length > 0;
   const avatar = resolveAvatar(u.avatar, u.email ?? u.id);
 
   return (
@@ -86,6 +107,11 @@ function UserRow({ user: u, isSelf }: { user: AdminUser; isSelf: boolean }) {
             {u.misdated && (
               <span className="shrink-0 rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-orange-600">
                 Next week
+              </span>
+            )}
+            {u.penaltyTotal > 0 && (
+              <span className="shrink-0 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-600">
+                {formatMoney(u.penaltyTotal)}
               </span>
             )}
             {u.submittedAtLabel ? (
@@ -146,42 +172,180 @@ function UserRow({ user: u, isSelf }: { user: AdminUser; isSelf: boolean }) {
         )}
       </button>
 
+      <button
+        type="button"
+        onClick={() => setAddingFine((v) => !v)}
+        className="shrink-0 rounded-lg border border-red-200 px-2.5 py-1 text-xs font-medium text-red-600 transition hover:bg-red-50"
+        title="Issue a fine to this person"
+      >
+        Fine
+      </button>
       {u.misdated && <FixWeekButton userId={u.id} weekLabel={u.weekLabel} />}
       {!isSelf && <DeleteUserButton userId={u.id} name={u.name ?? u.email} />}
       </div>
 
+      {addingFine && (
+        <AddFineForm
+          userId={u.id}
+          name={u.name ?? u.email}
+          onDone={() => setAddingFine(false)}
+        />
+      )}
+
       {open && canExpand && (
-        <ul className="border-t border-line px-4 py-2">
-          {u.goals.map((g) => (
-            <li
-              key={g.id}
-              className="flex items-center gap-3 py-1.5 text-sm"
-            >
-              <span
-                className={`h-2 w-2 shrink-0 rounded-full ${
-                  g.completed ? "bg-brand" : "bg-line"
-                }`}
-              />
-              <span
-                className={`min-w-0 flex-1 truncate ${
-                  g.completed ? "text-muted-fg line-through" : "text-ink"
-                }`}
-              >
-                {g.title}
-              </span>
-              {g.deadlineLabel && (
-                <span className="shrink-0 rounded-full bg-canvas px-2 py-0.5 text-[11px] font-medium text-muted-fg">
-                  Due {g.deadlineLabel}
-                </span>
-              )}
-              <span className="shrink-0 text-xs font-semibold tabular-nums text-accent">
-                {g.percent}%
-              </span>
-            </li>
-          ))}
-        </ul>
+        <div className="border-t border-line px-4 py-2">
+          {u.goals.length > 0 && (
+            <ul>
+              {u.goals.map((g) => (
+                <li key={g.id} className="flex items-center gap-3 py-1.5 text-sm">
+                  <span
+                    className={`h-2 w-2 shrink-0 rounded-full ${
+                      g.completed ? "bg-brand" : "bg-line"
+                    }`}
+                  />
+                  <span
+                    className={`min-w-0 flex-1 truncate ${
+                      g.completed ? "text-muted-fg line-through" : "text-ink"
+                    }`}
+                  >
+                    {g.title}
+                  </span>
+                  {g.deadlineLabel && (
+                    <span className="shrink-0 rounded-full bg-canvas px-2 py-0.5 text-[11px] font-medium text-muted-fg">
+                      Due {g.deadlineLabel}
+                    </span>
+                  )}
+                  <span className="shrink-0 text-xs font-semibold tabular-nums text-accent">
+                    {g.percent}%
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {u.penalties.length > 0 && (
+            <div className={u.goals.length > 0 ? "mt-2 border-t border-line pt-2" : ""}>
+              <p className="py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-fg">
+                Fines
+              </p>
+              <ul>
+                {u.penalties.map((p) => (
+                  <PenaltyRow key={p.id} penalty={p} />
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
       )}
     </li>
+  );
+}
+
+function PenaltyRow({ penalty: p }: { penalty: AdminPenalty }) {
+  const [isPending, startTransition] = useTransition();
+  return (
+    <li className="flex items-center gap-3 py-1.5 text-sm">
+      <span className="h-2 w-2 shrink-0 rounded-full bg-red-500" />
+      <span className="min-w-0 flex-1 truncate text-ink">
+        {p.label}
+        {p.note ? <span className="text-muted-fg"> · {p.note}</span> : ""}
+      </span>
+      <span className="shrink-0 text-[11px] text-muted-fg">{p.dateLabel}</span>
+      <span className="shrink-0 text-xs font-semibold tabular-nums text-red-600">
+        {formatMoney(p.amount)}
+      </span>
+      <button
+        type="button"
+        disabled={isPending}
+        onClick={() => startTransition(async () => void (await deletePenalty(p.id)))}
+        className="shrink-0 text-muted-fg transition hover:text-red-500 disabled:opacity-50"
+        aria-label="Remove fine"
+        title="Remove fine"
+      >
+        <TrashIcon className="h-4 w-4" />
+      </button>
+    </li>
+  );
+}
+
+function AddFineForm({
+  userId,
+  name,
+  onDone,
+}: {
+  userId: string;
+  name: string | null;
+  onDone: () => void;
+}) {
+  const [amount, setAmount] = useState(String(DEFAULT_MANUAL_PENALTY));
+  const [note, setNote] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  function submit() {
+    const value = Math.round(Number(amount));
+    if (!Number.isFinite(value) || value <= 0) {
+      setError("Enter a valid amount.");
+      return;
+    }
+    setError(null);
+    startTransition(async () => {
+      try {
+        await addManualPenalty(userId, value, note);
+        onDone();
+      } catch {
+        setError("Couldn't add the fine.");
+      }
+    });
+  }
+
+  return (
+    <div className="border-t border-line bg-canvas/50 px-4 py-3">
+      <p className="mb-2 text-xs font-semibold text-ink">
+        Fine {name ?? "user"}{" "}
+        <span className="font-normal text-muted-fg">
+          (for meeting skips, use attendance below)
+        </span>
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="flex items-center gap-1.5 text-sm">
+          <span className="text-xs text-muted-fg">Amount</span>
+          <input
+            type="number"
+            min={1}
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            className="w-28 rounded-lg border border-line px-2.5 py-1.5 text-sm text-ink focus:border-brand focus:outline-none"
+          />
+          <span className="text-xs text-muted-fg">{PENALTY_CURRENCY}</span>
+        </label>
+        <input
+          type="text"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder="Note (optional) — e.g. missed Monday standup"
+          maxLength={500}
+          className="min-w-0 flex-1 rounded-lg border border-line px-3 py-1.5 text-sm text-ink placeholder:text-muted-fg focus:border-brand focus:outline-none"
+        />
+        <button
+          type="button"
+          disabled={isPending}
+          onClick={submit}
+          className="shrink-0 rounded-lg bg-red-500 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-red-600 disabled:opacity-50"
+        >
+          {isPending ? "Adding…" : "Add fine"}
+        </button>
+        <button
+          type="button"
+          disabled={isPending}
+          onClick={onDone}
+          className="shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium text-muted-fg transition hover:bg-line"
+        >
+          Cancel
+        </button>
+      </div>
+      {error && <p className="mt-1.5 text-xs text-red-600">{error}</p>}
+    </div>
   );
 }
 

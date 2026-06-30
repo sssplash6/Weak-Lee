@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/admin";
 import { goalPercent, isGoalComplete, weekPercent } from "@/lib/progress";
 import { getWeekBounds } from "@/lib/weeks";
+import { currentMeetingSlot } from "@/lib/meetings";
 import {
   formatDateTimeTz,
   formatStamp,
@@ -12,7 +13,11 @@ import {
   toStamp,
   toYmd,
 } from "@/lib/dates";
+import { formatMoney, PENALTY_LABEL } from "@/lib/penalties";
+import { resolveAvatar } from "@/lib/avatar";
 import { AdminUserList, type AdminUser } from "./_components/AdminUserList";
+import { RecentPenalties } from "./_components/RecentPenalties";
+import { AttendancePanel } from "./_components/AttendancePanel";
 
 // Render week ranges by their UTC calendar date (matching how week bounds are
 // stored) so the dates don't drift by the viewer's timezone.
@@ -26,7 +31,8 @@ export default async function AdminPage() {
   if (!session?.user?.id) redirect("/signin");
   if (!isAdmin(session.user.email)) redirect("/dashboard");
 
-  const [rawUsers, feedback, lateWeeks] = await Promise.all([
+  const [rawUsers, feedback, lateWeeks, recentPenalties, currentMeeting] =
+    await Promise.all([
     prisma.user.findMany({
       orderBy: [{ name: "asc" }, { email: "asc" }],
       select: {
@@ -55,6 +61,16 @@ export default async function AdminPage() {
             },
           },
         },
+        penalties: {
+          orderBy: { createdAt: "desc" },
+          select: {
+            id: true,
+            type: true,
+            amount: true,
+            note: true,
+            createdAt: true,
+          },
+        },
       },
     }),
     prisma.feedback.findMany({
@@ -72,6 +88,29 @@ export default async function AdminPage() {
         endDate: true,
         createdAt: true,
         user: { select: { name: true, email: true } },
+      },
+    }),
+    prisma.penalty.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 30,
+      select: {
+        id: true,
+        type: true,
+        amount: true,
+        note: true,
+        createdAt: true,
+        user: { select: { name: true, email: true } },
+      },
+    }),
+    prisma.meeting.findUnique({
+      where: { scheduledAt: currentMeetingSlot() },
+      select: {
+        id: true,
+        attendances: { select: { userId: true, status: true } },
+        penalties: {
+          where: { type: "MEETING_SKIPPED" },
+          select: { userId: true, amount: true },
+        },
       },
     }),
   ]);
@@ -98,6 +137,14 @@ export default async function AdminPage() {
       percent: weekPercent(goals),
       goalCount: goals.length,
       completedCount: goals.filter(isGoalComplete).length,
+      penaltyTotal: u.penalties.reduce((s, p) => s + p.amount, 0),
+      penalties: u.penalties.map((p) => ({
+        id: p.id,
+        label: PENALTY_LABEL[p.type],
+        amount: p.amount,
+        note: p.note,
+        dateLabel: formatDateTimeTz(p.createdAt),
+      })),
       goals: goals.map((g) => ({
         id: g.id,
         title: g.title,
@@ -108,6 +155,26 @@ export default async function AdminPage() {
     };
   });
 
+  // This week's meeting attendance roster (everyone, with their current mark).
+  const attStatus = new Map(
+    currentMeeting?.attendances.map((a) => [a.userId, a.status]) ?? [],
+  );
+  const meetingFine = new Map(
+    currentMeeting?.penalties.map((p) => [p.userId, p.amount]) ?? [],
+  );
+  const roster = rawUsers.map((u) => {
+    const av = resolveAvatar(u.avatar, u.email ?? u.id);
+    return {
+      id: u.id,
+      name: u.name ?? u.email ?? "—",
+      emoji: av.emoji,
+      bg: av.bg,
+      status: attStatus.get(u.id) ?? null,
+      fine: meetingFine.get(u.id) ?? null,
+    };
+  });
+  const meetingLabel = formatDateTimeTz(currentMeetingSlot());
+
   // Aggregate stats. "Active" = has at least one goal in the current week.
   const active = users.filter((u) => u.goalCount > 0);
   const totalGoals = users.reduce((s, u) => s + u.goalCount, 0);
@@ -116,7 +183,10 @@ export default async function AdminPage() {
     ? Math.round(active.reduce((s, u) => s + u.percent, 0) / active.length)
     : 0;
 
-  const lateThisWeek = users.filter((u) => u.late).length;
+  // Fines issued this calendar week (by when they were recorded).
+  const finesThisWeek = recentPenalties
+    .filter((p) => p.createdAt.getTime() >= thisWeekStart.getTime())
+    .reduce((s, p) => s + p.amount, 0);
 
   const stats = [
     { label: "Users", value: users.length },
@@ -124,7 +194,7 @@ export default async function AdminPage() {
     { label: "Goals set", value: totalGoals },
     { label: "Goals completed", value: totalCompleted },
     { label: "Avg completion", value: `${avgCompletion}%` },
-    { label: "Late this week", value: lateThisWeek },
+    { label: "Fines this week", value: formatMoney(finesThisWeek) },
   ];
 
   return (
@@ -177,10 +247,40 @@ export default async function AdminPage() {
       </section>
 
       <section className="mt-8">
+        <h2 className="mb-1 px-1 text-sm font-semibold text-ink">
+          Monday meeting
+        </h2>
+        <p className="mb-3 px-1 text-xs text-muted-fg">
+          {meetingLabel} · mark who skipped. Skips are fined automatically
+          ($40, then +$20 for each meeting missed in a row).
+        </p>
+        <AttendancePanel meetingLabel={meetingLabel} roster={roster} />
+      </section>
+
+      <section className="mt-8">
         <h2 className="mb-3 px-1 text-sm font-semibold text-ink">
           People ({users.length})
         </h2>
         <AdminUserList users={users} currentUserId={session.user.id} />
+      </section>
+
+      <section className="mt-10">
+        <h2 className="mb-3 px-1 text-sm font-semibold text-ink">
+          Penalties ({recentPenalties.length})
+        </h2>
+        <p className="mb-3 px-1 text-xs text-muted-fg">
+          Fines issued to people. Add one from a person&rsquo;s row above.
+        </p>
+        <RecentPenalties
+          penalties={recentPenalties.map((p) => ({
+            id: p.id,
+            label: PENALTY_LABEL[p.type],
+            amount: p.amount,
+            note: p.note,
+            who: p.user.name ?? p.user.email ?? "—",
+            dateLabel: formatDateTimeTz(p.createdAt),
+          }))}
+        />
       </section>
 
       <section className="mt-10">

@@ -7,6 +7,7 @@ import { getOrCreateCurrentWeek, nextWeekBounds } from "@/lib/weeks";
 import { isLateSubmission } from "@/lib/lateness";
 import { isGoalComplete } from "@/lib/progress";
 import { isPriority, type Priority } from "@/lib/priority";
+import { LATE_SUBMISSION_PENALTY } from "@/lib/penalties";
 import { AVATAR_EMOJIS } from "@/lib/avatar";
 
 async function requireUserId(): Promise<string> {
@@ -239,8 +240,19 @@ export async function setAvatar(emoji: string): Promise<SetAvatarResult> {
 
 export async function deleteGoal(goalId: string) {
   const userId = await requireUserId();
-  await assertGoalEditable(goalId, userId);
+  const goal = await assertGoalEditable(goalId, userId);
   await prisma.goal.delete({ where: { id: goalId } });
+
+  // A week with no goals can never be in a submitted state. If this was the last
+  // goal, reset the week to a clean draft so it isn't a stale "submitted" empty
+  // week (it can only become locked again by submitting with at least one goal).
+  const remaining = await prisma.goal.count({ where: { weekId: goal.weekId } });
+  if (remaining === 0) {
+    await prisma.week.update({
+      where: { id: goal.weekId },
+      data: { submittedAt: null, goalsLocked: false },
+    });
+  }
   revalidatePath("/dashboard");
 }
 
@@ -438,6 +450,19 @@ export async function startNewWeek(
         deadline: firstGoalDeadline,
       },
     });
+    // A late submission is fined automatically and recorded in the penalty
+    // ledger alongside meeting fines.
+    if (submittedLate) {
+      await tx.penalty.create({
+        data: {
+          userId,
+          type: "LATE_SUBMISSION",
+          amount: LATE_SUBMISSION_PENALTY,
+          note: "Goals submitted after the Sunday 12:00 deadline",
+          weekId: newWeek.id,
+        },
+      });
+    }
   });
   revalidatePath("/dashboard");
 }
