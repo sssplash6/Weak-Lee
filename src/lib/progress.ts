@@ -15,11 +15,14 @@ export function isGoalComplete(goal: { completedAt: Date | string | null }): boo
   return goal.completedAt != null;
 }
 
-/** Overall week percent = average of each goal's percent (0 when no goals). */
+/**
+ * Overall week percent = share of goals marked complete (0 when no goals).
+ * With 2 goals, completing one gives 50%.
+ */
 export function weekPercent(
-  goals: { subtasks: { isDone: boolean }[] }[],
+  goals: { completedAt: Date | string | null }[],
 ): number {
   if (goals.length === 0) return 0;
-  const total = goals.reduce((sum, g) => sum + goalPercent(g.subtasks), 0);
-  return Math.round(total / goals.length);
+  const done = goals.filter(isGoalComplete).length;
+  return Math.round((done / goals.length) * 100);
 }
