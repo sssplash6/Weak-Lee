@@ -1,9 +1,9 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { resolveAvatar } from "@/lib/avatar";
 import { formatYmd, toYmd } from "@/lib/dates";
+import { BackLink } from "@/app/_components/BackLink";
 
 /** A LinkedIn value (URL or handle) → a full https URL. */
 function linkedinUrl(v: string): string {
@@ -45,12 +45,7 @@ export default async function TeamPage() {
             {members.length} {members.length === 1 ? "member" : "members"}
           </p>
         </div>
-        <Link
-          href="/dashboard"
-          className="text-sm font-medium text-muted-fg transition hover:text-ink"
-        >
-          ← Dashboard
-        </Link>
+        <BackLink href="/dashboard" label="My dashboard" />
       </header>
 
       {members.length === 0 ? (

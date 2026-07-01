@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { toYmd } from "@/lib/dates";
+import { BackLink } from "@/app/_components/BackLink";
 import { ProfileForm } from "./ProfileForm";
 
 export default async function ProfilePage() {
@@ -27,12 +28,7 @@ export default async function ProfilePage() {
   return (
     <main className="flex flex-1 justify-center bg-canvas px-6 py-10">
       <div className="w-full max-w-lg">
-        <Link
-          href="/dashboard"
-          className="text-sm font-medium text-muted-fg transition hover:text-ink"
-        >
-          ← Back to dashboard
-        </Link>
+        <BackLink href="/dashboard" label="My dashboard" />
 
         <div className="mt-4 rounded-2xl border border-line bg-surface p-8 shadow-sm">
           <div className="text-xs font-semibold uppercase tracking-widest text-brand">
