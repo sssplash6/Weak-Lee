@@ -20,11 +20,16 @@ model User {
   image         String?
   createdAt     DateTime  @default(now())
 
-  // Collected during onboarding after the first Google sign-in. All four are
+  // Collected during onboarding after the first Google sign-in. These are
   // required before a user reaches the dashboard (see lib/profile.ts).
   workPhone        String?
   telegramUsername String?
   department       String?
+  birthday         DateTime? // stored at UTC midnight, treated as a calendar day
+
+  // Optional social handles, editable from the profile page. Shown on /team.
+  linkedin  String?
+  instagram String?
 
   // Assigned preset animal avatar (emoji). Unique so no two users share one.
   avatar String? @unique

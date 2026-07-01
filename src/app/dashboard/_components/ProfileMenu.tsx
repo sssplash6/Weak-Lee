@@ -128,6 +128,25 @@ export function ProfileMenu({
 
           <div className="my-1 border-t border-line" />
 
+          <Link
+            href="/profile"
+            role="menuitem"
+            onClick={() => setOpen(false)}
+            className="block rounded-lg px-3 py-2 text-left text-sm font-medium text-ink transition hover:bg-canvas"
+          >
+            Edit profile
+          </Link>
+          <Link
+            href="/team"
+            role="menuitem"
+            onClick={() => setOpen(false)}
+            className="block rounded-lg px-3 py-2 text-left text-sm font-medium text-ink transition hover:bg-canvas"
+          >
+            The Team
+          </Link>
+
+          <div className="my-1 border-t border-line" />
+
           {isAdmin && (
             <Link
               href="/admin"

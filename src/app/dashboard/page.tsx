@@ -55,6 +55,7 @@ export default async function DashboardPage() {
       workPhone: true,
       telegramUsername: true,
       department: true,
+      birthday: true,
       avatar: true,
     },
   });

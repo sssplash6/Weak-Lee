@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { isProfileComplete } from "@/lib/profile";
+import { toYmd } from "@/lib/dates";
 import { OnboardingForm } from "./OnboardingForm";
 
 export default async function OnboardingPage() {
@@ -15,6 +16,7 @@ export default async function OnboardingPage() {
       workPhone: true,
       telegramUsername: true,
       department: true,
+      birthday: true,
     },
   });
 
@@ -40,6 +42,7 @@ export default async function OnboardingPage() {
             workPhone: user?.workPhone ?? "",
             telegramUsername: user?.telegramUsername ?? "",
             department: user?.department ?? "",
+            birthday: user?.birthday ? toYmd(user.birthday) : "",
           }}
         />
       </div>
