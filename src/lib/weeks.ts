@@ -94,6 +94,7 @@ export async function getArchivedWeeks(userId: string) {
           title: true,
           incompleteReason: true,
           completedAt: true,
+          manualPercent: true,
           subtasks: {
             orderBy: { position: "asc" },
             select: { id: true, title: true, isDone: true },

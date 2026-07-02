@@ -125,7 +125,7 @@ export default async function DashboardPage() {
 
   const incompleteGoals = week.goals
     .filter((g) => !isGoalComplete(g))
-    .map((g) => ({ id: g.id, title: g.title, percent: goalPercent(g.subtasks) }));
+    .map((g) => ({ id: g.id, title: g.title, percent: goalPercent(g) }));
 
   const now = new Date();
   const todayYmd = toYmd(now);
@@ -153,6 +153,7 @@ export default async function DashboardPage() {
     completed: isGoalComplete(goal),
     deadline: goal.deadline ? toStamp(goal.deadline) : null,
     priority: goal.priority ?? null,
+    manualPercent: goal.manualPercent,
     subtasks: goal.subtasks.map((s) => ({
       id: s.id,
       title: s.title,
@@ -171,7 +172,7 @@ export default async function DashboardPage() {
     goals: w.goals.map((g) => ({
       id: g.id,
       title: g.title,
-      percent: goalPercent(g.subtasks),
+      percent: goalPercent(g),
       completed: isGoalComplete(g),
       incompleteReason: g.incompleteReason,
       subtasks: g.subtasks.map((s) => ({

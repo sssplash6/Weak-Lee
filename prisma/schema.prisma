@@ -201,6 +201,10 @@ model Goal {
   deadline         DateTime?
   // Optional priority flag (none when null).
   priority         Priority?
+  // Manual progress override (0–100) typed by the user in place of the
+  // subtask-derived percent. Cleared whenever a subtask is toggled so the
+  // derived value takes back over. A completed goal always reads 100.
+  manualPercent    Int?
   createdAt        DateTime  @default(now())
 
   week     Week      @relation(fields: [weekId], references: [id], onDelete: Cascade)

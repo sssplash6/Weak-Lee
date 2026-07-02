@@ -5,7 +5,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { getOrCreateCurrentWeek, nextWeekBounds } from "@/lib/weeks";
 import { isLateSubmission } from "@/lib/lateness";
-import { isGoalComplete } from "@/lib/progress";
+import { clampPercent, isGoalComplete } from "@/lib/progress";
 import { isPriority, type Priority } from "@/lib/priority";
 import { LATE_SUBMISSION_PENALTY } from "@/lib/penalties";
 import { AVATAR_EMOJIS } from "@/lib/avatar";
@@ -163,6 +163,20 @@ export async function setGoalCompleted(goalId: string, completed: boolean) {
 }
 
 /**
+ * Set a goal's progress percent by hand (or clear the override with null so the
+ * subtask-derived value takes back over). Progress, not definition — allowed
+ * while the week is locked, like toggling subtasks.
+ */
+export async function setGoalPercent(goalId: string, percent: number | null) {
+  const userId = await requireUserId();
+  await assertGoalOwned(goalId, userId);
+  const manualPercent =
+    percent == null || Number.isNaN(percent) ? null : clampPercent(percent);
+  await prisma.goal.update({ where: { id: goalId }, data: { manualPercent } });
+  revalidatePath("/dashboard");
+}
+
+/**
  * Set or clear a goal's deadline. Accepts a "YYYY-MM-DDTHH:MM" wall-clock stamp
  * (stored verbatim as UTC so the time shows back exactly as typed) or null.
  */
@@ -284,8 +298,14 @@ export async function renameSubtask(subtaskId: string, title: string) {
 
 export async function toggleSubtask(subtaskId: string, isDone: boolean) {
   const userId = await requireUserId();
-  await assertSubtaskOwned(subtaskId, userId);
+  const subtask = await assertSubtaskOwned(subtaskId, userId);
   await prisma.subtask.update({ where: { id: subtaskId }, data: { isDone } });
+  // Toggling a subtask hands progress back to the derived value — a stale
+  // manual percent that ignores the change would read as broken.
+  await prisma.goal.update({
+    where: { id: subtask.goalId },
+    data: { manualPercent: null },
+  });
   revalidatePath("/dashboard");
 }
 

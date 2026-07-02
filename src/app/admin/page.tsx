@@ -56,6 +56,7 @@ export default async function AdminPage() {
                 title: true,
                 completedAt: true,
                 deadline: true,
+                manualPercent: true,
                 subtasks: { select: { isDone: true } },
               },
             },
@@ -148,7 +149,7 @@ export default async function AdminPage() {
       goals: goals.map((g) => ({
         id: g.id,
         title: g.title,
-        percent: goalPercent(g.subtasks),
+        percent: goalPercent(g),
         completed: isGoalComplete(g),
         deadlineLabel: g.deadline ? formatStamp(toStamp(g.deadline)) : null,
       })),

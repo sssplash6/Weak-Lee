@@ -8,7 +8,7 @@ import {
   useState,
   useTransition,
 } from "react";
-import { goalPercent } from "@/lib/progress";
+import { clampPercent, subtaskPercent } from "@/lib/progress";
 import { formatStamp } from "@/lib/dates";
 import {
   addSubtask,
@@ -18,6 +18,7 @@ import {
   renameSubtask,
   setGoalCompleted,
   setGoalDeadline,
+  setGoalPercent,
   setGoalPriority,
   shareSubtask,
   toggleSubtask,
@@ -52,6 +53,7 @@ type GoalView = {
   completed: boolean;
   deadline: string | null;
   priority: Priority | null;
+  manualPercent: number | null;
   subtasks: SubtaskView[];
 };
 
@@ -93,6 +95,10 @@ export function GoalCard({
     goal.priority,
     (_state: Priority | null, next: Priority | null) => next,
   );
+  const [manualPercent, applyManualPercent] = useOptimistic(
+    goal.manualPercent,
+    (_state: number | null, next: number | null) => next,
+  );
   const [subtasks, applyOptimistic] = useOptimistic(
     goal.subtasks,
     (state: SubtaskView[], action: OptAction) => {
@@ -122,11 +128,15 @@ export function GoalCard({
     },
   );
 
-  const percent = goalPercent(subtasks);
+  // A completed goal always reads 100%; otherwise a manual override wins over
+  // the subtask-derived value. Mirrors goalPercent() with optimistic state.
+  const percent = completed ? 100 : manualPercent ?? subtaskPercent(subtasks);
 
   function onToggle(id: string, isDone: boolean) {
     startTransition(async () => {
       applyOptimistic({ type: "toggle", id, isDone });
+      // The server clears any manual percent on toggle — mirror it optimistically.
+      applyManualPercent(null);
       await toggleSubtask(id, isDone);
     });
 
@@ -185,6 +195,13 @@ export function GoalCard({
     });
   }
 
+  function onSetPercent(next: number) {
+    startTransition(async () => {
+      applyManualPercent(next);
+      await setGoalPercent(goal.id, next);
+    });
+  }
+
   // Overdue only matters while the goal is still open.
   const overdue = !completed && deadline != null && deadline < nowStamp;
   const [curYear] = todayYmd.split("-").map(Number);
@@ -217,9 +234,11 @@ export function GoalCard({
             {subtasks.length}
           </span>
         </button>
-        <span className="mt-1 shrink-0 text-sm font-semibold tabular-nums text-accent">
-          {percent}%
-        </span>
+        <PercentChip
+          percent={percent}
+          editable={!completed}
+          onCommit={onSetPercent}
+        />
 
         {locked ? (
           <div className="mt-0.5 flex shrink-0 items-center gap-2">
@@ -352,6 +371,85 @@ export function GoalCard({
         </div>
       )}
     </article>
+  );
+}
+
+/**
+ * The goal's percent readout — click to type a manual value (0–100). Commits on
+ * blur or Enter, cancels on Escape. Not editable once the goal is completed
+ * (a completed goal is always 100%).
+ */
+function PercentChip({
+  percent,
+  editable,
+  onCommit,
+}: {
+  percent: number;
+  editable: boolean;
+  onCommit: (next: number) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState("");
+
+  if (!editable) {
+    return (
+      <span className="mt-1 shrink-0 text-sm font-semibold tabular-nums text-accent">
+        {percent}%
+      </span>
+    );
+  }
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          setText(String(percent));
+          setEditing(true);
+        }}
+        title="Click to set the percent yourself"
+        aria-label="Edit goal progress percent"
+        className="mt-0.5 shrink-0 rounded-md border border-transparent px-1 py-0.5 text-sm font-semibold tabular-nums text-accent transition hover:border-accent/40 hover:bg-accent-soft"
+      >
+        {percent}%
+      </button>
+    );
+  }
+
+  function commit() {
+    setEditing(false);
+    const parsed = Number(text.trim());
+    if (text.trim() === "" || Number.isNaN(parsed)) return;
+    const next = clampPercent(parsed);
+    if (next !== percent) onCommit(next);
+  }
+
+  return (
+    <span className="mt-0.5 flex shrink-0 items-center text-sm font-semibold text-accent">
+      <input
+        autoFocus
+        type="number"
+        min={0}
+        max={100}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onFocus={(e) => e.currentTarget.select()}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            e.currentTarget.blur();
+          }
+          if (e.key === "Escape") {
+            setText("");
+            setEditing(false);
+          }
+        }}
+        aria-label="Goal progress percent"
+        className="w-12 rounded-md border border-accent bg-surface px-1 py-0.5 text-right text-sm font-semibold tabular-nums text-accent focus:outline-none"
+      />
+      %
+    </span>
   );
 }
 
