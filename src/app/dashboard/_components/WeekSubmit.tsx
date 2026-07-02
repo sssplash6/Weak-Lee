@@ -30,19 +30,19 @@ export function WeekSubmit({
 
   if (locked) {
     return (
-      <div className="mb-5 flex items-center gap-3 rounded-xl border border-brand/30 bg-brand-soft/50 px-4 py-3">
-        <CheckCircleIcon className="h-5 w-5 shrink-0 text-brand" />
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-ink">Goals submitted</p>
+      <div className="mb-5 flex items-center gap-2.5 rounded-xl border border-brand/20 bg-brand-soft/40 px-4 py-2.5">
+        <CheckCircleIcon className="h-4 w-4 shrink-0 text-brand" />
+        <p className="min-w-0 flex-1 truncate text-sm text-ink">
+          <span className="font-semibold">Goals submitted</span>
           {submittedAtLabel && (
-            <p className="truncate text-xs text-muted-fg">{submittedAtLabel}</p>
+            <span className="text-muted-fg"> · {submittedAtLabel}</span>
           )}
-        </div>
+        </p>
         <button
           type="button"
           disabled={isPending}
           onClick={() => startTransition(async () => void (await reopen()))}
-          className="shrink-0 rounded-lg border border-line bg-surface px-3 py-1.5 text-sm font-medium text-ink transition hover:border-brand/40 hover:text-brand disabled:opacity-50"
+          className="shrink-0 rounded-lg border border-line bg-surface px-2.5 py-1 text-sm font-medium text-ink transition hover:border-brand/40 hover:text-brand disabled:opacity-50"
         >
           {isPending ? "Opening…" : "Edit goals"}
         </button>
