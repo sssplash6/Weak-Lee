@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { getOrCreateCurrentWeek, nextWeekBounds } from "@/lib/weeks";
+import { getOrCreateCurrentMonth, nextMonthBounds } from "@/lib/months";
 import { isLateSubmission } from "@/lib/lateness";
 import { clampPercent, isGoalComplete } from "@/lib/progress";
 import { isPriority, type Priority } from "@/lib/priority";
@@ -18,27 +19,36 @@ async function requireUserId(): Promise<string> {
   return session.user.id;
 }
 
+// A goal belongs to either a week or a month; both count as the user's.
+function goalOwnedWhere(userId: string) {
+  return { OR: [{ week: { userId } }, { month: { userId } }] };
+}
+
 /** Confirm a goal belongs to the signed-in user; returns it or throws. */
 async function assertGoalOwned(goalId: string, userId: string) {
   const goal = await prisma.goal.findFirst({
-    where: { id: goalId, week: { userId } },
+    where: { id: goalId, ...goalOwnedWhere(userId) },
   });
   if (!goal) throw new Error("Goal not found");
   return goal;
 }
 
 /**
- * Like `assertGoalOwned`, but also rejects edits while the week is submitted.
- * Used for actions that change a goal's *definition* (title, priority, deadline,
- * subtasks) — progress actions (toggling, completing) stay allowed when locked.
+ * Like `assertGoalOwned`, but also rejects edits while the goal's week or month
+ * is submitted. Used for actions that change a goal's *definition* (title,
+ * priority, deadline, subtasks) — progress actions (toggling, completing) stay
+ * allowed when locked.
  */
 async function assertGoalEditable(goalId: string, userId: string) {
   const goal = await prisma.goal.findFirst({
-    where: { id: goalId, week: { userId } },
-    include: { week: { select: { goalsLocked: true } } },
+    where: { id: goalId, ...goalOwnedWhere(userId) },
+    include: {
+      week: { select: { goalsLocked: true } },
+      month: { select: { goalsLocked: true } },
+    },
   });
   if (!goal) throw new Error("Goal not found");
-  if (goal.week.goalsLocked) {
+  if (goal.week?.goalsLocked || goal.month?.goalsLocked) {
     throw new Error("Goals are locked. Click Edit to make changes.");
   }
   return goal;
@@ -47,20 +57,27 @@ async function assertGoalEditable(goalId: string, userId: string) {
 /** Confirm a subtask belongs to the signed-in user; returns it or throws. */
 async function assertSubtaskOwned(subtaskId: string, userId: string) {
   const subtask = await prisma.subtask.findFirst({
-    where: { id: subtaskId, goal: { week: { userId } } },
+    where: { id: subtaskId, goal: goalOwnedWhere(userId) },
   });
   if (!subtask) throw new Error("Subtask not found");
   return subtask;
 }
 
-/** Like `assertSubtaskOwned`, but rejects edits while the week is submitted. */
+/** Like `assertSubtaskOwned`, but rejects edits while the period is submitted. */
 async function assertSubtaskEditable(subtaskId: string, userId: string) {
   const subtask = await prisma.subtask.findFirst({
-    where: { id: subtaskId, goal: { week: { userId } } },
-    include: { goal: { select: { week: { select: { goalsLocked: true } } } } },
+    where: { id: subtaskId, goal: goalOwnedWhere(userId) },
+    include: {
+      goal: {
+        select: {
+          week: { select: { goalsLocked: true } },
+          month: { select: { goalsLocked: true } },
+        },
+      },
+    },
   });
   if (!subtask) throw new Error("Subtask not found");
-  if (subtask.goal.week.goalsLocked) {
+  if (subtask.goal.week?.goalsLocked || subtask.goal.month?.goalsLocked) {
     throw new Error("Goals are locked. Click Edit to make changes.");
   }
   return subtask;
@@ -80,14 +97,18 @@ function parseRequiredDeadline(stamp: string): Date {
   return deadline;
 }
 
+/** Which period a goal-list action targets: the current week or current month. */
+export type GoalScope = "week" | "month";
+
 /**
- * Add a goal to the current week. Priority and deadline are required parts of
- * setting a goal (enforced here as well as in the UI).
+ * Add a goal to the current week or month. Priority and deadline are required
+ * parts of setting a goal (enforced here as well as in the UI).
  */
 export async function addGoal(input: {
   title: string;
   priority: Priority;
   deadline: string;
+  scope?: GoalScope;
 }) {
   const userId = await requireUserId();
   const title = input.title.trim();
@@ -95,13 +116,22 @@ export async function addGoal(input: {
   if (!isPriority(input.priority)) throw new Error("A priority is required.");
   const deadline = parseRequiredDeadline(input.deadline);
 
-  const week = await getOrCreateCurrentWeek(userId);
-  if (week.goalsLocked) {
+  const period =
+    input.scope === "month"
+      ? await getOrCreateCurrentMonth(userId)
+      : await getOrCreateCurrentWeek(userId);
+  if (period.goalsLocked) {
     throw new Error("Goals are locked. Click Edit to make changes.");
   }
-  const position = week.goals.length + 1;
+  const position = period.goals.length + 1;
   await prisma.goal.create({
-    data: { weekId: week.id, title, position, priority: input.priority, deadline },
+    data: {
+      ...(input.scope === "month" ? { monthId: period.id } : { weekId: period.id }),
+      title,
+      position,
+      priority: input.priority,
+      deadline,
+    },
   });
   revalidatePath("/dashboard");
 }
@@ -134,6 +164,38 @@ export async function reopenWeek() {
   const week = await getOrCreateCurrentWeek(userId);
   await prisma.week.update({
     where: { id: week.id },
+    data: { goalsLocked: false },
+  });
+  revalidatePath("/dashboard");
+}
+
+/**
+ * Confirm ("submit") the current month's goals — locks them for editing. There
+ * is no deadline for this (unlike weeks, no lateness or penalty); the recorded
+ * time is fixed to the first submit, same as weeks.
+ */
+export async function submitMonth() {
+  const userId = await requireUserId();
+  const month = await getOrCreateCurrentMonth(userId);
+  if (month.goals.length === 0) {
+    throw new Error("Add at least one goal before submitting.");
+  }
+  await prisma.month.update({
+    where: { id: month.id },
+    data: {
+      goalsLocked: true,
+      ...(month.submittedAt ? {} : { submittedAt: new Date() }),
+    },
+  });
+  revalidatePath("/dashboard");
+}
+
+/** Re-open the current month's goals for editing. Keeps the first-submit time. */
+export async function reopenMonth() {
+  const userId = await requireUserId();
+  const month = await getOrCreateCurrentMonth(userId);
+  await prisma.month.update({
+    where: { id: month.id },
     data: { goalsLocked: false },
   });
   revalidatePath("/dashboard");
@@ -257,15 +319,26 @@ export async function deleteGoal(goalId: string) {
   const goal = await assertGoalEditable(goalId, userId);
   await prisma.goal.delete({ where: { id: goalId } });
 
-  // A week with no goals can never be in a submitted state. If this was the last
-  // goal, reset the week to a clean draft so it isn't a stale "submitted" empty
-  // week (it can only become locked again by submitting with at least one goal).
-  const remaining = await prisma.goal.count({ where: { weekId: goal.weekId } });
-  if (remaining === 0) {
-    await prisma.week.update({
-      where: { id: goal.weekId },
-      data: { submittedAt: null, goalsLocked: false },
-    });
+  // A period with no goals can never be in a submitted state. If this was the
+  // last goal, reset its week/month to a clean draft so it isn't a stale
+  // "submitted" empty period (it can only become locked again by submitting
+  // with at least one goal).
+  if (goal.weekId) {
+    const remaining = await prisma.goal.count({ where: { weekId: goal.weekId } });
+    if (remaining === 0) {
+      await prisma.week.update({
+        where: { id: goal.weekId },
+        data: { submittedAt: null, goalsLocked: false },
+      });
+    }
+  } else if (goal.monthId) {
+    const remaining = await prisma.goal.count({ where: { monthId: goal.monthId } });
+    if (remaining === 0) {
+      await prisma.month.update({
+        where: { id: goal.monthId },
+        data: { submittedAt: null, goalsLocked: false },
+      });
+    }
   }
   revalidatePath("/dashboard");
 }
@@ -319,7 +392,9 @@ export async function deleteSubtask(subtaskId: string) {
 /**
  * Delegate a subtask to another user. The original stays on the sender's list
  * (marked "shared to X"); the recipient gets a linked copy added under the same
- * goal (creating that goal in their current week if they don't have it yet).
+ * goal, in the matching period — a weekly subtask lands in the recipient's
+ * current week, a monthly one in their current month (creating the goal there
+ * if they don't have it yet).
  */
 export async function shareSubtask(subtaskId: string, toUserId: string) {
   const fromUserId = await requireUserId();
@@ -327,7 +402,7 @@ export async function shareSubtask(subtaskId: string, toUserId: string) {
 
   // Load the original subtask (owned by sender) along with its goal title.
   const original = await prisma.subtask.findFirst({
-    where: { id: subtaskId, goal: { week: { userId: fromUserId } } },
+    where: { id: subtaskId, goal: goalOwnedWhere(fromUserId) },
     include: { goal: true },
   });
   if (!original) throw new Error("Subtask not found");
@@ -343,10 +418,13 @@ export async function shareSubtask(subtaskId: string, toUserId: string) {
   });
   if (already) return;
 
-  const recipientWeek = await getOrCreateCurrentWeek(toUserId);
+  const isMonthly = original.goal.monthId != null;
+  const recipientPeriod = isMonthly
+    ? await getOrCreateCurrentMonth(toUserId)
+    : await getOrCreateCurrentWeek(toUserId);
 
-  // Find a goal with the same title in the recipient's week, or create one.
-  const existingGoal = recipientWeek.goals.find(
+  // Find a goal with the same title in the recipient's period, or create one.
+  const existingGoal = recipientPeriod.goals.find(
     (g) => g.title === original.goal.title,
   );
   const targetGoalId =
@@ -354,9 +432,11 @@ export async function shareSubtask(subtaskId: string, toUserId: string) {
     (
       await prisma.goal.create({
         data: {
-          weekId: recipientWeek.id,
+          ...(isMonthly
+            ? { monthId: recipientPeriod.id }
+            : { weekId: recipientPeriod.id }),
           title: original.goal.title,
-          position: recipientWeek.goals.length + 1,
+          position: recipientPeriod.goals.length + 1,
         },
       })
     ).id;
@@ -483,6 +563,72 @@ export async function startNewWeek(
         },
       });
     }
+  });
+  revalidatePath("/dashboard");
+}
+
+/**
+ * Close the current month and start the next calendar month. Same reflection
+ * rule as weeks — every goal not marked complete needs a reason — but months
+ * have no submission deadline, so nothing here is ever late or fined. The new
+ * month is always the calendar month after the one being closed.
+ */
+export async function startNewMonth(
+  reasons: { goalId: string; reason: string }[] = [],
+  firstGoal?: { title: string; priority: Priority; deadline: string },
+) {
+  const userId = await requireUserId();
+  const month = await getOrCreateCurrentMonth(userId);
+
+  // The new month must be opened with at least one goal — with the same
+  // required priority and deadline as any other goal.
+  const firstGoalTitle = (firstGoal?.title ?? "").trim();
+  if (!firstGoalTitle) {
+    throw new Error("Add at least one goal for the new month.");
+  }
+  if (!firstGoal || !isPriority(firstGoal.priority)) {
+    throw new Error("A priority is required for the first goal.");
+  }
+  const firstGoalDeadline = parseRequiredDeadline(firstGoal.deadline);
+
+  const reasonByGoal = new Map(reasons.map((r) => [r.goalId, r.reason.trim()]));
+
+  // Goals that weren't marked complete require a reason before the month closes.
+  const incomplete = month.goals.filter((g) => !isGoalComplete(g));
+  for (const goal of incomplete) {
+    if (!reasonByGoal.get(goal.id)) {
+      throw new Error("A reason is required for every unfinished goal.");
+    }
+  }
+
+  const { start, end } = nextMonthBounds(month.endDate);
+
+  await prisma.$transaction(async (tx) => {
+    await Promise.all(
+      incomplete.map((goal) =>
+        tx.goal.update({
+          where: { id: goal.id },
+          data: { incompleteReason: reasonByGoal.get(goal.id) },
+        }),
+      ),
+    );
+    await tx.month.updateMany({
+      where: { userId, isCurrent: true },
+      data: { isCurrent: false },
+    });
+    const newMonth = await tx.month.create({
+      data: { userId, startDate: start, endDate: end, isCurrent: true },
+    });
+    // Seed the new month with its required first goal (priority + deadline set).
+    await tx.goal.create({
+      data: {
+        monthId: newMonth.id,
+        title: firstGoalTitle,
+        position: 1,
+        priority: firstGoal.priority,
+        deadline: firstGoalDeadline,
+      },
+    });
   });
   revalidatePath("/dashboard");
 }

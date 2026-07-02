@@ -37,6 +37,7 @@ model User {
   accounts Account[]
   sessions Session[]
   weeks    Week[]
+  months   Month[]
 
   sharesSent     SubtaskShare[] @relation("SharesFrom")
   sharesReceived SubtaskShare[] @relation("SharesTo")
@@ -187,9 +188,33 @@ model Week {
   @@index([userId, isCurrent])
 }
 
+// The monthly counterpart of Week. Same submit/lock/close lifecycle, but with
+// no submission deadline (so no lateness flag or penalties). Months are always
+// whole calendar months.
+model Month {
+  id        String   @id @default(cuid())
+  userId    String
+  startDate DateTime
+  endDate   DateTime
+  isCurrent Boolean  @default(true)
+  // First goal submission for this month — set once, never overwritten (same
+  // semantics as Week.submittedAt).
+  submittedAt DateTime?
+  goalsLocked Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  goals Goal[]
+
+  @@index([userId])
+  @@index([userId, isCurrent])
+}
+
 model Goal {
   id               String   @id @default(cuid())
-  weekId           String
+  // A goal belongs to exactly one period: either a week or a month.
+  weekId           String?
+  monthId          String?
   title            String
   position         Int
   // Reflection captured when closing a week if this goal wasn't marked complete.
@@ -207,10 +232,12 @@ model Goal {
   manualPercent    Int?
   createdAt        DateTime  @default(now())
 
-  week     Week      @relation(fields: [weekId], references: [id], onDelete: Cascade)
+  week     Week?     @relation(fields: [weekId], references: [id], onDelete: Cascade)
+  month    Month?    @relation(fields: [monthId], references: [id], onDelete: Cascade)
   subtasks Subtask[]
 
   @@index([weekId])
+  @@index([monthId])
 }
 
 model Subtask {
