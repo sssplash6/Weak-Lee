@@ -172,16 +172,18 @@ function UserRow({ user: u, isSelf }: { user: AdminUser; isSelf: boolean }) {
         )}
       </button>
 
-      <button
-        type="button"
-        onClick={() => setAddingFine((v) => !v)}
-        className="shrink-0 rounded-lg border border-red-200 px-2.5 py-1 text-xs font-medium text-red-600 transition hover:bg-red-50"
-        title="Issue a fine to this person"
-      >
-        Fine
-      </button>
-      {u.misdated && <FixWeekButton userId={u.id} weekLabel={u.weekLabel} />}
-      {!isSelf && <DeleteUserButton userId={u.id} name={u.name ?? u.email} />}
+      <div className="flex shrink-0 items-center gap-2 pr-4">
+        <button
+          type="button"
+          onClick={() => setAddingFine((v) => !v)}
+          className="shrink-0 rounded-lg border border-red-200 px-2.5 py-1 text-xs font-medium text-red-600 transition hover:bg-red-50"
+          title="Issue a fine to this person"
+        >
+          Fine
+        </button>
+        {u.misdated && <FixWeekButton userId={u.id} weekLabel={u.weekLabel} />}
+        {!isSelf && <DeleteUserButton userId={u.id} name={u.name ?? u.email} />}
+      </div>
       </div>
 
       {addingFine && (
