@@ -9,6 +9,11 @@ import {
   getOrCreateCurrentWeek,
   nextWeekBounds,
 } from "@/lib/weeks";
+import {
+  getArchivedMonths,
+  getOrCreateCurrentMonth,
+  nextMonthBounds,
+} from "@/lib/months";
 import { goalPercent, isGoalComplete, weekPercent } from "@/lib/progress";
 import { formatDateTimeTz, formatYmd, toStamp, toYmd } from "@/lib/dates";
 import type { Priority } from "@/lib/priority";
@@ -17,11 +22,13 @@ import { AddGoalCard } from "./_components/AddGoalCard";
 import { ProfileMenu } from "./_components/ProfileMenu";
 import { WeekProgress } from "./_components/WeekProgress";
 import { StartNewWeekButton } from "./_components/StartNewWeekButton";
+import { StartNewMonthButton } from "./_components/StartNewMonthButton";
 import { FeedbackButton } from "./_components/FeedbackButton";
 import { WeekArchive } from "./_components/WeekArchive";
 import { WeekCalendar } from "./_components/WeekCalendar";
 import { WeekSubmit } from "./_components/WeekSubmit";
 import { PenaltyNotice } from "./_components/PenaltyNotice";
+import { PeriodToggle } from "./_components/PeriodToggle";
 import { PENALTY_LABEL } from "@/lib/penalties";
 
 // Render by the UTC calendar date the bounds were stored at, so the week label
@@ -30,6 +37,16 @@ function formatRange(start: Date, end: Date): string {
   return `${formatYmd(toYmd(start))} – ${formatYmd(toYmd(end))}`;
 }
 
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+// Month bounds are created with local server time (see lib/months.ts), so read
+// them back with local getters — same convention as toLocalYmd below.
+function monthLabel(start: Date): string {
+  return `${MONTH_NAMES[start.getMonth()]} ${start.getFullYear()}`;
+}
 
 function displayName(u: { name: string | null; email: string | null }): string {
   return u.name ?? u.email ?? "Someone";
@@ -43,9 +60,17 @@ function toLocalYmd(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ view?: string | string[] }>;
+}) {
   const session = await auth();
   const userId = session!.user.id;
+
+  // Which period the dashboard shows: weekly goals (default) or monthly ones.
+  const view = (await searchParams).view === "month" ? "month" : "week";
+  const isMonth = view === "month";
 
   // Require a completed profile before showing the dashboard.
   const profile = await prisma.user.findUnique({
@@ -73,14 +98,14 @@ export default async function DashboardPage() {
     })
   ).map((u) => u.avatar as string);
 
-  const [week, members, archivedWeeks, penalties] = await Promise.all([
-    getOrCreateCurrentWeek(userId),
+  const [period, members, archivedPeriods, penalties] = await Promise.all([
+    isMonth ? getOrCreateCurrentMonth(userId) : getOrCreateCurrentWeek(userId),
     prisma.user.findMany({
       where: { id: { not: userId } },
       select: { id: true, name: true, email: true },
       orderBy: [{ name: "asc" }, { email: "asc" }],
     }),
-    getArchivedWeeks(userId),
+    isMonth ? getArchivedMonths(userId) : getArchivedWeeks(userId),
     prisma.penalty.findMany({
       where: { userId },
       orderBy: { createdAt: "desc" },
@@ -96,17 +121,18 @@ export default async function DashboardPage() {
   ]);
 
   // The user's own fines: a running total, plus this week's broken out so
-  // they're shown front-and-centre. A fine's "date" is the meeting it relates
-  // to (for skips) or when it was recorded (late submissions / manual fines).
+  // they're shown front-and-centre (week view only — fines are week-scoped).
+  // A fine's "date" is the meeting it relates to (for skips) or when it was
+  // recorded (late submissions / manual fines).
   const penaltyTotal = penalties.reduce((s, p) => s + p.amount, 0);
-  const weekStartMs = week.startDate.getTime();
-  const weekEndMs = week.endDate.getTime();
+  const periodStartMs = period.startDate.getTime();
+  const periodEndMs = period.endDate.getTime();
   const penaltyDate = (p: (typeof penalties)[number]) =>
     p.meeting?.scheduledAt ?? p.createdAt;
   const weekPenalties = penalties
     .filter((p) => {
       const d = penaltyDate(p).getTime();
-      return d >= weekStartMs && d <= weekEndMs;
+      return d >= periodStartMs && d <= periodEndMs;
     })
     .map((p) => ({
       id: p.id,
@@ -117,13 +143,13 @@ export default async function DashboardPage() {
     }));
   const weekPenaltyTotal = weekPenalties.reduce((s, p) => s + p.amount, 0);
 
-  const overall = weekPercent(week.goals);
-  const locked = week.goalsLocked;
-  const submittedAtLabel = week.submittedAt
-    ? formatDateTimeTz(week.submittedAt)
+  const overall = weekPercent(period.goals);
+  const locked = period.goalsLocked;
+  const submittedAtLabel = period.submittedAt
+    ? formatDateTimeTz(period.submittedAt)
     : null;
 
-  const incompleteGoals = week.goals
+  const incompleteGoals = period.goals
     .filter((g) => !isGoalComplete(g))
     .map((g) => ({ id: g.id, title: g.title, percent: goalPercent(g) }));
 
@@ -131,15 +157,17 @@ export default async function DashboardPage() {
   const todayYmd = toYmd(now);
   const nowStamp = toStamp(now);
 
-  // Default date range for the next week (editable in the Start-new-week dialog).
-  const nextBounds = nextWeekBounds(week.endDate);
-  const defaultWeekStart = toLocalYmd(nextBounds.start);
-  const defaultWeekEnd = toLocalYmd(nextBounds.end);
+  // Default date range for the next week (editable in the Start-new-week
+  // dialog); the next month is fixed — always the following calendar month.
+  const nextWeek = nextWeekBounds(period.endDate);
+  const defaultWeekStart = toLocalYmd(nextWeek.start);
+  const defaultWeekEnd = toLocalYmd(nextWeek.end);
+  const nextMonthName = monthLabel(nextMonthBounds(period.endDate).start);
 
   // Open goals due on each day, keyed by "YYYY-MM-DD", as a list of their
   // priorities (null = no flag) so the calendar can color each dot.
   const deadlineDots: Record<string, (Priority | null)[]> = {};
-  for (const g of week.goals) {
+  for (const g of period.goals) {
     if (g.deadline && !isGoalComplete(g)) {
       const key = toYmd(g.deadline);
       (deadlineDots[key] ??= []).push(g.priority ?? null);
@@ -147,7 +175,7 @@ export default async function DashboardPage() {
   }
 
   // Flatten to a serializable shape for the client components.
-  const goals = week.goals.map((goal) => ({
+  const goals = period.goals.map((goal) => ({
     id: goal.id,
     title: goal.title,
     completed: isGoalComplete(goal),
@@ -165,11 +193,11 @@ export default async function DashboardPage() {
 
   const team = members.map((m) => ({ id: m.id, name: displayName(m) }));
 
-  const archive = archivedWeeks.map((w) => ({
-    id: w.id,
-    label: formatRange(w.startDate, w.endDate),
-    percent: weekPercent(w.goals),
-    goals: w.goals.map((g) => ({
+  const archive = archivedPeriods.map((p) => ({
+    id: p.id,
+    label: isMonth ? monthLabel(p.startDate) : formatRange(p.startDate, p.endDate),
+    percent: weekPercent(p.goals),
+    goals: p.goals.map((g) => ({
       id: g.id,
       title: g.title,
       percent: goalPercent(g),
@@ -187,22 +215,24 @@ export default async function DashboardPage() {
     <div className="mx-auto flex w-full max-w-6xl flex-1 gap-6 px-4 py-8">
       <aside className="hidden w-64 shrink-0 lg:block">
         <div className="sticky top-8">
-          <WeekArchive weeks={archive} />
+          <WeekArchive weeks={archive} periodNoun={view} />
         </div>
       </aside>
 
       <main className="flex w-full min-w-0 max-w-3xl flex-1 flex-col">
-        <header className="mb-8 flex items-start justify-between gap-4">
+        <header className="mb-6 flex items-start justify-between gap-4">
         <div>
           <div className="text-xs font-semibold uppercase tracking-widest text-brand">
             freshman.academy
           </div>
           <h1 className="mt-1 text-2xl font-bold text-ink">
-            {formatRange(week.startDate, week.endDate)}
+            {isMonth
+              ? monthLabel(period.startDate)
+              : formatRange(period.startDate, period.endDate)}
           </h1>
         </div>
         <div className="flex items-center gap-4">
-          <WeekProgress percent={overall} />
+          <WeekProgress percent={overall} label={isMonth ? "Month" : "Week"} />
           <ProfileMenu
             name={session!.user.name}
             email={session!.user.email}
@@ -213,7 +243,9 @@ export default async function DashboardPage() {
         </div>
       </header>
 
-      {penaltyTotal > 0 && (
+      <PeriodToggle view={view} />
+
+      {!isMonth && penaltyTotal > 0 && (
         <PenaltyNotice
           weekPenalties={weekPenalties}
           weekTotal={weekPenaltyTotal}
@@ -222,6 +254,7 @@ export default async function DashboardPage() {
       )}
 
       <WeekSubmit
+        scope={view}
         locked={locked}
         submittedAtLabel={submittedAtLabel}
         goalCount={goals.length}
@@ -240,22 +273,36 @@ export default async function DashboardPage() {
           />
         ))}
 
-        {!locked && <AddGoalCard nextIndex={goals.length + 1} todayYmd={todayYmd} />}
+        {!locked && (
+          <AddGoalCard
+            nextIndex={goals.length + 1}
+            todayYmd={todayYmd}
+            scope={view}
+          />
+        )}
 
         {goals.length === 0 && (
           <p className="px-1 text-sm text-muted-fg">
-            Add your goals for the week, then break each one into subtasks.
+            Add your goals for the {view}, then break each one into subtasks.
           </p>
         )}
       </section>
 
         <footer className="mt-10 border-t border-line pt-6">
-          <StartNewWeekButton
-            incompleteGoals={incompleteGoals}
-            defaultStart={defaultWeekStart}
-            defaultEnd={defaultWeekEnd}
-            todayYmd={todayYmd}
-          />
+          {isMonth ? (
+            <StartNewMonthButton
+              incompleteGoals={incompleteGoals}
+              nextMonthLabel={nextMonthName}
+              todayYmd={todayYmd}
+            />
+          ) : (
+            <StartNewWeekButton
+              incompleteGoals={incompleteGoals}
+              defaultStart={defaultWeekStart}
+              defaultEnd={defaultWeekEnd}
+              todayYmd={todayYmd}
+            />
+          )}
         </footer>
       </main>
 

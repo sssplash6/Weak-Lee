@@ -1,4 +1,10 @@
-export function WeekProgress({ percent }: { percent: number }) {
+export function WeekProgress({
+  percent,
+  label = "Week",
+}: {
+  percent: number;
+  label?: string;
+}) {
   const radius = 22;
   const circumference = 2 * Math.PI * radius;
   const offset = circumference - (percent / 100) * circumference;
@@ -6,8 +12,8 @@ export function WeekProgress({ percent }: { percent: number }) {
   return (
     <div
       className="relative h-14 w-14"
-      title={`Week ${percent}% complete`}
-      aria-label={`Week ${percent} percent complete`}
+      title={`${label} ${percent}% complete`}
+      aria-label={`${label} ${percent} percent complete`}
     >
       <svg className="h-14 w-14 -rotate-90" viewBox="0 0 56 56">
         <circle

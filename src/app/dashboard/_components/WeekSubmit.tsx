@@ -1,26 +1,32 @@
 "use client";
 
 import { useTransition } from "react";
-import { reopenWeek, submitWeek } from "../actions";
+import { reopenMonth, reopenWeek, submitMonth, submitWeek } from "../actions";
 import { CheckCircleIcon } from "./icons";
 
 /**
- * The weekly goal-submission control, with three states:
+ * The goal-submission control for a week or a month, with three states:
  *  - draft (never submitted): a prompt + "Submit goals" button.
  *  - locked (submitted): shows the first-submit time + "Edit goals" to re-open.
  *  - re-opened (submitted, then edited): editable again with "Submit goals" to
  *    re-lock; still shows the original submit time, which never changes.
+ *
+ * Weekly submissions have a deadline (enforced elsewhere); monthly ones never do.
  */
 export function WeekSubmit({
+  scope = "week",
   locked,
   submittedAtLabel,
   goalCount,
 }: {
+  scope?: "week" | "month";
   locked: boolean;
   submittedAtLabel: string | null;
   goalCount: number;
 }) {
   const [isPending, startTransition] = useTransition();
+  const submit = scope === "month" ? submitMonth : submitWeek;
+  const reopen = scope === "month" ? reopenMonth : reopenWeek;
 
   if (locked) {
     return (
@@ -35,7 +41,7 @@ export function WeekSubmit({
         <button
           type="button"
           disabled={isPending}
-          onClick={() => startTransition(async () => void (await reopenWeek()))}
+          onClick={() => startTransition(async () => void (await reopen()))}
           className="shrink-0 rounded-lg border border-line bg-surface px-3 py-1.5 text-sm font-medium text-ink transition hover:border-brand/40 hover:text-brand disabled:opacity-50"
         >
           {isPending ? "Opening…" : "Edit goals"}
@@ -56,13 +62,13 @@ export function WeekSubmit({
         <p className="text-xs text-muted-fg">
           {resubmitting
             ? `Submitted ${submittedAtLabel} — that time stays fixed when you re-submit.`
-            : "Submit to confirm them for the week. You can still edit afterwards."}
+            : `Submit to confirm them for the ${scope}. You can still edit afterwards.`}
         </p>
       </div>
       <button
         type="button"
         disabled={!canSubmit}
-        onClick={() => startTransition(async () => void (await submitWeek()))}
+        onClick={() => startTransition(async () => void (await submit()))}
         title={goalCount === 0 ? "Add a goal first" : undefined}
         className="shrink-0 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-50"
       >

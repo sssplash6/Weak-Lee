@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import type { Priority } from "@/lib/priority";
 import { PRIORITY_LABEL } from "@/lib/priority";
-import { addGoal } from "../actions";
+import { addGoal, type GoalScope } from "../actions";
 import { DeadlinePicker } from "./DeadlinePicker";
 import { PriorityPicker } from "./PriorityPicker";
 
@@ -14,9 +14,11 @@ import { PriorityPicker } from "./PriorityPicker";
 export function AddGoalCard({
   nextIndex,
   todayYmd,
+  scope = "week",
 }: {
   nextIndex: number;
   todayYmd: string;
+  scope?: GoalScope;
 }) {
   const [title, setTitle] = useState("");
   const [priority, setPriority] = useState<Priority | null>(null);
@@ -29,7 +31,7 @@ export function AddGoalCard({
     if (!ready || !priority || !deadline) return;
     const trimmed = title.trim();
     startTransition(async () => {
-      await addGoal({ title: trimmed, priority, deadline });
+      await addGoal({ title: trimmed, priority, deadline, scope });
       setTitle("");
       setPriority(null);
       setDeadline(null);

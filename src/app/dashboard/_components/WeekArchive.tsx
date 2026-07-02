@@ -20,7 +20,14 @@ export type ArchivedWeekView = {
   goals: ArchivedGoal[];
 };
 
-export function WeekArchive({ weeks }: { weeks: ArchivedWeekView[] }) {
+export function WeekArchive({
+  weeks,
+  periodNoun = "week",
+}: {
+  weeks: ArchivedWeekView[];
+  // "week" or "month" — only changes the copy, the rows render the same.
+  periodNoun?: string;
+}) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   function toggle(id: string) {
@@ -39,13 +46,16 @@ export function WeekArchive({ weeks }: { weeks: ArchivedWeekView[] }) {
       </h2>
 
       {weeks.length === 0 ? (
-        <p className="mt-3 px-1 text-sm text-muted-fg">No past weeks yet.</p>
+        <p className="mt-3 px-1 text-sm text-muted-fg">
+          No past {periodNoun}s yet.
+        </p>
       ) : (
         <ul className="mt-3 flex flex-col gap-1.5">
           {weeks.map((week) => (
             <li key={week.id}>
               <WeekRow
                 week={week}
+                periodNoun={periodNoun}
                 open={expanded.has(week.id)}
                 onToggle={() => toggle(week.id)}
               />
@@ -59,10 +69,12 @@ export function WeekArchive({ weeks }: { weeks: ArchivedWeekView[] }) {
 
 function WeekRow({
   week,
+  periodNoun,
   open,
   onToggle,
 }: {
   week: ArchivedWeekView;
+  periodNoun: string;
   open: boolean;
   onToggle: () => void;
 }) {
@@ -86,7 +98,7 @@ function WeekRow({
       {open && (
         <div className="border-t border-line px-3 py-3">
           {week.goals.length === 0 ? (
-            <p className="text-sm text-muted-fg">No goals this week.</p>
+            <p className="text-sm text-muted-fg">No goals this {periodNoun}.</p>
           ) : (
             <ul className="flex flex-col gap-3">
               {week.goals.map((goal) => (
