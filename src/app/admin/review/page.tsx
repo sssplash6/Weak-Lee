@@ -14,6 +14,8 @@ export default async function AdminReviewPage() {
   if (!session?.user?.id) redirect("/signin");
   if (!isAdmin(session.user.email)) redirect("/dashboard");
 
+  const now = new Date();
+
   const rawUsers = await prisma.user.findMany({
     orderBy: [{ name: "asc" }, { email: "asc" }],
     select: {
@@ -21,9 +23,17 @@ export default async function AdminReviewPage() {
       name: true,
       email: true,
       avatar: true,
+      // The week under review is the latest one that has already started —
+      // NOT the isCurrent flag. Someone who closes their week early has a
+      // future-dated week marked current, and this page must keep showing
+      // the goals of the week we're actually in.
       weeks: {
-        where: { isCurrent: true },
+        where: { startDate: { lte: now } },
+        orderBy: { startDate: "desc" },
+        take: 1,
         select: {
+          startDate: true,
+          endDate: true,
           submittedLate: true,
           submittedAt: true,
           goals: {
@@ -51,6 +61,9 @@ export default async function AdminReviewPage() {
       name: u.name ?? u.email ?? "—",
       emoji: avatar.emoji,
       bg: avatar.bg,
+      weekLabel: week
+        ? `${formatYmd(toYmd(week.startDate))} – ${formatYmd(toYmd(week.endDate))}`
+        : null,
       goalCount: goals.length,
       percent: weekPercent(goals),
       late: week?.submittedLate ?? false,

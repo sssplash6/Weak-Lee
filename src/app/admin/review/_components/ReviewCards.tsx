@@ -16,6 +16,9 @@ export type ReviewMember = {
   name: string;
   emoji: string;
   bg: string;
+  // The reviewed week's own date range — can differ from the calendar week in
+  // the page header when someone runs custom week bounds.
+  weekLabel: string | null;
   goalCount: number;
   percent: number;
   late: boolean;
@@ -112,6 +115,7 @@ function MemberModal({
           <div className="min-w-0 flex-1">
             <h2 className="truncate text-base font-bold text-ink">{m.name}</h2>
             <p className="text-xs text-muted-fg">
+              {m.weekLabel ? `${m.weekLabel} · ` : ""}
               {m.submittedAtLabel
                 ? `Goals submitted ${m.submittedAtLabel}`
                 : "Goals not submitted yet"}
