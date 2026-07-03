@@ -52,9 +52,11 @@ export type AdminUser = {
 export function AdminUserList({
   users,
   currentUserId,
+  periodNoun = "week",
 }: {
   users: AdminUser[];
   currentUserId: string;
+  periodNoun?: string;
 }) {
   if (users.length === 0) {
     return <p className="px-1 text-sm text-muted-fg">No users yet.</p>;
@@ -62,13 +64,26 @@ export function AdminUserList({
   return (
     <ul className="flex flex-col gap-2">
       {users.map((u) => (
-        <UserRow key={u.id} user={u} isSelf={u.id === currentUserId} />
+        <UserRow
+          key={u.id}
+          user={u}
+          isSelf={u.id === currentUserId}
+          periodNoun={periodNoun}
+        />
       ))}
     </ul>
   );
 }
 
-function UserRow({ user: u, isSelf }: { user: AdminUser; isSelf: boolean }) {
+function UserRow({
+  user: u,
+  isSelf,
+  periodNoun,
+}: {
+  user: AdminUser;
+  isSelf: boolean;
+  periodNoun: string;
+}) {
   const [open, setOpen] = useState(false);
   const [addingFine, setAddingFine] = useState(false);
   const canExpand = u.goalCount > 0 || u.penalties.length > 0;
@@ -156,7 +171,7 @@ function UserRow({ user: u, isSelf }: { user: AdminUser; isSelf: boolean }) {
               </div>
             </>
           ) : (
-            <span className="text-xs text-muted-fg">No goals this week</span>
+            <span className="text-xs text-muted-fg">No goals this {periodNoun}</span>
           )}
         </div>
 

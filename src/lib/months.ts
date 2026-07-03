@@ -26,6 +26,17 @@ export function nextMonthBounds(prevEnd: Date): { start: Date; end: Date } {
   return getMonthBounds(next);
 }
 
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+// Month bounds are created with local server time (see getMonthBounds above),
+// so read them back with local getters rather than UTC ones.
+export function monthLabel(start: Date): string {
+  return `${MONTH_NAMES[start.getMonth()]} ${start.getFullYear()}`;
+}
+
 // Loads a month with its goals, subtasks, and delegation info. Same shape as
 // the week include (see lib/weeks.ts) — inlined so Prisma infers the payload.
 const monthInclude = {

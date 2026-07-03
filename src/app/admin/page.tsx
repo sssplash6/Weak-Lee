@@ -15,6 +15,8 @@ import {
 } from "@/lib/dates";
 import { formatMoney, PENALTY_LABEL } from "@/lib/penalties";
 import { resolveAvatar } from "@/lib/avatar";
+import { monthLabel } from "@/lib/months";
+import { PeriodToggle } from "../dashboard/_components/PeriodToggle";
 import { AdminUserList, type AdminUser } from "./_components/AdminUserList";
 import { RecentPenalties } from "./_components/RecentPenalties";
 import { AttendancePanel } from "./_components/AttendancePanel";
@@ -25,11 +27,20 @@ function fmtRange(start: Date, end: Date): string {
   return `${formatYmd(toYmd(start))} – ${formatYmd(toYmd(end))}`;
 }
 
-export default async function AdminPage() {
+export default async function AdminPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ view?: string | string[] }>;
+}) {
   const session = await auth();
   // Gate: must be signed in AND an admin. Everyone else goes to the dashboard.
   if (!session?.user?.id) redirect("/signin");
   if (!isAdmin(session.user.email)) redirect("/dashboard");
+
+  // Which period the People section shows: weekly goals (default) or monthly.
+  // Everything else on this page (stats, meeting, fines) stays week-based.
+  const view = (await searchParams).view === "month" ? "month" : "week";
+  const isMonth = view === "month";
 
   const [rawUsers, feedback, lateWeeks, recentPenalties, currentMeeting] =
     await Promise.all([
@@ -48,6 +59,26 @@ export default async function AdminPage() {
             startDate: true,
             endDate: true,
             submittedLate: true,
+            submittedAt: true,
+            goals: {
+              orderBy: { position: "asc" },
+              select: {
+                id: true,
+                title: true,
+                completedAt: true,
+                deadline: true,
+                manualPercent: true,
+                subtasks: { select: { isDone: true } },
+              },
+            },
+          },
+        },
+        // Months are created lazily when someone first opens the month view,
+        // so a user may have no current month — they render as "no goals".
+        months: {
+          where: { isCurrent: true },
+          select: {
+            startDate: true,
             submittedAt: true,
             goals: {
               orderBy: { position: "asc" },
@@ -122,18 +153,30 @@ export default async function AdminPage() {
 
   const users: AdminUser[] = rawUsers.map((u) => {
     const week = u.weeks[0];
-    const goals = week?.goals ?? [];
+    const period = isMonth ? u.months[0] : week;
+    const goals = period?.goals ?? [];
     return {
       id: u.id,
       name: u.name,
       email: u.email,
       department: u.department,
       avatar: u.avatar,
-      weekLabel: week ? fmtRange(week.startDate, week.endDate) : null,
-      misdated: week ? week.startDate.getTime() > thisWeekStart.getTime() : false,
-      late: week?.submittedLate ?? false,
-      submittedAtLabel: week?.submittedAt
-        ? formatDateTimeTz(week.submittedAt)
+      weekLabel: isMonth
+        ? period
+          ? monthLabel(period.startDate)
+          : null
+        : week
+          ? fmtRange(week.startDate, week.endDate)
+          : null,
+      // Misdated weeks and late submissions are week-only concepts: months are
+      // always whole calendar months and have no submission deadline.
+      misdated:
+        !isMonth && week
+          ? week.startDate.getTime() > thisWeekStart.getTime()
+          : false,
+      late: !isMonth && (week?.submittedLate ?? false),
+      submittedAtLabel: period?.submittedAt
+        ? formatDateTimeTz(period.submittedAt)
         : null,
       percent: weekPercent(goals),
       goalCount: goals.length,
@@ -191,7 +234,7 @@ export default async function AdminPage() {
 
   const stats = [
     { label: "Users", value: users.length },
-    { label: "Active this week", value: active.length },
+    { label: `Active this ${view}`, value: active.length },
     { label: "Goals set", value: totalGoals },
     { label: "Goals completed", value: totalCompleted },
     { label: "Avg completion", value: `${avgCompletion}%` },
@@ -207,7 +250,7 @@ export default async function AdminPage() {
           </div>
           <h1 className="mt-1 text-2xl font-bold text-ink">Team overview</h1>
           <p className="mt-1 text-sm text-muted-fg">
-            Weekly goals and progress across everyone.
+            {isMonth ? "Monthly" : "Weekly"} goals and progress across everyone.
           </p>
         </div>
         <Link
@@ -230,6 +273,8 @@ export default async function AdminPage() {
           My dashboard
         </Link>
       </header>
+
+      <PeriodToggle view={view} basePath="/admin" />
 
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {stats.map((s) => (
@@ -262,7 +307,11 @@ export default async function AdminPage() {
         <h2 className="mb-3 px-1 text-sm font-semibold text-ink">
           People ({users.length})
         </h2>
-        <AdminUserList users={users} currentUserId={session.user.id} />
+        <AdminUserList
+          users={users}
+          currentUserId={session.user.id}
+          periodNoun={view}
+        />
       </section>
 
       <section className="mt-10">

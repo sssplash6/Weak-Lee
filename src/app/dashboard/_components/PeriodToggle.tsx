@@ -1,16 +1,22 @@
 import Link from "next/link";
 
 /**
- * Week ⇄ Month tabs for the dashboard. Plain links — the view is carried in
- * the `view` search param, so it survives reloads and is shareable.
+ * Week ⇄ Month tabs. Plain links — the view is carried in the `view` search
+ * param, so it survives reloads and is shareable.
  */
-export function PeriodToggle({ view }: { view: "week" | "month" }) {
+export function PeriodToggle({
+  view,
+  basePath = "/dashboard",
+}: {
+  view: "week" | "month";
+  basePath?: string;
+}) {
   return (
     <nav className="mb-6 flex gap-6 border-b border-line">
-      <Tab href="/dashboard" active={view === "week"}>
+      <Tab href={basePath} active={view === "week"}>
         Week
       </Tab>
-      <Tab href="/dashboard?view=month" active={view === "month"}>
+      <Tab href={`${basePath}?view=month`} active={view === "month"}>
         Month
       </Tab>
     </nav>

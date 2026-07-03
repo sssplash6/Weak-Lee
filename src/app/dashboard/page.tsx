@@ -12,6 +12,7 @@ import {
 import {
   getArchivedMonths,
   getOrCreateCurrentMonth,
+  monthLabel,
   nextMonthBounds,
 } from "@/lib/months";
 import { goalPercent, isGoalComplete, weekPercent } from "@/lib/progress";
@@ -35,17 +36,6 @@ import { PENALTY_LABEL } from "@/lib/penalties";
 // doesn't drift by the viewer's timezone.
 function formatRange(start: Date, end: Date): string {
   return `${formatYmd(toYmd(start))} – ${formatYmd(toYmd(end))}`;
-}
-
-const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
-
-// Month bounds are created with local server time (see lib/months.ts), so read
-// them back with local getters — same convention as toLocalYmd below.
-function monthLabel(start: Date): string {
-  return `${MONTH_NAMES[start.getMonth()]} ${start.getFullYear()}`;
 }
 
 function displayName(u: { name: string | null; email: string | null }): string {
