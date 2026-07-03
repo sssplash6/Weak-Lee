@@ -197,7 +197,13 @@ function UserRow({
           Fine
         </button>
         {u.misdated && <FixWeekButton userId={u.id} weekLabel={u.weekLabel} />}
-        {!isSelf && <DeleteUserButton userId={u.id} name={u.name ?? u.email} />}
+        {isSelf ? (
+          // Invisible stand-in matching the delete button's footprint (px-4
+          // around an h-4 w-4 icon) so every row's columns line up.
+          <span className="w-12 shrink-0" aria-hidden="true" />
+        ) : (
+          <DeleteUserButton userId={u.id} name={u.name ?? u.email} />
+        )}
       </div>
       </div>
 
