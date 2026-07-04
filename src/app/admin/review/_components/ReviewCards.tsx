@@ -9,6 +9,9 @@ export type ReviewGoal = {
   percent: number;
   completed: boolean;
   deadlineLabel: string | null;
+  // The reason the person gave for not finishing (captured when the week is
+  // closed); null while the week is open or when the goal was completed.
+  incompleteReason: string | null;
 };
 
 export type ReviewMember = {
@@ -161,6 +164,11 @@ function MemberModal({
                 {g.deadlineLabel && (
                   <p className="mt-1 text-xs text-muted-fg">
                     Due {g.deadlineLabel}
+                  </p>
+                )}
+                {g.incompleteReason && (
+                  <p className="mt-1 text-xs italic text-muted-fg">
+                    “{g.incompleteReason}”
                   </p>
                 )}
               </li>

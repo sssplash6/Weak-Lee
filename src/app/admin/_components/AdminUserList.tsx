@@ -21,6 +21,8 @@ export type AdminGoal = {
   percent: number;
   completed: boolean;
   deadlineLabel: string | null;
+  // Reason given for not finishing, captured when the period was closed.
+  incompleteReason: string | null;
 };
 
 export type AdminPenalty = {
@@ -220,27 +222,34 @@ function UserRow({
           {u.goals.length > 0 && (
             <ul>
               {u.goals.map((g) => (
-                <li key={g.id} className="flex items-center gap-3 py-1.5 text-sm">
-                  <span
-                    className={`h-2 w-2 shrink-0 rounded-full ${
-                      g.completed ? "bg-brand" : "bg-line"
-                    }`}
-                  />
-                  <span
-                    className={`min-w-0 flex-1 truncate ${
-                      g.completed ? "text-muted-fg line-through" : "text-ink"
-                    }`}
-                  >
-                    {g.title}
-                  </span>
-                  {g.deadlineLabel && (
-                    <span className="shrink-0 rounded-full bg-canvas px-2 py-0.5 text-[11px] font-medium text-muted-fg">
-                      Due {g.deadlineLabel}
+                <li key={g.id} className="py-1.5 text-sm">
+                  <div className="flex items-center gap-3">
+                    <span
+                      className={`h-2 w-2 shrink-0 rounded-full ${
+                        g.completed ? "bg-brand" : "bg-line"
+                      }`}
+                    />
+                    <span
+                      className={`min-w-0 flex-1 truncate ${
+                        g.completed ? "text-muted-fg line-through" : "text-ink"
+                      }`}
+                    >
+                      {g.title}
                     </span>
+                    {g.deadlineLabel && (
+                      <span className="shrink-0 rounded-full bg-canvas px-2 py-0.5 text-[11px] font-medium text-muted-fg">
+                        Due {g.deadlineLabel}
+                      </span>
+                    )}
+                    <span className="shrink-0 text-xs font-semibold tabular-nums text-accent">
+                      {g.percent}%
+                    </span>
+                  </div>
+                  {g.incompleteReason && (
+                    <p className="mt-0.5 pl-5 text-xs italic text-muted-fg">
+                      “{g.incompleteReason}”
+                    </p>
                   )}
-                  <span className="shrink-0 text-xs font-semibold tabular-nums text-accent">
-                    {g.percent}%
-                  </span>
                 </li>
               ))}
             </ul>

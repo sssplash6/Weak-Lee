@@ -44,6 +44,7 @@ export default async function AdminReviewPage() {
               completedAt: true,
               deadline: true,
               manualPercent: true,
+              incompleteReason: true,
               subtasks: { select: { isDone: true } },
             },
           },
@@ -76,6 +77,7 @@ export default async function AdminReviewPage() {
         percent: goalPercent(g),
         completed: isGoalComplete(g),
         deadlineLabel: g.deadline ? formatStamp(toStamp(g.deadline)) : null,
+        incompleteReason: g.incompleteReason,
       })),
     };
   });

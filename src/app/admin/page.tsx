@@ -68,6 +68,7 @@ export default async function AdminPage({
                 completedAt: true,
                 deadline: true,
                 manualPercent: true,
+                incompleteReason: true,
                 subtasks: { select: { isDone: true } },
               },
             },
@@ -88,6 +89,7 @@ export default async function AdminPage({
                 completedAt: true,
                 deadline: true,
                 manualPercent: true,
+                incompleteReason: true,
                 subtasks: { select: { isDone: true } },
               },
             },
@@ -195,6 +197,7 @@ export default async function AdminPage({
         percent: goalPercent(g),
         completed: isGoalComplete(g),
         deadlineLabel: g.deadline ? formatStamp(toStamp(g.deadline)) : null,
+        incompleteReason: g.incompleteReason,
       })),
     };
   });
