@@ -133,11 +133,11 @@ function UserRow({
             )}
             {u.submittedAtLabel ? (
               <span className="shrink-0 rounded-full bg-green-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-green-600">
-                Reported
+                Submitted
               </span>
             ) : (
               <span className="shrink-0 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-600">
-                Not reported
+                Not submitted
               </span>
             )}
           </p>
