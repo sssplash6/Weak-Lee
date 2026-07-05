@@ -20,6 +20,7 @@ import { PeriodToggle } from "../dashboard/_components/PeriodToggle";
 import { AdminUserList, type AdminUser } from "./_components/AdminUserList";
 import { RecentPenalties } from "./_components/RecentPenalties";
 import { AttendancePanel } from "./_components/AttendancePanel";
+import { AttendanceHistory } from "./_components/AttendanceHistory";
 
 // Render week ranges by their UTC calendar date (matching how week bounds are
 // stored) so the dates don't drift by the viewer's timezone.
@@ -42,8 +43,14 @@ export default async function AdminPage({
   const view = (await searchParams).view === "month" ? "month" : "week";
   const isMonth = view === "month";
 
-  const [rawUsers, feedback, lateWeeks, recentPenalties, currentMeeting] =
-    await Promise.all([
+  const [
+    rawUsers,
+    feedback,
+    lateWeeks,
+    recentPenalties,
+    currentMeeting,
+    recentMeetings,
+  ] = await Promise.all([
     prisma.user.findMany({
       orderBy: [{ name: "asc" }, { email: "asc" }],
       select: {
@@ -147,6 +154,17 @@ export default async function AdminPage({
         },
       },
     }),
+    // The last several Monday meetings, newest first, for the attendance-history
+    // strip. Each week is its own meeting row, so this is the stored record of
+    // past weeks even though the marking sheet always shows just the current one.
+    prisma.meeting.findMany({
+      orderBy: { scheduledAt: "desc" },
+      take: 8,
+      select: {
+        scheduledAt: true,
+        attendances: { select: { userId: true, status: true } },
+      },
+    }),
   ]);
 
   // The current calendar week's Monday — used to flag users whose active week is
@@ -221,6 +239,30 @@ export default async function AdminPage({
     };
   });
   const meetingLabel = formatDateTimeTz(currentMeetingSlot());
+
+  // Attendance history: oldest → newest across the recent meetings. Each cell is
+  // a person's status for that meeting (null if never marked that week).
+  const meetingsChrono = [...recentMeetings].reverse();
+  const historyColumns = meetingsChrono.map((m) =>
+    formatYmd(toYmd(m.scheduledAt)),
+  );
+  const statusByMeetingUser = new Map(
+    meetingsChrono.flatMap((m, i) =>
+      m.attendances.map((a) => [`${i}:${a.userId}`, a.status] as const),
+    ),
+  );
+  const historyRows = rawUsers.map((u) => {
+    const av = resolveAvatar(u.avatar, u.email ?? u.id);
+    return {
+      id: u.id,
+      name: u.name ?? u.email ?? "—",
+      emoji: av.emoji,
+      bg: av.bg,
+      cells: meetingsChrono.map(
+        (_, i) => statusByMeetingUser.get(`${i}:${u.id}`) ?? null,
+      ),
+    };
+  });
 
   // Aggregate stats. "Active" = has at least one goal in the current week.
   const active = users.filter((u) => u.goalCount > 0);
@@ -312,6 +354,9 @@ export default async function AdminPage({
           ($40, then +$20 for each meeting missed in a row).
         </p>
         <AttendancePanel meetingLabel={meetingLabel} roster={roster} />
+        <div className="mt-3">
+          <AttendanceHistory columns={historyColumns} rows={historyRows} />
+        </div>
       </section>
 
       <section className="mt-8">
