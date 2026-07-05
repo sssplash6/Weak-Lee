@@ -29,11 +29,14 @@ export function DeadlinePicker({
   todayYmd,
   overdue,
   onChange,
+  invalid = false,
 }: {
   value: string | null;
   todayYmd: string;
   overdue: boolean;
   onChange: (stamp: string | null) => void;
+  // When true (and no date set), ring the icon in red as a required field.
+  invalid?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -83,7 +86,9 @@ export function DeadlinePicker({
                   ? "bg-red-50 text-red-600 hover:bg-red-100"
                   : "bg-brand-soft text-brand hover:bg-brand-soft/70"
               }`
-            : "flex h-8 w-8 items-center justify-center rounded-full text-muted-fg transition hover:bg-brand-soft hover:text-brand"
+            : `flex h-8 w-8 items-center justify-center rounded-full text-muted-fg transition hover:bg-brand-soft hover:text-brand ${
+                invalid ? "ring-1 ring-red-400" : ""
+              }`
         }
       >
         <CalendarIcon className="h-4 w-4" />

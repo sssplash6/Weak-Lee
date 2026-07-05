@@ -41,6 +41,9 @@ export function StartNewWeekButton({
   const [firstGoal, setFirstGoal] = useState("");
   const [priority, setPriority] = useState<Priority | null>(null);
   const [deadline, setDeadline] = useState<string | null>(null);
+  // Set once the user tries to start the week; drives the "what's missing" hints
+  // so we never disable the button without telling them why.
+  const [attempted, setAttempted] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   const hasUnfinished = incompleteGoals.length > 0;
@@ -48,8 +51,19 @@ export function StartNewWeekButton({
     (g) => (reasons[g.id] ?? "").trim().length > 0,
   );
   const validRange = !!start && !!end && start <= end;
-  const hasFirstGoal =
-    firstGoal.trim().length > 0 && priority != null && deadline != null;
+  const needsTitle = firstGoal.trim().length === 0;
+  const needsPriority = priority == null;
+  const needsDeadline = deadline == null;
+  const hasFirstGoal = !needsTitle && !needsPriority && !needsDeadline;
+
+  // Everything that's stopping the week from starting, in plain language.
+  const missing: string[] = [];
+  if (needsTitle) missing.push("a goal title");
+  if (needsPriority) missing.push("a priority");
+  if (needsDeadline) missing.push("a deadline");
+  if (hasUnfinished && !allFilled)
+    missing.push("a reason for every unfinished goal");
+  if (!validRange) missing.push("a valid week date range");
 
   function close() {
     setOpen(false);
@@ -59,6 +73,7 @@ export function StartNewWeekButton({
     setFirstGoal("");
     setPriority(null);
     setDeadline(null);
+    setAttempted(false);
   }
 
   // Close on Escape and lock body scroll while the modal is open.
@@ -77,7 +92,11 @@ export function StartNewWeekButton({
   }, [open, isPending]);
 
   function submit() {
-    if ((hasUnfinished && !allFilled) || !validRange || !hasFirstGoal) return;
+    if ((hasUnfinished && !allFilled) || !validRange || !hasFirstGoal) {
+      // Don't silently no-op — reveal exactly which fields still need filling.
+      setAttempted(true);
+      return;
+    }
     if (priority == null || deadline == null) return;
     const payload = incompleteGoals.map((g) => ({
       goalId: g.id,
@@ -167,16 +186,23 @@ export function StartNewWeekButton({
                 placeholder="e.g. Ship the onboarding flow"
                 className="min-w-0 flex-1 bg-transparent text-sm text-ink placeholder:text-muted-fg focus:outline-none"
               />
-              <PriorityPicker value={priority} onChange={setPriority} />
+              <PriorityPicker
+                value={priority}
+                onChange={setPriority}
+                invalid={attempted && needsPriority}
+              />
               <DeadlinePicker
                 value={deadline}
                 todayYmd={todayYmd}
                 overdue={false}
                 onChange={setDeadline}
+                invalid={attempted && needsDeadline}
               />
             </div>
             <span className="mt-1 block text-xs text-muted-fg">
-              Every new week needs at least one goal — with a priority and
+              Every new week needs at least one goal — tap the{" "}
+              <span className="font-semibold">flag</span> to set a priority and
+              the <span className="font-semibold">calendar</span> to set a
               deadline.
               {priority != null && ` Priority: ${PRIORITY_LABEL[priority]}.`}
             </span>
@@ -223,6 +249,12 @@ export function StartNewWeekButton({
         </p>
       )}
 
+      {attempted && missing.length > 0 && (
+        <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-600">
+          Before starting the week, add {missing.join(", ")}.
+        </p>
+      )}
+
       <div className="mt-5 flex items-center justify-end gap-2">
         <button
           type="button"
@@ -234,9 +266,7 @@ export function StartNewWeekButton({
         </button>
         <button
           type="button"
-          disabled={
-            isPending || (hasUnfinished && !allFilled) || !validRange || !hasFirstGoal
-          }
+          disabled={isPending}
           onClick={submit}
           className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white transition hover:bg-accent-dark disabled:cursor-not-allowed disabled:opacity-50"
         >

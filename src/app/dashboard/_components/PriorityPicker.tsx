@@ -17,9 +17,12 @@ import { FlagIcon } from "./icons";
 export function PriorityPicker({
   value,
   onChange,
+  invalid = false,
 }: {
   value: Priority | null;
   onChange: (priority: Priority | null) => void;
+  // When true, ring the flag in red to flag it as a required-but-unset field.
+  invalid?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -48,7 +51,7 @@ export function PriorityPicker({
         aria-label="Set priority"
         className={`flex h-8 w-8 items-center justify-center rounded-full transition hover:bg-canvas ${
           value ? PRIORITY_TEXT[value] : "text-muted-fg hover:text-ink"
-        }`}
+        } ${invalid ? "ring-1 ring-red-400" : ""}`}
       >
         <FlagIcon className="h-4 w-4" filled={value != null} />
       </button>
