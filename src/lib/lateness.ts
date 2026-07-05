@@ -17,11 +17,38 @@ export function weekSubmissionDeadline(weekStart: Date): Date {
 }
 
 /**
+ * The Monday 11:00 Asia/Tashkent meeting for the week beginning `weekStart`, as
+ * a UTC instant. Goals still unsubmitted at this moment are flagged "not
+ * submitted" at the meeting, so submitting after it is the steeper offence.
+ */
+export function weekMeetingDeadline(weekStart: Date): Date {
+  const d = new Date(weekStart);
+  d.setUTCHours(11 - TASHKENT_UTC_OFFSET_HOURS, 0, 0, 0); // 11:00 UZT = 06:00 UTC
+  return d;
+}
+
+/**
  * Whether a week submitted at `submittedAt`, for a week beginning `weekStart`,
  * missed the Sunday-midday deadline.
  */
 export function isLateSubmission(submittedAt: Date, weekStart: Date): boolean {
   return submittedAt.getTime() > weekSubmissionDeadline(weekStart).getTime();
+}
+
+// How late a submission was, which sets the fine tier:
+//   on-time — by Sunday 12:00 (no fine)
+//   late    — after Sunday 12:00 but by the Monday 11:00 meeting
+//   missed  — after the Monday 11:00 meeting (was flagged "not submitted" there)
+export type SubmissionTiming = "on-time" | "late" | "missed";
+
+export function submissionTiming(
+  submittedAt: Date,
+  weekStart: Date,
+): SubmissionTiming {
+  const t = submittedAt.getTime();
+  if (t > weekMeetingDeadline(weekStart).getTime()) return "missed";
+  if (t > weekSubmissionDeadline(weekStart).getTime()) return "late";
+  return "on-time";
 }
 
 /**

@@ -5,10 +5,13 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { getOrCreateCurrentWeek, nextWeekBounds } from "@/lib/weeks";
 import { getOrCreateCurrentMonth, nextMonthBounds } from "@/lib/months";
-import { isLateSubmission } from "@/lib/lateness";
+import { submissionTiming } from "@/lib/lateness";
 import { clampPercent, isGoalComplete } from "@/lib/progress";
 import { isPriority, type Priority } from "@/lib/priority";
-import { LATE_SUBMISSION_PENALTY } from "@/lib/penalties";
+import {
+  LATE_SUBMISSION_PENALTY,
+  MISSED_SUBMISSION_PENALTY,
+} from "@/lib/penalties";
 import { AVATAR_EMOJIS } from "@/lib/avatar";
 
 async function requireUserId(): Promise<string> {
@@ -520,9 +523,11 @@ export async function startNewWeek(
     ({ start, end } = nextWeekBounds(week.endDate));
   }
 
-  // Late if this submission happens after the Sunday-midday (Tashkent) deadline
-  // for the new week — i.e. the week wasn't closed and re-opened on time.
-  const submittedLate = isLateSubmission(new Date(), start);
+  // How late this submission is against the new week's deadlines. "late" =
+  // after Sunday 12:00; "missed" = after the Monday 11:00 meeting (flagged not
+  // submitted there). Both count as a late submission for the flag/fine.
+  const timing = submissionTiming(new Date(), start);
+  const submittedLate = timing !== "on-time";
 
   await prisma.$transaction(async (tx) => {
     await Promise.all(
@@ -551,14 +556,19 @@ export async function startNewWeek(
       },
     });
     // A late submission is fined automatically and recorded in the penalty
-    // ledger alongside meeting fines.
+    // ledger alongside meeting fines. Submitting after the Monday 11:00 meeting
+    // (when they were flagged not submitted) costs more than merely missing the
+    // Sunday deadline.
     if (submittedLate) {
+      const missed = timing === "missed";
       await tx.penalty.create({
         data: {
           userId,
           type: "LATE_SUBMISSION",
-          amount: LATE_SUBMISSION_PENALTY,
-          note: "Goals submitted after the Sunday 12:00 deadline",
+          amount: missed ? MISSED_SUBMISSION_PENALTY : LATE_SUBMISSION_PENALTY,
+          note: missed
+            ? "Goals submitted after the Monday 11:00 meeting — flagged not submitted"
+            : "Goals submitted after the Sunday 12:00 deadline",
           weekId: newWeek.id,
         },
       });

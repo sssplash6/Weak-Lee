@@ -13,8 +13,13 @@ export const MEETING_PENALTY_STEP = 20; // added for every further skip in a row
 /** Flat fine for showing up late to a meeting (counts as present, no escalation). */
 export const MEETING_LATE_PENALTY = 20;
 
-/** Flat fine auto-applied when a week's goals are submitted after the deadline. */
-export const LATE_SUBMISSION_PENALTY = 10;
+/** Fine auto-applied when a week's goals are submitted after the Sunday 12:00
+ * deadline but before the Monday 11:00 meeting. */
+export const LATE_SUBMISSION_PENALTY = 20;
+
+/** Steeper fine when goals are still unsubmitted at the Monday 11:00 meeting —
+ * i.e. the person was flagged "not submitted" there and submitted even later. */
+export const MISSED_SUBMISSION_PENALTY = 40;
 
 /** Pre-filled amount for a manual (admin-issued) fine. */
 export const DEFAULT_MANUAL_PENALTY = 20;
