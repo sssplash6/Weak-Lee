@@ -8,7 +8,7 @@ export type AttendanceHistoryRow = {
   name: string;
   emoji: string;
   bg: string;
-  // One cell per recent meeting, oldest → newest; null = not marked / no record.
+  // One cell per recent meeting, newest → oldest; null = not marked / no record.
   cells: (AttendanceStatus | null)[];
 };
 
@@ -26,14 +26,14 @@ const CELL: Record<
 
 /**
  * A read-only per-person history of the last few Monday meetings: one row per
- * person, one cell per meeting (oldest on the left). Hover a cell for its date
+ * person, one cell per meeting (newest on the left). Hover a cell for its date
  * and status. Collapsed by default to keep the admin page tidy.
  */
 export function AttendanceHistory({
   columns,
   rows,
 }: {
-  columns: string[]; // meeting date labels, oldest → newest
+  columns: string[]; // meeting date labels, newest → oldest
   rows: AttendanceHistoryRow[];
 }) {
   const [open, setOpen] = useState(false);

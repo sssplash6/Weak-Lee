@@ -240,14 +240,14 @@ export default async function AdminPage({
   });
   const meetingLabel = formatDateTimeTz(currentMeetingSlot());
 
-  // Attendance history: oldest → newest across the recent meetings. Each cell is
-  // a person's status for that meeting (null if never marked that week).
-  const meetingsChrono = [...recentMeetings].reverse();
-  const historyColumns = meetingsChrono.map((m) =>
+  // Attendance history: newest meeting on the left. Each cell is a person's
+  // status for that meeting (null if never marked that week). recentMeetings is
+  // already newest-first from the query.
+  const historyColumns = recentMeetings.map((m) =>
     formatYmd(toYmd(m.scheduledAt)),
   );
   const statusByMeetingUser = new Map(
-    meetingsChrono.flatMap((m, i) =>
+    recentMeetings.flatMap((m, i) =>
       m.attendances.map((a) => [`${i}:${a.userId}`, a.status] as const),
     ),
   );
@@ -258,7 +258,7 @@ export default async function AdminPage({
       name: u.name ?? u.email ?? "—",
       emoji: av.emoji,
       bg: av.bg,
-      cells: meetingsChrono.map(
+      cells: recentMeetings.map(
         (_, i) => statusByMeetingUser.get(`${i}:${u.id}`) ?? null,
       ),
     };
