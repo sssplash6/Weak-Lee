@@ -138,9 +138,9 @@ function UserRow({
   const [addingFine, setAddingFine] = useState(false);
   const canExpand = u.goalCount > 0 || u.penalties.length > 0;
   // In the week view, whose submission is shown depends on whether the user has
-  // jumped ahead: a misdated (future-dated) current week means the badge below
-  // reflects *next* week's goals, not this week's. Tag it so the two are
-  // distinguishable at a glance. Months have no such split.
+  // jumped ahead: a misdated (future-dated) current week means the badge/subtext
+  // reflect *next* week's goals, not this week's. Tag the submission badge with
+  // the week it refers to so the two are distinguishable. Months have no split.
   const weekTag =
     periodNoun === "week" ? (u.misdated ? "next wk" : "this wk") : null;
   const forNextWeek = weekTag === "next wk";
@@ -174,11 +174,6 @@ function UserRow({
             {u.goalCount === 0 && (
               <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-600">
                 No goals
-              </span>
-            )}
-            {u.misdated && (
-              <span className="shrink-0 rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-orange-600">
-                Next week
               </span>
             )}
             {u.penaltyTotal > 0 && (
