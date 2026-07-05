@@ -14,7 +14,7 @@ export const MEETING_PENALTY_STEP = 20; // added for every further skip in a row
 export const MEETING_LATE_PENALTY = 20;
 
 /** Flat fine auto-applied when a week's goals are submitted after the deadline. */
-export const LATE_SUBMISSION_PENALTY = 20;
+export const LATE_SUBMISSION_PENALTY = 10;
 
 /** Pre-filled amount for a manual (admin-issued) fine. */
 export const DEFAULT_MANUAL_PENALTY = 20;
