@@ -51,6 +51,8 @@ export type AdminUser = {
   goals: AdminGoal[];
 };
 
+type SubmitFilter = "all" | "submitted" | "not-submitted";
+
 export function AdminUserList({
   users,
   currentUserId,
@@ -60,20 +62,66 @@ export function AdminUserList({
   currentUserId: string;
   periodNoun?: string;
 }) {
+  const [filter, setFilter] = useState<SubmitFilter>("all");
+
   if (users.length === 0) {
     return <p className="px-1 text-sm text-muted-fg">No users yet.</p>;
   }
+
+  // "Submitted" = they've submitted their goals for the current period.
+  const submittedCount = users.filter((u) => u.submittedAtLabel != null).length;
+  const counts = {
+    all: users.length,
+    submitted: submittedCount,
+    "not-submitted": users.length - submittedCount,
+  };
+  const visible = users.filter((u) => {
+    if (filter === "submitted") return u.submittedAtLabel != null;
+    if (filter === "not-submitted") return u.submittedAtLabel == null;
+    return true;
+  });
+
+  const FILTERS: { key: SubmitFilter; label: string }[] = [
+    { key: "all", label: "All" },
+    { key: "submitted", label: "Submitted" },
+    { key: "not-submitted", label: "Not submitted" },
+  ];
+
   return (
-    <ul className="flex flex-col gap-2">
-      {users.map((u) => (
-        <UserRow
-          key={u.id}
-          user={u}
-          isSelf={u.id === currentUserId}
-          periodNoun={periodNoun}
-        />
-      ))}
-    </ul>
+    <>
+      <div className="mb-3 inline-flex rounded-lg border border-line bg-canvas p-0.5 text-xs font-semibold">
+        {FILTERS.map((f) => (
+          <button
+            key={f.key}
+            type="button"
+            onClick={() => setFilter(f.key)}
+            aria-pressed={filter === f.key}
+            className={`rounded-md px-3 py-1.5 transition ${
+              filter === f.key
+                ? "bg-brand text-white"
+                : "text-muted-fg hover:text-ink"
+            }`}
+          >
+            {f.label} ({counts[f.key]})
+          </button>
+        ))}
+      </div>
+
+      {visible.length === 0 ? (
+        <p className="px-1 text-sm text-muted-fg">No people match this filter.</p>
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {visible.map((u) => (
+            <UserRow
+              key={u.id}
+              user={u}
+              isSelf={u.id === currentUserId}
+              periodNoun={periodNoun}
+            />
+          ))}
+        </ul>
+      )}
+    </>
   );
 }
 
