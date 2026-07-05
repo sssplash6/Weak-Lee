@@ -15,10 +15,12 @@ type WeekPenalty = {
  */
 export function PenaltyNotice({
   weekPenalties,
+  earlierPenalties = [],
   weekTotal,
   allTimeTotal,
 }: {
   weekPenalties: WeekPenalty[];
+  earlierPenalties?: WeekPenalty[];
   weekTotal: number;
   allTimeTotal: number;
 }) {
@@ -36,29 +38,43 @@ export function PenaltyNotice({
       {weekPenalties.length > 0 && (
         <ul className="mt-2 flex flex-col gap-1">
           {weekPenalties.map((p) => (
-            <li
-              key={p.id}
-              className="flex items-center gap-2 text-xs text-red-700/90"
-            >
-              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-red-500" />
-              <span className="min-w-0 flex-1 truncate">
-                {p.label}
-                {p.note ? ` · ${p.note}` : ""}
-                <span className="text-red-700/60"> · {p.dateLabel}</span>
-              </span>
-              <span className="shrink-0 font-semibold tabular-nums">
-                {formatMoney(p.amount)}
-              </span>
-            </li>
+            <PenaltyLine key={p.id} penalty={p} />
           ))}
         </ul>
       )}
 
-      {allTimeTotal > weekTotal && (
-        <p className="mt-2 text-xs text-red-700/70">
-          Total to date: {formatMoney(allTimeTotal)}
-        </p>
+      {earlierPenalties.length > 0 && (
+        <>
+          <p className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-red-700/70">
+            Earlier fines
+          </p>
+          <ul className="mt-1 flex flex-col gap-1">
+            {earlierPenalties.map((p) => (
+              <PenaltyLine key={p.id} penalty={p} />
+            ))}
+          </ul>
+          <p className="mt-2 text-xs font-medium text-red-700/70">
+            Total to date: {formatMoney(allTimeTotal)}
+          </p>
+        </>
       )}
     </div>
+  );
+}
+
+/** One fine: its reason (label + note) and amount, on a single line. */
+function PenaltyLine({ penalty: p }: { penalty: WeekPenalty }) {
+  return (
+    <li className="flex items-center gap-2 text-xs text-red-700/90">
+      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-red-500" />
+      <span className="min-w-0 flex-1 truncate">
+        {p.label}
+        {p.note ? ` · ${p.note}` : ""}
+        <span className="text-red-700/60"> · {p.dateLabel}</span>
+      </span>
+      <span className="shrink-0 font-semibold tabular-nums">
+        {formatMoney(p.amount)}
+      </span>
+    </li>
   );
 }

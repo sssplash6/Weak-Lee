@@ -119,18 +119,21 @@ export default async function DashboardPage({
   const periodEndMs = period.endDate.getTime();
   const penaltyDate = (p: (typeof penalties)[number]) =>
     p.meeting?.scheduledAt ?? p.createdAt;
-  const weekPenalties = penalties
-    .filter((p) => {
-      const d = penaltyDate(p).getTime();
-      return d >= periodStartMs && d <= periodEndMs;
-    })
-    .map((p) => ({
-      id: p.id,
-      label: PENALTY_LABEL[p.type],
-      amount: p.amount,
-      note: p.note,
-      dateLabel: formatDateTimeTz(penaltyDate(p)),
-    }));
+  const toRow = (p: (typeof penalties)[number]) => ({
+    id: p.id,
+    label: PENALTY_LABEL[p.type],
+    amount: p.amount,
+    note: p.note,
+    dateLabel: formatDateTimeTz(penaltyDate(p)),
+  });
+  const inThisWeek = (p: (typeof penalties)[number]) => {
+    const d = penaltyDate(p).getTime();
+    return d >= periodStartMs && d <= periodEndMs;
+  };
+  const weekPenalties = penalties.filter(inThisWeek).map(toRow);
+  // Earlier fines are itemised too (not just summed) so the reason for every
+  // fine stays visible to the person, not only this week's.
+  const earlierPenalties = penalties.filter((p) => !inThisWeek(p)).map(toRow);
   const weekPenaltyTotal = weekPenalties.reduce((s, p) => s + p.amount, 0);
 
   const overall = weekPercent(period.goals);
@@ -238,6 +241,7 @@ export default async function DashboardPage({
       {!isMonth && penaltyTotal > 0 && (
         <PenaltyNotice
           weekPenalties={weekPenalties}
+          earlierPenalties={earlierPenalties}
           weekTotal={weekPenaltyTotal}
           allTimeTotal={penaltyTotal}
         />
