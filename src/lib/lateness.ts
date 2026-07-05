@@ -23,3 +23,13 @@ export function weekSubmissionDeadline(weekStart: Date): Date {
 export function isLateSubmission(submittedAt: Date, weekStart: Date): boolean {
   return submittedAt.getTime() > weekSubmissionDeadline(weekStart).getTime();
 }
+
+/**
+ * Whether `at` falls on a Sunday in Asia/Tashkent (UTC+5) — the day the weekly
+ * close-and-restart is due, and the only day the review page flags who's
+ * reported vs not.
+ */
+export function isTashkentSunday(at: Date): boolean {
+  const shifted = new Date(at.getTime() + TASHKENT_UTC_OFFSET_HOURS * 3_600_000);
+  return shifted.getUTCDay() === 0;
+}

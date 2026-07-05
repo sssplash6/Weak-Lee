@@ -25,6 +25,9 @@ export type ReviewMember = {
   goalCount: number;
   percent: number;
   late: boolean;
+  // Whether they closed the current week and started the next one. Only surfaced
+  // on Sunday (see `showReported`).
+  reported: boolean;
   submittedAtLabel: string | null;
   goals: ReviewGoal[];
 };
@@ -33,7 +36,15 @@ export type ReviewMember = {
  * The weekly-review grid: one card per team member (avatar, name, goal
  * count). Clicking a card opens a modal summarizing that person's week.
  */
-export function ReviewCards({ members }: { members: ReviewMember[] }) {
+export function ReviewCards({
+  members,
+  showReported = false,
+}: {
+  members: ReviewMember[];
+  // On Sunday, flag on each card whether the person has closed the current week
+  // and started the next one.
+  showReported?: boolean;
+}) {
   const [selected, setSelected] = useState<ReviewMember | null>(null);
 
   // Close on Escape and lock body scroll while the modal is open.
@@ -78,6 +89,16 @@ export function ReviewCards({ members }: { members: ReviewMember[] }) {
                   {m.goalCount} {m.goalCount === 1 ? "goal" : "goals"}
                 </span>
               </span>
+              {showReported &&
+                (m.reported ? (
+                  <span className="ml-auto shrink-0 rounded-full bg-green-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-green-600">
+                    Reported
+                  </span>
+                ) : (
+                  <span className="ml-auto shrink-0 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-600">
+                    Not reported
+                  </span>
+                ))}
             </button>
           </li>
         ))}

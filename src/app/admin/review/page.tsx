@@ -5,6 +5,7 @@ import { isAdmin } from "@/lib/admin";
 import { goalPercent, isGoalComplete, weekPercent } from "@/lib/progress";
 import { getWeekBounds } from "@/lib/weeks";
 import { formatDateTimeTz, formatStamp, formatYmd, toStamp, toYmd } from "@/lib/dates";
+import { isTashkentSunday } from "@/lib/lateness";
 import { resolveAvatar } from "@/lib/avatar";
 import { BackLink } from "@/app/_components/BackLink";
 import { ReviewCards, type ReviewMember } from "./_components/ReviewCards";
@@ -15,6 +16,19 @@ export default async function AdminReviewPage() {
   if (!isAdmin(session.user.email)) redirect("/dashboard");
 
   const now = new Date();
+
+  // "Reported" = closed the current week and started the next one, which leaves
+  // a future-dated week behind. Collect who's already done that so the review
+  // grid can flag it (only shown on Sunday, the day the ritual is due).
+  const showReported = isTashkentSunday(now);
+  const startedNext = showReported
+    ? await prisma.week.findMany({
+        where: { startDate: { gt: now } },
+        distinct: ["userId"],
+        select: { userId: true },
+      })
+    : [];
+  const reportedIds = new Set(startedNext.map((w) => w.userId));
 
   const rawUsers = await prisma.user.findMany({
     orderBy: [{ name: "asc" }, { email: "asc" }],
@@ -68,6 +82,7 @@ export default async function AdminReviewPage() {
       goalCount: goals.length,
       percent: weekPercent(goals),
       late: week?.submittedLate ?? false,
+      reported: reportedIds.has(u.id),
       submittedAtLabel: week?.submittedAt
         ? formatDateTimeTz(week.submittedAt)
         : null,
@@ -100,7 +115,7 @@ export default async function AdminReviewPage() {
         <BackLink href="/admin" label="Admin" />
       </header>
 
-      <ReviewCards members={members} />
+      <ReviewCards members={members} showReported={showReported} />
     </div>
   );
 }
