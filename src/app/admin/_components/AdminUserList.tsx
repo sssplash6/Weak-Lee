@@ -132,15 +132,13 @@ function UserRow({
               </span>
             )}
             {u.submittedAtLabel ? (
-              <span className="shrink-0 rounded-full bg-brand-soft px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand">
-                Submitted
+              <span className="shrink-0 rounded-full bg-green-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-green-600">
+                Reported
               </span>
             ) : (
-              u.goalCount > 0 && (
-                <span className="shrink-0 rounded-full bg-line px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted-fg">
-                  Draft
-                </span>
-              )
+              <span className="shrink-0 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-600">
+                Not reported
+              </span>
             )}
           </p>
           <p className="truncate text-xs text-muted-fg">
