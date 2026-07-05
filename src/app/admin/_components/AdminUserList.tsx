@@ -137,6 +137,13 @@ function UserRow({
   const [open, setOpen] = useState(false);
   const [addingFine, setAddingFine] = useState(false);
   const canExpand = u.goalCount > 0 || u.penalties.length > 0;
+  // In the week view, whose submission is shown depends on whether the user has
+  // jumped ahead: a misdated (future-dated) current week means the badge below
+  // reflects *next* week's goals, not this week's. Tag it so the two are
+  // distinguishable at a glance. Months have no such split.
+  const weekTag =
+    periodNoun === "week" ? (u.misdated ? "next wk" : "this wk") : null;
+  const forNextWeek = weekTag === "next wk";
   const avatar = resolveAvatar(u.avatar, u.email ?? u.id);
 
   return (
@@ -181,11 +188,11 @@ function UserRow({
             )}
             {u.submittedAtLabel ? (
               <span className="shrink-0 rounded-full bg-green-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-green-600">
-                Submitted
+                Submitted{weekTag ? ` · ${weekTag}` : ""}
               </span>
             ) : (
               <span className="shrink-0 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-600">
-                Not submitted
+                Not submitted{weekTag ? ` · ${weekTag}` : ""}
               </span>
             )}
           </p>
@@ -195,8 +202,8 @@ function UserRow({
           </p>
           <p className="truncate text-xs text-muted-fg">
             {u.submittedAtLabel
-              ? `Goals submitted ${u.submittedAtLabel}`
-              : "Goals not submitted yet"}
+              ? `${forNextWeek ? "Next week's goals" : "Goals"} submitted ${u.submittedAtLabel}`
+              : `${forNextWeek ? "Next week's goals" : "Goals"} not submitted yet`}
           </p>
         </div>
 
