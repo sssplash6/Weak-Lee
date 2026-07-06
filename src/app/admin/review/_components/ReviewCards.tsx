@@ -170,7 +170,7 @@ function MemberModal({
                     {g.completed && (
                       <CheckCircleIcon className="h-4 w-4 shrink-0 text-brand" />
                     )}
-                    <span className="truncate">{g.title}</span>
+                    <span className="min-w-0 break-words">{g.title}</span>
                   </span>
                   <span className="shrink-0 text-xs font-semibold tabular-nums text-accent">
                     {g.percent}%

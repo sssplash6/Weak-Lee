@@ -278,7 +278,7 @@ function UserRow({
                       }`}
                     />
                     <span
-                      className={`min-w-0 flex-1 truncate ${
+                      className={`min-w-0 flex-1 break-words ${
                         g.completed ? "text-muted-fg line-through" : "text-ink"
                       }`}
                     >
