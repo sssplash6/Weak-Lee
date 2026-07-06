@@ -3,14 +3,14 @@ import Link from "next/link";
 export type AdminTab = "this" | "next" | "month";
 
 /**
- * Top-level admin tabs — This week ⇄ Next week ⇄ This month. Plain links; the
- * active tab rides in the `tab` search param so it survives reloads and is
- * shareable. Replaces the old Week/Month toggle (month is now just a tab).
+ * Top-level admin tabs. Plain links; the active tab rides in the `tab` search
+ * param so it survives reloads and is shareable. "Submissions" = who has opened
+ * (submitted) the current week; "Reports" = who has closed/reported their week.
  */
 export function AdminTabs({ tab }: { tab: AdminTab }) {
   const TABS: { key: AdminTab; label: string; href: string }[] = [
-    { key: "this", label: "This week", href: "/admin" },
-    { key: "next", label: "Next week", href: "/admin?tab=next" },
+    { key: "this", label: "Submissions", href: "/admin" },
+    { key: "next", label: "Reports", href: "/admin?tab=next" },
     { key: "month", label: "This month", href: "/admin?tab=month" },
   ];
   return (

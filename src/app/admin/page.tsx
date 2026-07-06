@@ -359,10 +359,10 @@ export default async function AdminPage({
 
   const subtitle =
     tab === "next"
-      ? "Who has planned next week, and what they set."
+      ? "Who has closed and reported their week, and what they planned next."
       : tab === "month"
         ? `${monthRange} · monthly goals across everyone.`
-        : `${weekRange} · weekly goals and progress across everyone.`;
+        : `${weekRange} · this week's submitted goals and progress across everyone.`;
 
   return (
     <div className="mx-auto w-full max-w-5xl flex-1 px-4 py-8">
@@ -578,11 +578,11 @@ export default async function AdminPage({
           />
           <section className="mt-8">
             <h2 className="mb-1 px-1 text-sm font-semibold text-ink">
-              Next week ({rawUsers.length})
+              Reports ({rawUsers.length})
             </h2>
             <p className="mb-3 px-1 text-xs text-muted-fg">
-              Reporting a week early opens next week&rsquo;s goals — everyone
-              who&rsquo;s done that shows as reported.
+              Reporting closes the week and plans the next one — everyone
+              who&rsquo;s done that shows as reported, with their next-week goals.
             </p>
             <AdminUserList
               users={usersNextWeek}
