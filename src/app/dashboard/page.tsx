@@ -184,6 +184,12 @@ export default async function DashboardPage({
     })),
   }));
 
+  // Completed goals sink to the bottom automatically. Array.sort is stable, so
+  // position order is preserved within the open and completed groups. This is
+  // display-only — the stored `position` is untouched, so reopening a goal
+  // returns it to its original spot.
+  goals.sort((a, b) => Number(a.completed) - Number(b.completed));
+
   const team = members.map((m) => ({ id: m.id, name: displayName(m) }));
 
   const archive = archivedPeriods.map((p) => ({
