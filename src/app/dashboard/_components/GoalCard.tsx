@@ -83,6 +83,9 @@ export function GoalCard({
   const [isPending, startTransition] = useTransition();
   const [tasksOpen, setTasksOpen] = useState(true);
   const [confirmComplete, setConfirmComplete] = useState(false);
+  // The completion rate typed in the confirm prompt (0–100). Seeded to 100 when
+  // the prompt opens; committed as the goal's percent on confirm.
+  const [completeRate, setCompleteRate] = useState("100");
   const [completed, applyCompleted] = useOptimistic(
     goal.completed,
     (_state: boolean, next: boolean) => next,
@@ -128,9 +131,10 @@ export function GoalCard({
     },
   );
 
-  // A completed goal always reads 100%; otherwise a manual override wins over
-  // the subtask-derived value. Mirrors goalPercent() with optimistic state.
-  const percent = completed ? 100 : manualPercent ?? subtaskPercent(subtasks);
+  // A manual/completion rate always wins; otherwise a completed goal reads 100
+  // and an open one follows its subtasks. Mirrors goalPercent() with optimistic
+  // state.
+  const percent = manualPercent ?? (completed ? 100 : subtaskPercent(subtasks));
 
   function onToggle(id: string, isDone: boolean) {
     startTransition(async () => {
@@ -146,6 +150,7 @@ export function GoalCard({
       subtasks.length > 0 &&
       subtasks.every((s) => (s.id === id ? isDone : s.isDone));
     if (isDone && willAllBeDone && !completed) {
+      setCompleteRate("100");
       setConfirmComplete(true);
     }
   }
@@ -153,9 +158,12 @@ export function GoalCard({
   function confirmCompletion() {
     setConfirmComplete(false);
     if (completed) return;
+    const rate = clampPercent(Number(completeRate.trim()) || 0);
     startTransition(async () => {
       applyCompleted(true);
-      await setGoalCompleted(goal.id, true);
+      // Completing also records the rate as the goal's percent.
+      applyManualPercent(rate);
+      await setGoalCompleted(goal.id, true, rate);
     });
   }
 
@@ -174,10 +182,16 @@ export function GoalCard({
   }
 
   function onToggleCompleted() {
-    const next = !completed;
+    // Completing always goes through the rate prompt ("how much did you finish?");
+    // reopening a completed goal is immediate.
+    if (!completed) {
+      setCompleteRate("100");
+      setConfirmComplete(true);
+      return;
+    }
     startTransition(async () => {
-      applyCompleted(next);
-      await setGoalCompleted(goal.id, next);
+      applyCompleted(false);
+      await setGoalCompleted(goal.id, false);
     });
   }
 
@@ -234,11 +248,7 @@ export function GoalCard({
             {subtasks.length}
           </span>
         </button>
-        <PercentChip
-          percent={percent}
-          editable={!completed}
-          onCommit={onSetPercent}
-        />
+        <PercentChip percent={percent} editable onCommit={onSetPercent} />
 
         {locked ? (
           <div className="mt-0.5 flex shrink-0 items-center gap-2">
@@ -346,11 +356,36 @@ export function GoalCard({
             onClick={(e) => e.stopPropagation()}
           >
             <h2 className="text-base font-bold text-ink">
-              Do you confirm the goal completion?
+              Mark “{goal.title}” complete?
             </h2>
             <p className="mt-1 text-sm text-muted-fg">
-              All subtasks for “{goal.title}” are done.
+              How much of it did you actually finish? You can edit this later.
             </p>
+            <label className="mt-4 flex items-center justify-center gap-2">
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted-fg">
+                Completion rate
+              </span>
+              <span className="flex items-center rounded-lg border border-accent px-2 py-1 text-sm font-semibold text-accent focus-within:ring-2 focus-within:ring-accent/30">
+                <input
+                  autoFocus
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={completeRate}
+                  onChange={(e) => setCompleteRate(e.target.value)}
+                  onFocus={(e) => e.currentTarget.select()}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      confirmCompletion();
+                    }
+                  }}
+                  aria-label="Completion rate percent"
+                  className="w-12 bg-transparent text-right tabular-nums focus:outline-none"
+                />
+                %
+              </span>
+            </label>
             <div className="mt-5 flex items-center justify-center gap-2">
               <button
                 type="button"
@@ -364,7 +399,7 @@ export function GoalCard({
                 onClick={confirmCompletion}
                 className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-dark"
               >
-                Confirm completion
+                Mark complete
               </button>
             </div>
           </div>
@@ -376,8 +411,8 @@ export function GoalCard({
 
 /**
  * The goal's percent readout — click to type a manual value (0–100). Commits on
- * blur or Enter, cancels on Escape. Not editable once the goal is completed
- * (a completed goal is always 100%).
+ * blur or Enter, cancels on Escape. Editable even once the goal is completed, so
+ * a "done at 70%" rate can be adjusted after the fact.
  */
 function PercentChip({
   percent,

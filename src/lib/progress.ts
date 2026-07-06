@@ -9,8 +9,10 @@ export function subtaskPercent(subtasks: { isDone: boolean }[]): number {
 
 /**
  * A goal's displayed completion percent:
- *  - a completed goal is always 100 (even with no subtasks);
- *  - otherwise a manual override (typed by the user) wins when set;
+ *  - a manual/completion rate (typed by the user) always wins when set — this
+ *    is the rate captured when a goal is marked complete (default 100) and is
+ *    editable afterward, so "done at 70%" is a real state;
+ *  - otherwise a completed goal with no explicit rate reads 100 (legacy);
  *  - otherwise it's derived from the subtasks (0 when none).
  */
 export function goalPercent(goal: {
@@ -18,8 +20,8 @@ export function goalPercent(goal: {
   manualPercent?: number | null;
   subtasks: { isDone: boolean }[];
 }): number {
-  if (goal.completedAt != null) return 100;
   if (goal.manualPercent != null) return clampPercent(goal.manualPercent);
+  if (goal.completedAt != null) return 100;
   return subtaskPercent(goal.subtasks);
 }
 
@@ -37,13 +39,19 @@ export function isGoalComplete(goal: { completedAt: Date | string | null }): boo
 }
 
 /**
- * Overall week percent = share of goals marked complete (0 when no goals).
- * With 2 goals, completing one gives 50%.
+ * Overall week percent = the average of each goal's own completion percent (0
+ * when no goals). This honors partial completion rates: a goal marked done at
+ * 70% contributes 70, not a full 100. With 2 goals at 100% and 70%, the week
+ * reads 85%. (Previously this was the binary share of goals marked complete.)
  */
 export function weekPercent(
-  goals: { completedAt: Date | string | null }[],
+  goals: {
+    completedAt?: Date | string | null;
+    manualPercent?: number | null;
+    subtasks: { isDone: boolean }[];
+  }[],
 ): number {
   if (goals.length === 0) return 0;
-  const done = goals.filter(isGoalComplete).length;
-  return Math.round((done / goals.length) * 100);
+  const sum = goals.reduce((acc, g) => acc + goalPercent(g), 0);
+  return Math.round(sum / goals.length);
 }

@@ -217,12 +217,24 @@ export async function renameGoal(goalId: string, title: string) {
  * Mark a goal complete (or reopen it). Completion is always a deliberate act —
  * finishing every subtask does not complete the goal on its own.
  */
-export async function setGoalCompleted(goalId: string, completed: boolean) {
+export async function setGoalCompleted(
+  goalId: string,
+  completed: boolean,
+  // The completion rate captured when marking done (0–100, defaults to 100).
+  // Stored as the goal's manualPercent so a goal can be "done at 70%" and stay
+  // editable. Ignored when un-completing (the existing percent is kept).
+  rate?: number,
+) {
   const userId = await requireUserId();
   await assertGoalOwned(goalId, userId);
   await prisma.goal.update({
     where: { id: goalId },
-    data: { completedAt: completed ? new Date() : null },
+    data: completed
+      ? {
+          completedAt: new Date(),
+          manualPercent: clampPercent(rate ?? 100),
+        }
+      : { completedAt: null },
   });
   revalidatePath("/dashboard");
 }
