@@ -17,6 +17,7 @@ import { formatMoney, PENALTY_LABEL } from "@/lib/penalties";
 import { resolveAvatar } from "@/lib/avatar";
 import { monthLabel } from "@/lib/months";
 import { AdminTabs, type AdminTab } from "./_components/AdminTabs";
+import { AssignedTasksPanel } from "./_components/AssignedTasksPanel";
 import { CollapsibleSection } from "./_components/CollapsibleSection";
 import { AdminUserList, type AdminUser } from "./_components/AdminUserList";
 import { RecentPenalties } from "./_components/RecentPenalties";
@@ -78,6 +79,7 @@ export default async function AdminPage({
     recentBonuses,
     currentMeeting,
     recentMeetings,
+    assignedTasks,
   ] = await Promise.all([
     prisma.user.findMany({
       orderBy: [{ name: "asc" }, { email: "asc" }],
@@ -191,6 +193,19 @@ export default async function AdminPage({
       select: {
         scheduledAt: true,
         attendances: { select: { userId: true, status: true } },
+      },
+    }),
+    // Admin-assigned tasks (all people), pending first, for the tracking list.
+    prisma.assignedTask.findMany({
+      orderBy: [{ completedAt: "asc" }, { createdAt: "desc" }],
+      select: {
+        id: true,
+        title: true,
+        note: true,
+        deadline: true,
+        completedAt: true,
+        createdAt: true,
+        user: { select: { name: true, email: true } },
       },
     }),
   ]);
@@ -353,6 +368,21 @@ export default async function AdminPage({
 
   const reportedCount = usersNextWeek.filter((u) => u.misdated).length;
 
+  // Assigned-task tracking data + the person picker for the assign form.
+  const assignPeople = rawUsers.map((u) => ({
+    id: u.id,
+    name: u.name ?? u.email ?? "—",
+  }));
+  const assignedTaskRows = assignedTasks.map((t) => ({
+    id: t.id,
+    title: t.title,
+    note: t.note,
+    assigneeName: t.user.name ?? t.user.email ?? "—",
+    deadlineLabel: t.deadline ? formatYmd(toYmd(t.deadline)) : null,
+    done: t.completedAt != null,
+    createdAtLabel: formatDateTimeTz(t.createdAt),
+  }));
+
   const bounds = getWeekBounds(new Date());
   const weekRange = fmtRange(bounds.start, bounds.end);
   const monthRange = monthLabel(now);
@@ -438,6 +468,17 @@ export default async function AdminPage({
               currentUserId={session.user.id}
               variant="week"
             />
+          </section>
+
+          <section className="mt-8">
+            <h2 className="mb-1 px-1 text-sm font-semibold text-ink">
+              Assign &amp; track goals
+            </h2>
+            <p className="mb-3 px-1 text-xs text-muted-fg">
+              Give someone a goal to work on. It shows up in their &ldquo;Assigned
+              to you&rdquo; list, separate from their own weekly goals.
+            </p>
+            <AssignedTasksPanel people={assignPeople} tasks={assignedTaskRows} />
           </section>
 
           <section className="mt-10">

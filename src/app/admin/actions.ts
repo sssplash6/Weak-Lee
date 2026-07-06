@@ -255,3 +255,59 @@ async function recomputeMeetingPenalties(
     await tx.penalty.deleteMany({ where: { id: { in: stale } } });
   }
 }
+
+/**
+ * Create a goal and assign it to a specific person. Lives outside the weekly
+ * goal flow (see the AssignedTask model) — a standalone task the assignee
+ * tracks. Admin-only. Deadline is an optional YYYY-MM-DD (stored at UTC
+ * midnight, treated as date-only like goal deadlines).
+ */
+export async function assignTask(
+  userId: string,
+  title: string,
+  deadline?: string | null,
+  note?: string,
+) {
+  const session = await auth();
+  if (!isAdmin(session?.user?.email)) {
+    throw new Error("Not authorized");
+  }
+  const cleanTitle = title.trim().slice(0, 300);
+  if (!cleanTitle) throw new Error("A title is required.");
+
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new Error("User not found");
+
+  let due: Date | null = null;
+  if (deadline) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(deadline)) {
+      throw new Error("Invalid deadline");
+    }
+    const [y, m, d] = deadline.split("-").map(Number);
+    due = new Date(Date.UTC(y, m - 1, d));
+    if (Number.isNaN(due.getTime())) throw new Error("Invalid deadline");
+  }
+
+  await prisma.assignedTask.create({
+    data: {
+      userId,
+      assignedById: session!.user.id,
+      title: cleanTitle,
+      note: note?.trim().slice(0, 500) || null,
+      deadline: due,
+    },
+  });
+  revalidatePath("/admin");
+  revalidatePath("/dashboard");
+}
+
+/** Remove an assigned task (e.g. created by mistake or no longer needed). Admin-only. */
+export async function deleteAssignedTask(taskId: string) {
+  const session = await auth();
+  if (!isAdmin(session?.user?.email)) {
+    throw new Error("Not authorized");
+  }
+  await prisma.assignedTask.delete({ where: { id: taskId } });
+  revalidatePath("/admin");
+  revalidatePath("/dashboard");
+}

@@ -240,6 +240,27 @@ export async function setGoalCompleted(
 }
 
 /**
+ * Mark one of the signed-in user's admin-assigned tasks done / not done. Only
+ * the assignee can toggle their own task.
+ */
+export async function setAssignedTaskDone(taskId: string, done: boolean) {
+  const userId = await requireUserId();
+  const task = await prisma.assignedTask.findUnique({
+    where: { id: taskId },
+    select: { userId: true },
+  });
+  if (!task || task.userId !== userId) {
+    throw new Error("Task not found");
+  }
+  await prisma.assignedTask.update({
+    where: { id: taskId },
+    data: { completedAt: done ? new Date() : null },
+  });
+  revalidatePath("/dashboard");
+  revalidatePath("/admin");
+}
+
+/**
  * Set a goal's progress percent by hand (or clear the override with null so the
  * subtask-derived value takes back over). Progress, not definition — allowed
  * while the week is locked, like toggling subtasks.

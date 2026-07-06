@@ -35,6 +35,7 @@ import { WeekCalendar } from "./_components/WeekCalendar";
 import { WeekSubmit } from "./_components/WeekSubmit";
 import { PenaltyNotice } from "./_components/PenaltyNotice";
 import { BonusNotice } from "./_components/BonusNotice";
+import { AssignedTasks } from "./_components/AssignedTasks";
 import { PeriodToggle } from "./_components/PeriodToggle";
 import { PENALTY_LABEL } from "@/lib/penalties";
 
@@ -94,7 +95,7 @@ export default async function DashboardPage({
     })
   ).map((u) => u.avatar as string);
 
-  const [period, members, archivedPeriods, penalties, bonuses] =
+  const [period, members, archivedPeriods, penalties, bonuses, assignedTasks] =
     await Promise.all([
       isMonth ? getOrCreateCurrentMonth(userId) : getOrCreateCurrentWeek(userId),
       prisma.user.findMany({
@@ -119,6 +120,17 @@ export default async function DashboardPage({
         where: { userId },
         orderBy: { createdAt: "desc" },
         select: { id: true, amount: true, note: true, createdAt: true },
+      }),
+      prisma.assignedTask.findMany({
+        where: { userId },
+        orderBy: [{ completedAt: "asc" }, { createdAt: "desc" }],
+        select: {
+          id: true,
+          title: true,
+          note: true,
+          deadline: true,
+          completedAt: true,
+        },
       }),
     ]);
 
@@ -156,6 +168,15 @@ export default async function DashboardPage({
     amount: b.amount,
     note: b.note,
     dateLabel: formatDateTimeTz(b.createdAt),
+  }));
+
+  // Admin-assigned tasks — shown as a standalone list, not part of week %.
+  const assignedTaskViews = assignedTasks.map((t) => ({
+    id: t.id,
+    title: t.title,
+    note: t.note,
+    deadlineLabel: t.deadline ? formatYmd(toYmd(t.deadline)) : null,
+    done: t.completedAt != null,
   }));
 
   const overall = weekPercent(period.goals);
@@ -289,6 +310,8 @@ export default async function DashboardPage({
           )}
         </div>
       )}
+
+      <AssignedTasks tasks={assignedTaskViews} />
 
       <WeekSubmit
         scope={view}
