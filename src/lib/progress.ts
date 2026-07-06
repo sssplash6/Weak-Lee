@@ -34,8 +34,24 @@ export function clampPercent(value: number): number {
  * Whether a goal counts as done. Completion is an explicit user action
  * (`completedAt` being set) — finishing every subtask does not auto-complete it.
  */
-export function isGoalComplete(goal: { completedAt: Date | string | null }): boolean {
+export function isGoalComplete(goal: {
+  completedAt?: Date | string | null;
+}): boolean {
   return goal.completedAt != null;
+}
+
+/**
+ * Whether a goal must carry a reflection reason when its period closes. Any goal
+ * that isn't fully done needs one — that includes goals left incomplete AND
+ * goals marked complete at a partial rate (e.g. "done at 70%"). Only a goal that
+ * is both marked complete and at 100% is exempt.
+ */
+export function needsCompletionReason(goal: {
+  completedAt?: Date | string | null;
+  manualPercent?: number | null;
+  subtasks: { isDone: boolean }[];
+}): boolean {
+  return !isGoalComplete(goal) || goalPercent(goal) < 100;
 }
 
 /**

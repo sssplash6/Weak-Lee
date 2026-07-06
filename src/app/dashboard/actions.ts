@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { getOrCreateCurrentWeek, nextWeekBounds } from "@/lib/weeks";
 import { getOrCreateCurrentMonth, nextMonthBounds } from "@/lib/months";
 import { submissionTiming } from "@/lib/lateness";
-import { clampPercent, isGoalComplete } from "@/lib/progress";
+import { clampPercent, needsCompletionReason } from "@/lib/progress";
 import { isPriority, type Priority } from "@/lib/priority";
 import {
   LATE_SUBMISSION_PENALTY,
@@ -506,11 +506,12 @@ export async function startNewWeek(
     reasons.map((r) => [r.goalId, r.reason.trim()]),
   );
 
-  // Goals that weren't marked complete require a reason before the week can close.
-  const incomplete = week.goals.filter((g) => !isGoalComplete(g));
+  // Goals below 100% require a reason before the week can close — including ones
+  // marked complete at a partial rate, not just unfinished ones.
+  const incomplete = week.goals.filter((g) => needsCompletionReason(g));
   for (const goal of incomplete) {
     if (!reasonByGoal.get(goal.id)) {
-      throw new Error("A reason is required for every unfinished goal.");
+      throw new Error("A reason is required for every goal below 100%.");
     }
   }
 
@@ -626,11 +627,12 @@ export async function startNewMonth(
 
   const reasonByGoal = new Map(reasons.map((r) => [r.goalId, r.reason.trim()]));
 
-  // Goals that weren't marked complete require a reason before the month closes.
-  const incomplete = month.goals.filter((g) => !isGoalComplete(g));
+  // Goals below 100% require a reason before the month closes — including ones
+  // marked complete at a partial rate, not just unfinished ones.
+  const incomplete = month.goals.filter((g) => needsCompletionReason(g));
   for (const goal of incomplete) {
     if (!reasonByGoal.get(goal.id)) {
-      throw new Error("A reason is required for every unfinished goal.");
+      throw new Error("A reason is required for every goal below 100%.");
     }
   }
 

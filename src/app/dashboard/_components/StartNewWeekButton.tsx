@@ -215,8 +215,8 @@ export function StartNewWeekButton({
             Reflect before you close the week
           </h2>
           <p className="mt-1 text-sm text-muted-fg">
-            These goals weren&rsquo;t marked complete. Note why before starting a
-            new week — every goal needs a reason.
+            These goals came in below 100%. Note what happened before starting a
+            new week — each one needs a reason.
           </p>
 
           <div className="mt-4 flex flex-col gap-4">

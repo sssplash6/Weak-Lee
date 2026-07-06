@@ -15,7 +15,12 @@ import {
   monthLabel,
   nextMonthBounds,
 } from "@/lib/months";
-import { goalPercent, isGoalComplete, weekPercent } from "@/lib/progress";
+import {
+  goalPercent,
+  isGoalComplete,
+  needsCompletionReason,
+  weekPercent,
+} from "@/lib/progress";
 import { formatDateTimeTz, formatYmd, toStamp, toYmd } from "@/lib/dates";
 import type { Priority } from "@/lib/priority";
 import { GoalCard } from "./_components/GoalCard";
@@ -142,8 +147,10 @@ export default async function DashboardPage({
     ? formatDateTimeTz(period.submittedAt)
     : null;
 
+  // Every goal below 100% at close needs a reflection reason — including ones
+  // marked complete at a partial rate, not just unfinished ones.
   const incompleteGoals = period.goals
-    .filter((g) => !isGoalComplete(g))
+    .filter((g) => needsCompletionReason(g))
     .map((g) => ({ id: g.id, title: g.title, percent: goalPercent(g) }));
 
   const now = new Date();

@@ -143,8 +143,8 @@ export function StartNewMonthButton({
               Reflect before you close the month
             </h2>
             <p className="mt-1 text-sm text-muted-fg">
-              These goals weren&rsquo;t marked complete. Note why before
-              starting a new month — every goal needs a reason.
+              These goals came in below 100%. Note what happened before starting
+              a new month — each one needs a reason.
             </p>
 
             <div className="mt-4 flex flex-col gap-4">
