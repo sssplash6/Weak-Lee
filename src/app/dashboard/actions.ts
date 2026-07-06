@@ -491,16 +491,17 @@ export async function startNewWeek(
   const userId = await requireUserId();
   const week = await getOrCreateCurrentWeek(userId);
 
-  // The new week must be opened with at least one goal — with the same required
-  // priority and deadline as any other goal.
+  // A first goal is optional — a week can be opened empty. If one *was* given,
+  // it needs a priority and deadline like any other goal.
   const firstGoalTitle = (firstGoal?.title ?? "").trim();
-  if (!firstGoalTitle) {
-    throw new Error("Add at least one goal for the new week.");
+  const hasFirstGoal = firstGoalTitle.length > 0;
+  let firstGoalDeadline: Date | null = null;
+  if (hasFirstGoal) {
+    if (!firstGoal || !isPriority(firstGoal.priority)) {
+      throw new Error("A priority is required for the first goal.");
+    }
+    firstGoalDeadline = parseRequiredDeadline(firstGoal.deadline);
   }
-  if (!firstGoal || !isPriority(firstGoal.priority)) {
-    throw new Error("A priority is required for the first goal.");
-  }
-  const firstGoalDeadline = parseRequiredDeadline(firstGoal.deadline);
 
   const reasonByGoal = new Map(
     reasons.map((r) => [r.goalId, r.reason.trim()]),
@@ -556,29 +557,30 @@ export async function startNewWeek(
       data: { isCurrent: false },
     });
     const newWeek = await tx.week.create({
-      // Reporting *is* submitting: the person just committed a real first goal
-      // through the reflection flow, so the new week opens already submitted
-      // (locked + timestamped). "Edit goals" reopens it to add or change goals.
+      // Reporting *is* submitting when a first goal was set: the week opens
+      // already submitted (locked + timestamped), reopenable via "Edit goals".
+      // An empty week opens as a draft to fill in and submit later.
       data: {
         userId,
         startDate: start,
         endDate: end,
         isCurrent: true,
         submittedLate,
-        goalsLocked: true,
-        submittedAt: new Date(),
+        ...(hasFirstGoal ? { goalsLocked: true, submittedAt: new Date() } : {}),
       },
     });
-    // Seed the new week with its required first goal (priority + deadline set).
-    await tx.goal.create({
-      data: {
-        weekId: newWeek.id,
-        title: firstGoalTitle,
-        position: 1,
-        priority: firstGoal.priority,
-        deadline: firstGoalDeadline,
-      },
-    });
+    // Seed the new week with its first goal, if one was given.
+    if (hasFirstGoal) {
+      await tx.goal.create({
+        data: {
+          weekId: newWeek.id,
+          title: firstGoalTitle,
+          position: 1,
+          priority: firstGoal!.priority,
+          deadline: firstGoalDeadline,
+        },
+      });
+    }
     // A late submission is fined automatically and recorded in the penalty
     // ledger alongside meeting fines. Submitting after the Monday 11:00 meeting
     // (when they were flagged not submitted) costs more than merely missing the

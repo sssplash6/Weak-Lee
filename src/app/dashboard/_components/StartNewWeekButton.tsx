@@ -13,6 +13,12 @@ const MONTHS = [
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
 
+/** "2026-07-13" → "Jul 13". */
+function formatDayLabel(ymd: string): string {
+  const [, m, d] = ymd.split("-").map(Number);
+  return `${MONTHS[m - 1]} ${d}`;
+}
+
 /** "2026-07-06","2026-07-13" → "Jul 6–13" (or "Jul 6 – Aug 2" across months). */
 function formatRangeLabel(startYmd: string, endYmd: string): string {
   const [sy, sm, sd] = startYmd.split("-").map(Number);
@@ -51,19 +57,20 @@ export function StartNewWeekButton({
     (g) => (reasons[g.id] ?? "").trim().length > 0,
   );
   const validRange = !!start && !!end && start <= end;
-  const needsTitle = firstGoal.trim().length === 0;
-  const needsPriority = priority == null;
-  const needsDeadline = deadline == null;
-  const hasFirstGoal = !needsTitle && !needsPriority && !needsDeadline;
+  // The first goal is optional. If a title was typed, it needs a priority and
+  // deadline like any goal; if left blank, the week just opens empty.
+  const hasTitle = firstGoal.trim().length > 0;
+  const needsPriority = hasTitle && priority == null;
+  const needsDeadline = hasTitle && deadline == null;
+  const firstGoalReady = !hasTitle || (priority != null && deadline != null);
 
   // Everything that's stopping the week from starting, in plain language.
   const missing: string[] = [];
-  if (needsTitle) missing.push("a goal title");
-  if (needsPriority) missing.push("a priority");
-  if (needsDeadline) missing.push("a deadline");
+  if (needsPriority) missing.push("a priority for your goal");
+  if (needsDeadline) missing.push("a deadline for your goal");
   if (hasUnfinished && !allFilled)
-    missing.push("a reason for every unfinished goal");
-  if (!validRange) missing.push("a valid week date range");
+    missing.push("a reason for every goal below 100%");
+  if (!validRange) missing.push("a valid start date");
 
   function close() {
     setOpen(false);
@@ -92,22 +99,23 @@ export function StartNewWeekButton({
   }, [open, isPending]);
 
   function submit() {
-    if ((hasUnfinished && !allFilled) || !validRange || !hasFirstGoal) {
+    if ((hasUnfinished && !allFilled) || !validRange || !firstGoalReady) {
       // Don't silently no-op — reveal exactly which fields still need filling.
       setAttempted(true);
       return;
     }
-    if (priority == null || deadline == null) return;
     const payload = incompleteGoals.map((g) => ({
       goalId: g.id,
       reason: (reasons[g.id] ?? "").trim(),
     }));
+    // Only send a first goal when one was actually entered (title + priority +
+    // deadline); otherwise the week opens empty.
+    const goal =
+      hasTitle && priority != null && deadline != null
+        ? { title: firstGoal.trim(), priority, deadline }
+        : undefined;
     startTransition(async () => {
-      await startNewWeek(
-        payload,
-        { start, end },
-        { title: firstGoal.trim(), priority, deadline },
-      );
+      await startNewWeek(payload, { start, end }, goal);
       close();
     });
   }
@@ -135,11 +143,11 @@ export function StartNewWeekButton({
         className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-line bg-surface p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Editable date range for the new week */}
+        {/* Flexible start, preset end for the new week */}
         <div className="mb-5">
           <h2 className="text-base font-bold text-ink">Start a new week</h2>
           <p className="mt-1 text-sm text-muted-fg">
-            Set the dates for the upcoming week.
+            Pick when the week starts — it ends on the preset date.
           </p>
           <div className="mt-3 flex items-end gap-3">
             <label className="flex-1">
@@ -155,28 +163,25 @@ export function StartNewWeekButton({
               />
             </label>
             <span className="pb-2.5 text-muted-fg">→</span>
-            <label className="flex-1">
+            <div className="flex-1">
               <span className="text-xs font-semibold uppercase tracking-wide text-muted-fg">
-                End
+                End (preset)
               </span>
-              <input
-                type="date"
-                value={end}
-                min={start || undefined}
-                onChange={(e) => setEnd(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-line px-3 py-2 text-sm text-ink focus:border-brand focus:outline-none"
-              />
-            </label>
+              <div className="mt-1 w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm text-muted-fg">
+                {formatDayLabel(end)}
+              </div>
+            </div>
           </div>
           {!validRange && (
             <p className="mt-2 text-xs text-red-600">
-              The end date must be on or after the start date.
+              The start date must be on or before the preset end date.
             </p>
           )}
 
           <div className="mt-4">
             <span className="text-xs font-semibold uppercase tracking-wide text-muted-fg">
-              First goal for the new week
+              First goal{" "}
+              <span className="font-normal text-muted-fg/80">(optional)</span>
             </span>
             <div className="mt-1 flex items-center gap-2 rounded-lg border border-line px-3 py-2 focus-within:border-brand">
               <input
@@ -200,10 +205,10 @@ export function StartNewWeekButton({
               />
             </div>
             <span className="mt-1 block text-xs text-muted-fg">
-              Every new week needs at least one goal — tap the{" "}
-              <span className="font-semibold">flag</span> to set a priority and
-              the <span className="font-semibold">calendar</span> to set a
-              deadline.
+              You can start the week empty and add goals later. If you do add one
+              here, tap the <span className="font-semibold">flag</span> for a
+              priority and the <span className="font-semibold">calendar</span>{" "}
+              for a deadline.
               {priority != null && ` Priority: ${PRIORITY_LABEL[priority]}.`}
             </span>
           </div>
