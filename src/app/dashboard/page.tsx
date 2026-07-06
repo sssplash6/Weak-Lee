@@ -34,6 +34,7 @@ import { WeekArchive } from "./_components/WeekArchive";
 import { WeekCalendar } from "./_components/WeekCalendar";
 import { WeekSubmit } from "./_components/WeekSubmit";
 import { PenaltyNotice } from "./_components/PenaltyNotice";
+import { BonusNotice } from "./_components/BonusNotice";
 import { PeriodToggle } from "./_components/PeriodToggle";
 import { PENALTY_LABEL } from "@/lib/penalties";
 
@@ -93,27 +94,33 @@ export default async function DashboardPage({
     })
   ).map((u) => u.avatar as string);
 
-  const [period, members, archivedPeriods, penalties] = await Promise.all([
-    isMonth ? getOrCreateCurrentMonth(userId) : getOrCreateCurrentWeek(userId),
-    prisma.user.findMany({
-      where: { id: { not: userId } },
-      select: { id: true, name: true, email: true },
-      orderBy: [{ name: "asc" }, { email: "asc" }],
-    }),
-    isMonth ? getArchivedMonths(userId) : getArchivedWeeks(userId),
-    prisma.penalty.findMany({
-      where: { userId },
-      orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        type: true,
-        amount: true,
-        note: true,
-        createdAt: true,
-        meeting: { select: { scheduledAt: true } },
-      },
-    }),
-  ]);
+  const [period, members, archivedPeriods, penalties, bonuses] =
+    await Promise.all([
+      isMonth ? getOrCreateCurrentMonth(userId) : getOrCreateCurrentWeek(userId),
+      prisma.user.findMany({
+        where: { id: { not: userId } },
+        select: { id: true, name: true, email: true },
+        orderBy: [{ name: "asc" }, { email: "asc" }],
+      }),
+      isMonth ? getArchivedMonths(userId) : getArchivedWeeks(userId),
+      prisma.penalty.findMany({
+        where: { userId },
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          type: true,
+          amount: true,
+          note: true,
+          createdAt: true,
+          meeting: { select: { scheduledAt: true } },
+        },
+      }),
+      prisma.bonus.findMany({
+        where: { userId },
+        orderBy: { createdAt: "desc" },
+        select: { id: true, amount: true, note: true, createdAt: true },
+      }),
+    ]);
 
   // The user's own fines: a running total, plus this week's broken out so
   // they're shown front-and-centre (week view only — fines are week-scoped).
@@ -140,6 +147,16 @@ export default async function DashboardPage({
   // fine stays visible to the person, not only this week's.
   const earlierPenalties = penalties.filter((p) => !inThisWeek(p)).map(toRow);
   const weekPenaltyTotal = weekPenalties.reduce((s, p) => s + p.amount, 0);
+
+  // The user's own bonuses — tracked separately from fines (no netting), shown
+  // alongside them so the person sees both. Not period-scoped.
+  const bonusTotal = bonuses.reduce((s, b) => s + b.amount, 0);
+  const bonusRows = bonuses.map((b) => ({
+    id: b.id,
+    amount: b.amount,
+    note: b.note,
+    dateLabel: formatDateTimeTz(b.createdAt),
+  }));
 
   const overall = weekPercent(period.goals);
   const locked = period.goalsLocked;
@@ -251,13 +268,26 @@ export default async function DashboardPage({
 
       <PeriodToggle view={view} />
 
-      {!isMonth && penaltyTotal > 0 && (
-        <PenaltyNotice
-          weekPenalties={weekPenalties}
-          earlierPenalties={earlierPenalties}
-          weekTotal={weekPenaltyTotal}
-          allTimeTotal={penaltyTotal}
-        />
+      {((!isMonth && penaltyTotal > 0) || bonusTotal > 0) && (
+        <div
+          className={`mb-5 grid items-start gap-3 ${
+            !isMonth && penaltyTotal > 0 && bonusTotal > 0
+              ? "sm:grid-cols-2"
+              : ""
+          }`}
+        >
+          {!isMonth && penaltyTotal > 0 && (
+            <PenaltyNotice
+              weekPenalties={weekPenalties}
+              earlierPenalties={earlierPenalties}
+              weekTotal={weekPenaltyTotal}
+              allTimeTotal={penaltyTotal}
+            />
+          )}
+          {bonusTotal > 0 && (
+            <BonusNotice bonuses={bonusRows} total={bonusTotal} />
+          )}
+        </div>
       )}
 
       <WeekSubmit

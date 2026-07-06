@@ -9,7 +9,9 @@ import {
 } from "@/lib/penalties";
 import { TrashIcon } from "../../dashboard/_components/icons";
 import {
+  addBonus,
   addManualPenalty,
+  deleteBonus,
   deletePenalty,
   deleteUser,
   moveUserWeekToCurrent,
@@ -33,6 +35,13 @@ export type AdminPenalty = {
   dateLabel: string;
 };
 
+export type AdminBonus = {
+  id: string;
+  amount: number;
+  note: string | null;
+  dateLabel: string;
+};
+
 export type AdminUser = {
   id: string;
   name: string | null;
@@ -48,6 +57,8 @@ export type AdminUser = {
   completedCount: number;
   penaltyTotal: number;
   penalties: AdminPenalty[];
+  bonusTotal: number;
+  bonuses: AdminBonus[];
   goals: AdminGoal[];
 };
 
@@ -154,7 +165,9 @@ function UserRow({
 }) {
   const [open, setOpen] = useState(false);
   const [addingFine, setAddingFine] = useState(false);
-  const canExpand = u.goalCount > 0 || u.penalties.length > 0;
+  const [addingBonus, setAddingBonus] = useState(false);
+  const canExpand =
+    u.goalCount > 0 || u.penalties.length > 0 || u.bonuses.length > 0;
   const periodNoun = labels.noun;
   const avatar = resolveAvatar(u.avatar, u.email ?? u.id);
 
@@ -191,6 +204,11 @@ function UserRow({
             {u.penaltyTotal > 0 && (
               <span className="shrink-0 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-600">
                 {formatMoney(u.penaltyTotal)}
+              </span>
+            )}
+            {u.bonusTotal > 0 && (
+              <span className="shrink-0 rounded-full bg-green-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-green-600">
+                +{formatMoney(u.bonusTotal)}
               </span>
             )}
             {u.submittedAtLabel ? (
@@ -252,11 +270,25 @@ function UserRow({
       <div className="flex shrink-0 items-center gap-2 pr-4">
         <button
           type="button"
-          onClick={() => setAddingFine((v) => !v)}
+          onClick={() => {
+            setAddingBonus(false);
+            setAddingFine((v) => !v);
+          }}
           className="shrink-0 rounded-lg border border-red-200 px-2.5 py-1 text-xs font-medium text-red-600 transition hover:bg-red-50"
           title="Issue a fine to this person"
         >
           Fine
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setAddingFine(false);
+            setAddingBonus((v) => !v);
+          }}
+          className="shrink-0 rounded-lg border border-green-200 px-2.5 py-1 text-xs font-medium text-green-600 transition hover:bg-green-50"
+          title="Award a bonus to this person"
+        >
+          Bonus
         </button>
         {u.misdated && <FixWeekButton userId={u.id} weekLabel={u.weekLabel} />}
         {isSelf ? (
@@ -274,6 +306,14 @@ function UserRow({
           userId={u.id}
           name={u.name ?? u.email}
           onDone={() => setAddingFine(false)}
+        />
+      )}
+
+      {addingBonus && (
+        <AddBonusForm
+          userId={u.id}
+          name={u.name ?? u.email}
+          onDone={() => setAddingBonus(false)}
         />
       )}
 
@@ -323,6 +363,25 @@ function UserRow({
               <ul>
                 {u.penalties.map((p) => (
                   <PenaltyRow key={p.id} penalty={p} />
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {u.bonuses.length > 0 && (
+            <div
+              className={
+                u.goals.length > 0 || u.penalties.length > 0
+                  ? "mt-2 border-t border-line pt-2"
+                  : ""
+              }
+            >
+              <p className="py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-fg">
+                Bonuses
+              </p>
+              <ul>
+                {u.bonuses.map((b) => (
+                  <BonusRow key={b.id} bonus={b} />
                 ))}
               </ul>
             </div>
@@ -426,6 +485,112 @@ function AddFineForm({
           className="shrink-0 rounded-lg bg-red-500 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-red-600 disabled:opacity-50"
         >
           {isPending ? "Adding…" : "Add fine"}
+        </button>
+        <button
+          type="button"
+          disabled={isPending}
+          onClick={onDone}
+          className="shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium text-muted-fg transition hover:bg-line"
+        >
+          Cancel
+        </button>
+      </div>
+      {error && <p className="mt-1.5 text-xs text-red-600">{error}</p>}
+    </div>
+  );
+}
+
+function BonusRow({ bonus: b }: { bonus: AdminBonus }) {
+  const [isPending, startTransition] = useTransition();
+  return (
+    <li className="flex items-center gap-3 py-1.5 text-sm">
+      <span className="h-2 w-2 shrink-0 rounded-full bg-green-500" />
+      <span className="min-w-0 flex-1 truncate text-ink">
+        Bonus
+        {b.note ? <span className="text-muted-fg"> · {b.note}</span> : ""}
+      </span>
+      <span className="shrink-0 text-[11px] text-muted-fg">{b.dateLabel}</span>
+      <span className="shrink-0 text-xs font-semibold tabular-nums text-green-600">
+        +{formatMoney(b.amount)}
+      </span>
+      <button
+        type="button"
+        disabled={isPending}
+        onClick={() => startTransition(async () => void (await deleteBonus(b.id)))}
+        className="shrink-0 text-muted-fg transition hover:text-red-500 disabled:opacity-50"
+        aria-label="Remove bonus"
+        title="Remove bonus"
+      >
+        <TrashIcon className="h-4 w-4" />
+      </button>
+    </li>
+  );
+}
+
+function AddBonusForm({
+  userId,
+  name,
+  onDone,
+}: {
+  userId: string;
+  name: string | null;
+  onDone: () => void;
+}) {
+  const [amount, setAmount] = useState(String(DEFAULT_MANUAL_PENALTY));
+  const [note, setNote] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  function submit() {
+    const value = Math.round(Number(amount));
+    if (!Number.isFinite(value) || value <= 0) {
+      setError("Enter a valid amount.");
+      return;
+    }
+    setError(null);
+    startTransition(async () => {
+      try {
+        await addBonus(userId, value, note);
+        onDone();
+      } catch {
+        setError("Couldn't add the bonus.");
+      }
+    });
+  }
+
+  return (
+    <div className="border-t border-line bg-green-50/40 px-4 py-3">
+      <p className="mb-2 text-xs font-semibold text-ink">
+        Bonus {name ?? "user"}{" "}
+        <span className="font-normal text-muted-fg">(great work, extra effort…)</span>
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="flex items-center gap-1.5 text-sm">
+          <span className="text-xs text-muted-fg">Amount</span>
+          <input
+            type="number"
+            min={1}
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            className="w-28 rounded-lg border border-line px-2.5 py-1.5 text-sm text-ink focus:border-brand focus:outline-none"
+          />
+          <span className="text-xs text-muted-fg">{PENALTY_CURRENCY}</span>
+        </label>
+        <input
+          type="text"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder="Note (optional) — e.g. shipped the launch early"
+          maxLength={500}
+          className="min-w-0 flex-1 rounded-lg border border-line px-3 py-1.5 text-sm text-ink placeholder:text-muted-fg focus:border-brand focus:outline-none"
+        />
+        <button
+          type="button"
+          disabled={isPending}
+          onClick={submit}
+          className="shrink-0 rounded-lg bg-green-600 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-green-700 disabled:opacity-50"
+        >
+          {isPending ? "Adding…" : "Add bonus"}
         </button>
         <button
           type="button"

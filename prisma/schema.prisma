@@ -45,6 +45,10 @@ model User {
 
   penalties       Penalty[] @relation("PenaltiesReceived")
   penaltiesIssued Penalty[] @relation("PenaltiesIssued")
+  bonuses         Bonus[]   @relation("BonusesReceived")
+  bonusesIssued   Bonus[]   @relation("BonusesIssued")
+  assignedTasks   AssignedTask[] @relation("AssignedReceived")
+  tasksAssigned   AssignedTask[] @relation("AssignedIssued")
   attendances     Attendance[]
 }
 
@@ -123,6 +127,42 @@ model Penalty {
   @@index([userId])
   @@index([weekId])
   @@index([meetingId])
+}
+
+// A bonus awarded to a user — the positive counterpart of a Penalty, tracked
+// separately (no netting against fines). Amount is a whole number in the app's
+// configured currency (see lib/penalties.ts formatMoney).
+model Bonus {
+  id         String   @id @default(cuid())
+  userId     String
+  amount     Int
+  note       String?
+  issuedById String?
+  createdAt  DateTime @default(now())
+
+  user     User  @relation("BonusesReceived", fields: [userId], references: [id], onDelete: Cascade)
+  issuedBy User? @relation("BonusesIssued", fields: [issuedById], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+}
+
+// A goal an admin assigns to a specific person. Lives outside the weekly/monthly
+// goal flow — it's a standalone task the assignee tracks and marks done, and it
+// does NOT count toward their week completion percent.
+model AssignedTask {
+  id           String    @id @default(cuid())
+  userId       String
+  assignedById String?
+  title        String
+  note         String?
+  deadline     DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime  @default(now())
+
+  user       User  @relation("AssignedReceived", fields: [userId], references: [id], onDelete: Cascade)
+  assignedBy User? @relation("AssignedIssued", fields: [assignedById], references: [id], onDelete: SetNull)
+
+  @@index([userId])
 }
 
 // A recurring team meeting (Monday 11:00 company time). One row per time slot.

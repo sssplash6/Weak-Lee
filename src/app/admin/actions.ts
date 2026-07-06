@@ -108,6 +108,47 @@ export async function deletePenalty(penaltyId: string) {
 }
 
 /**
+ * Award a bonus to a user — the positive counterpart of a manual fine, tracked
+ * separately (no netting). Amount is a whole number in the app currency.
+ * Admin-only.
+ */
+export async function addBonus(userId: string, amount: number, note: string) {
+  const session = await auth();
+  if (!isAdmin(session?.user?.email)) {
+    throw new Error("Not authorized");
+  }
+  const value = Math.round(Number(amount));
+  if (!Number.isFinite(value) || value <= 0 || value > MAX_PENALTY) {
+    throw new Error("Enter a valid bonus amount.");
+  }
+
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new Error("User not found");
+
+  await prisma.bonus.create({
+    data: {
+      userId,
+      amount: value,
+      note: note.trim().slice(0, 500) || null,
+      issuedById: session!.user.id,
+    },
+  });
+  revalidatePath("/admin");
+  revalidatePath("/dashboard");
+}
+
+/** Remove a bonus (e.g. awarded by mistake). Admin-only. */
+export async function deleteBonus(bonusId: string) {
+  const session = await auth();
+  if (!isAdmin(session?.user?.email)) {
+    throw new Error("Not authorized");
+  }
+  await prisma.bonus.delete({ where: { id: bonusId } });
+  revalidatePath("/admin");
+  revalidatePath("/dashboard");
+}
+
+/**
  * Mark a person's attendance for this week's Monday 11:00 meeting (creating the
  * meeting row on first mark). Recomputes that person's escalating skip fines so
  * amounts and the consecutive-skip streak always stay correct. Admin-only.

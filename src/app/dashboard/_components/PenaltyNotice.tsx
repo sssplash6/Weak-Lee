@@ -25,7 +25,7 @@ export function PenaltyNotice({
   allTimeTotal: number;
 }) {
   return (
-    <div className="mb-5 rounded-xl border border-red-200 bg-red-50/60 px-4 py-3">
+    <div className="rounded-xl border border-red-200 bg-red-50/60 px-4 py-3">
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm font-semibold text-red-700">
           {weekTotal > 0 ? "Fines this week" : "Fines"}

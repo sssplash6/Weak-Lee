@@ -75,6 +75,7 @@ export default async function AdminPage({
     feedback,
     lateWeeks,
     recentPenalties,
+    recentBonuses,
     currentMeeting,
     recentMeetings,
   ] = await Promise.all([
@@ -120,6 +121,15 @@ export default async function AdminPage({
             createdAt: true,
           },
         },
+        bonuses: {
+          orderBy: { createdAt: "desc" },
+          select: {
+            id: true,
+            amount: true,
+            note: true,
+            createdAt: true,
+          },
+        },
       },
     }),
     prisma.feedback.findMany({
@@ -145,6 +155,17 @@ export default async function AdminPage({
       select: {
         id: true,
         type: true,
+        amount: true,
+        note: true,
+        createdAt: true,
+        user: { select: { name: true, email: true } },
+      },
+    }),
+    prisma.bonus.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 30,
+      select: {
+        id: true,
         amount: true,
         note: true,
         createdAt: true,
@@ -211,6 +232,13 @@ export default async function AdminPage({
         amount: p.amount,
         note: p.note,
         dateLabel: formatDateTimeTz(p.createdAt),
+      })),
+      bonusTotal: u.bonuses.reduce((s, b) => s + b.amount, 0),
+      bonuses: u.bonuses.map((b) => ({
+        id: b.id,
+        amount: b.amount,
+        note: b.note,
+        dateLabel: formatDateTimeTz(b.createdAt),
       })),
       goals: fields.goals.map((g) => ({
         id: g.id,
@@ -348,12 +376,6 @@ export default async function AdminPage({
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <Link
-            href="/admin/review"
-            className="inline-flex items-center rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-dark"
-          >
-            Review this week
-          </Link>
-          <Link
             href="/dashboard"
             className="group inline-flex shrink-0 items-center gap-2 rounded-lg border border-line bg-surface px-4 py-2 text-sm font-medium text-ink transition hover:border-brand/40 hover:bg-canvas hover:text-brand"
           >
@@ -435,6 +457,43 @@ export default async function AdminPage({
                     dateLabel: formatDateTimeTz(p.createdAt),
                   }))}
                 />
+              </CollapsibleSection>
+
+              <CollapsibleSection title="Bonuses" count={recentBonuses.length}>
+                <p className="mb-3 text-xs text-muted-fg">
+                  Bonuses awarded to people. Add one from a person&rsquo;s row
+                  above.
+                </p>
+                {recentBonuses.length === 0 ? (
+                  <p className="text-sm text-muted-fg">No bonuses yet.</p>
+                ) : (
+                  <ul className="flex flex-col gap-2">
+                    {recentBonuses.map((b) => (
+                      <li
+                        key={b.id}
+                        className="flex items-center gap-3 rounded-xl border border-line bg-surface p-4"
+                      >
+                        <span className="h-2 w-2 shrink-0 rounded-full bg-green-500" />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-ink">
+                            {b.user.name ?? b.user.email ?? "—"}
+                          </p>
+                          {b.note && (
+                            <p className="truncate text-xs text-muted-fg">
+                              {b.note}
+                            </p>
+                          )}
+                        </div>
+                        <span className="shrink-0 text-xs text-muted-fg">
+                          {formatDateTimeTz(b.createdAt)}
+                        </span>
+                        <span className="shrink-0 text-sm font-semibold tabular-nums text-green-600">
+                          +{formatMoney(b.amount)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </CollapsibleSection>
 
               <CollapsibleSection
