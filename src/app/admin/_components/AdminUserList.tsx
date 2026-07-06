@@ -53,16 +53,34 @@ export type AdminUser = {
 
 type SubmitFilter = "all" | "submitted" | "not-submitted";
 
+// Per-tab wording. "next-week" relabels the submitted signal as "Reported"
+// (reporting auto-submits the new week) and points the copy at next week.
+export type AdminListVariant = "week" | "next-week" | "month";
+const VARIANT_LABELS: Record<
+  AdminListVariant,
+  { done: string; notDone: string; noun: string; goalsWord: string }
+> = {
+  week: { done: "Submitted", notDone: "Not submitted", noun: "week", goalsWord: "Goals" },
+  "next-week": {
+    done: "Reported",
+    notDone: "Not reported",
+    noun: "week",
+    goalsWord: "Next week's goals",
+  },
+  month: { done: "Submitted", notDone: "Not submitted", noun: "month", goalsWord: "Goals" },
+};
+
 export function AdminUserList({
   users,
   currentUserId,
-  periodNoun = "week",
+  variant = "week",
 }: {
   users: AdminUser[];
   currentUserId: string;
-  periodNoun?: string;
+  variant?: AdminListVariant;
 }) {
   const [filter, setFilter] = useState<SubmitFilter>("all");
+  const labels = VARIANT_LABELS[variant];
 
   if (users.length === 0) {
     return <p className="px-1 text-sm text-muted-fg">No users yet.</p>;
@@ -83,8 +101,8 @@ export function AdminUserList({
 
   const FILTERS: { key: SubmitFilter; label: string }[] = [
     { key: "all", label: "All" },
-    { key: "submitted", label: "Submitted" },
-    { key: "not-submitted", label: "Not submitted" },
+    { key: "submitted", label: labels.done },
+    { key: "not-submitted", label: labels.notDone },
   ];
 
   return (
@@ -116,7 +134,7 @@ export function AdminUserList({
               key={u.id}
               user={u}
               isSelf={u.id === currentUserId}
-              periodNoun={periodNoun}
+              labels={labels}
             />
           ))}
         </ul>
@@ -128,22 +146,16 @@ export function AdminUserList({
 function UserRow({
   user: u,
   isSelf,
-  periodNoun,
+  labels,
 }: {
   user: AdminUser;
   isSelf: boolean;
-  periodNoun: string;
+  labels: { done: string; notDone: string; noun: string; goalsWord: string };
 }) {
   const [open, setOpen] = useState(false);
   const [addingFine, setAddingFine] = useState(false);
   const canExpand = u.goalCount > 0 || u.penalties.length > 0;
-  // In the week view, whose submission is shown depends on whether the user has
-  // jumped ahead: a misdated (future-dated) current week means the badge/subtext
-  // reflect *next* week's goals, not this week's. Tag the submission badge with
-  // the week it refers to so the two are distinguishable. Months have no split.
-  const weekTag =
-    periodNoun === "week" ? (u.misdated ? "next wk" : "this wk") : null;
-  const forNextWeek = weekTag === "next wk";
+  const periodNoun = labels.noun;
   const avatar = resolveAvatar(u.avatar, u.email ?? u.id);
 
   return (
@@ -183,11 +195,11 @@ function UserRow({
             )}
             {u.submittedAtLabel ? (
               <span className="shrink-0 rounded-full bg-green-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-green-600">
-                Submitted{weekTag ? ` · ${weekTag}` : ""}
+                {labels.done}
               </span>
             ) : (
               <span className="shrink-0 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-600">
-                Not submitted{weekTag ? ` · ${weekTag}` : ""}
+                {labels.notDone}
               </span>
             )}
           </p>
@@ -197,8 +209,8 @@ function UserRow({
           </p>
           <p className="truncate text-xs text-muted-fg">
             {u.submittedAtLabel
-              ? `${forNextWeek ? "Next week's goals" : "Goals"} submitted ${u.submittedAtLabel}`
-              : `${forNextWeek ? "Next week's goals" : "Goals"} not submitted yet`}
+              ? `${labels.goalsWord} submitted ${u.submittedAtLabel}`
+              : `${labels.goalsWord} not submitted yet`}
           </p>
         </div>
 
