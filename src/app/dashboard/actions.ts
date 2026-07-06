@@ -543,7 +543,18 @@ export async function startNewWeek(
       data: { isCurrent: false },
     });
     const newWeek = await tx.week.create({
-      data: { userId, startDate: start, endDate: end, isCurrent: true, submittedLate },
+      // Reporting *is* submitting: the person just committed a real first goal
+      // through the reflection flow, so the new week opens already submitted
+      // (locked + timestamped). "Edit goals" reopens it to add or change goals.
+      data: {
+        userId,
+        startDate: start,
+        endDate: end,
+        isCurrent: true,
+        submittedLate,
+        goalsLocked: true,
+        submittedAt: new Date(),
+      },
     });
     // Seed the new week with its required first goal (priority + deadline set).
     await tx.goal.create({
@@ -627,7 +638,16 @@ export async function startNewMonth(
       data: { isCurrent: false },
     });
     const newMonth = await tx.month.create({
-      data: { userId, startDate: start, endDate: end, isCurrent: true },
+      // Reporting is submitting here too — the new month opens already submitted
+      // (locked + timestamped), reopenable via "Edit goals". Mirrors weeks.
+      data: {
+        userId,
+        startDate: start,
+        endDate: end,
+        isCurrent: true,
+        goalsLocked: true,
+        submittedAt: new Date(),
+      },
     });
     // Seed the new month with its required first goal (priority + deadline set).
     await tx.goal.create({
