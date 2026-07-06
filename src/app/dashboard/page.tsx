@@ -360,7 +360,6 @@ export default async function DashboardPage({
               incompleteGoals={incompleteGoals}
               defaultStart={defaultWeekStart}
               defaultEnd={defaultWeekEnd}
-              todayYmd={todayYmd}
             />
           )}
         </footer>
