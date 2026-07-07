@@ -20,6 +20,7 @@ import { AdminTabs, type AdminTab } from "./_components/AdminTabs";
 import { AssignedTasksPanel } from "./_components/AssignedTasksPanel";
 import { CollapsibleSection } from "./_components/CollapsibleSection";
 import { AdminUserList, type AdminUser } from "./_components/AdminUserList";
+import { RecentBonuses } from "./_components/RecentBonuses";
 import { RecentPenalties } from "./_components/RecentPenalties";
 import { AttendancePanel } from "./_components/AttendancePanel";
 import { AttendanceHistory } from "./_components/AttendanceHistory";
@@ -505,36 +506,15 @@ export default async function AdminPage({
                   Bonuses awarded to people. Add one from a person&rsquo;s row
                   above.
                 </p>
-                {recentBonuses.length === 0 ? (
-                  <p className="text-sm text-muted-fg">No bonuses yet.</p>
-                ) : (
-                  <ul className="flex flex-col gap-2">
-                    {recentBonuses.map((b) => (
-                      <li
-                        key={b.id}
-                        className="flex items-center gap-3 rounded-xl border border-line bg-surface p-4"
-                      >
-                        <span className="h-2 w-2 shrink-0 rounded-full bg-green-500" />
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium text-ink">
-                            {b.user.name ?? b.user.email ?? "—"}
-                          </p>
-                          {b.note && (
-                            <p className="truncate text-xs text-muted-fg">
-                              {b.note}
-                            </p>
-                          )}
-                        </div>
-                        <span className="shrink-0 text-xs text-muted-fg">
-                          {formatDateTimeTz(b.createdAt)}
-                        </span>
-                        <span className="shrink-0 text-sm font-semibold tabular-nums text-green-600">
-                          +{formatMoney(b.amount)}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                <RecentBonuses
+                  bonuses={recentBonuses.map((b) => ({
+                    id: b.id,
+                    amount: b.amount,
+                    note: b.note,
+                    who: b.user.name ?? b.user.email ?? "—",
+                    dateLabel: formatDateTimeTz(b.createdAt),
+                  }))}
+                />
               </CollapsibleSection>
 
               <CollapsibleSection
