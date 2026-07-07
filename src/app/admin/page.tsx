@@ -432,7 +432,7 @@ export default async function AdminPage({
 
       {tab === "this" && (
         <>
-          <StatGrid
+          <StatStrip
             stats={[
               { label: "Users", value: rawUsers.length },
               { label: "Active this week", value: statsOf(usersThisWeek).activeCount },
@@ -590,7 +590,7 @@ export default async function AdminPage({
 
       {tab === "next" && (
         <>
-          <StatGrid
+          <StatStrip
             stats={[
               { label: "Reported", value: `${reportedCount}/${rawUsers.length}` },
               { label: "Goals planned", value: statsOf(usersNextWeek).totalGoals },
@@ -616,7 +616,7 @@ export default async function AdminPage({
 
       {tab === "month" && (
         <>
-          <StatGrid
+          <StatStrip
             stats={[
               { label: "Users", value: rawUsers.length },
               { label: "Active this month", value: statsOf(usersMonth).activeCount },
@@ -641,24 +641,20 @@ export default async function AdminPage({
   );
 }
 
-// A responsive row of stat tiles; the grid widens with the number of tiles.
-function StatGrid({
+// The period's numbers as one quiet strip between hairlines — no tile boxes.
+function StatStrip({
   stats,
 }: {
   stats: { label: string; value: string | number }[];
 }) {
-  const cols =
-    stats.length <= 3
-      ? "grid-cols-2 sm:grid-cols-3"
-      : stats.length === 5
-        ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-5"
-        : "grid-cols-2 sm:grid-cols-3 lg:grid-cols-6";
   return (
-    <section className={`grid gap-3 ${cols}`}>
+    <section className="flex flex-wrap gap-x-10 gap-y-4 border-y border-line px-1 py-4">
       {stats.map((s) => (
-        <div key={s.label} className="rounded-xl border border-line bg-surface p-4">
-          <div className="text-2xl font-bold tabular-nums text-ink">{s.value}</div>
-          <div className="mt-1 text-xs font-medium text-muted-fg">{s.label}</div>
+        <div key={s.label}>
+          <div className="text-xl font-semibold tabular-nums text-ink">
+            {s.value}
+          </div>
+          <div className="mt-0.5 text-xs text-muted-fg">{s.label}</div>
         </div>
       ))}
     </section>
