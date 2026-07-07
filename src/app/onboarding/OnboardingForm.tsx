@@ -54,7 +54,7 @@ export function OnboardingForm({ defaults }: { defaults: Defaults }) {
       />
 
       {state.error && (
-        <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
+        <p className="rise-in rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
           {state.error}
         </p>
       )}

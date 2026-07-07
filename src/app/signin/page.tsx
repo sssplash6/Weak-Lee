@@ -38,7 +38,7 @@ export default async function SignInPage({
           >
             <button
               type="submit"
-              className="flex w-full items-center justify-center gap-3 rounded-lg border border-line bg-surface px-4 py-3 text-sm font-medium text-ink transition-colors hover:bg-canvas"
+              className="flex w-full items-center justify-center gap-3 rounded-lg border border-line bg-surface px-4 py-3 text-sm font-medium text-ink transition hover:border-brand/40 hover:bg-canvas"
             >
               <GoogleIcon />
               Continue with Google

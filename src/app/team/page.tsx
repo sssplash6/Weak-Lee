@@ -49,7 +49,10 @@ export default async function TeamPage() {
       </header>
 
       {members.length === 0 ? (
-        <p className="text-sm text-muted-fg">No members yet.</p>
+        <p className="text-sm text-muted-fg">
+          No members yet. People show up here once they finish onboarding and
+          fill in their profile.
+        </p>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {members.map((m) => {
