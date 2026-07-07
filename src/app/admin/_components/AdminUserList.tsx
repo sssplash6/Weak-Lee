@@ -177,7 +177,7 @@ function UserRow({
       <button
         type="button"
         onClick={() => canExpand && setOpen((v) => !v)}
-        className={`flex min-w-0 flex-1 items-center gap-3 p-4 text-left ${
+        className={`group flex min-w-0 flex-1 items-center gap-3 p-4 text-left ${
           canExpand ? "cursor-pointer" : "cursor-default"
         }`}
       >
@@ -257,7 +257,7 @@ function UserRow({
 
         {canExpand && (
           <span
-            className={`shrink-0 text-muted-fg transition-transform ${
+            className={`shrink-0 text-muted-fg transition group-hover:text-ink ${
               open ? "rotate-90" : ""
             }`}
             aria-hidden="true"
@@ -318,7 +318,7 @@ function UserRow({
       )}
 
       {open && canExpand && (
-        <div className="border-t border-line px-4 py-2">
+        <div className="rise-in border-t border-line px-4 py-2">
           {u.goals.length > 0 && (
             <ul>
               {u.goals.map((g) => (
@@ -451,7 +451,7 @@ function AddFineForm({
   }
 
   return (
-    <div className="border-t border-line bg-canvas/50 px-4 py-3">
+    <div className="rise-in border-t border-line bg-canvas/50 px-4 py-3">
       <p className="mb-2 text-xs font-semibold text-ink">
         Fine {name ?? "user"}{" "}
         <span className="font-normal text-muted-fg">
@@ -559,7 +559,7 @@ function AddBonusForm({
   }
 
   return (
-    <div className="border-t border-line bg-green-50/40 px-4 py-3">
+    <div className="rise-in border-t border-line bg-green-50/40 px-4 py-3">
       <p className="mb-2 text-xs font-semibold text-ink">
         Bonus {name ?? "user"}{" "}
         <span className="font-normal text-muted-fg">(great work, extra effort…)</span>

@@ -94,7 +94,7 @@ function AssignForm({
   }
 
   return (
-    <div className="border-t border-line bg-canvas/50 px-4 py-3">
+    <div className="rise-in border-t border-line bg-canvas/50 px-4 py-3">
       <div className="flex flex-wrap items-center gap-2">
         <select
           value={userId}

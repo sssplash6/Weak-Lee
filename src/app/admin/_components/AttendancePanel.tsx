@@ -41,7 +41,9 @@ export function AttendancePanel({
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="flex w-full items-center justify-between gap-3 p-3 text-left"
+        className={`group flex w-full items-center justify-between gap-3 p-3 text-left transition hover:bg-canvas/60 ${
+          open ? "rounded-t-xl" : "rounded-xl"
+        }`}
       >
         <span className="text-sm font-medium text-ink">
           {marked}/{roster.length} marked
@@ -52,14 +54,14 @@ export function AttendancePanel({
           )}
         </span>
         <span
-          className={`shrink-0 text-muted-fg transition-transform ${open ? "rotate-180" : ""}`}
+          className={`shrink-0 text-muted-fg transition group-hover:text-ink ${open ? "rotate-180" : ""}`}
           aria-hidden="true"
         >
           ▾
         </span>
       </button>
       {open && (
-        <ul className="flex flex-col gap-2 border-t border-line p-2">
+        <ul className="rise-in flex flex-col gap-2 border-t border-line p-2">
           {roster.map((r) => (
             <RosterRow key={r.id} entry={r} meetingLabel={meetingLabel} />
           ))}

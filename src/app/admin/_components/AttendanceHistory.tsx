@@ -50,7 +50,9 @@ export function AttendanceHistory({
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="flex w-full items-center justify-between gap-3 p-3 text-left"
+        className={`group flex w-full items-center justify-between gap-3 p-3 text-left transition hover:bg-canvas/60 ${
+          open ? "rounded-t-xl" : "rounded-xl"
+        }`}
       >
         <span className="text-sm font-medium text-ink">
           Attendance history
@@ -59,7 +61,7 @@ export function AttendanceHistory({
           </span>
         </span>
         <span
-          className={`shrink-0 text-muted-fg transition-transform ${open ? "rotate-180" : ""}`}
+          className={`shrink-0 text-muted-fg transition group-hover:text-ink ${open ? "rotate-180" : ""}`}
           aria-hidden="true"
         >
           ▾
@@ -67,7 +69,7 @@ export function AttendanceHistory({
       </button>
 
       {open && (
-        <div className="border-t border-line p-3">
+        <div className="rise-in border-t border-line p-3">
           <div className="overflow-x-auto">
             <table className="border-separate border-spacing-x-1 border-spacing-y-1 text-sm">
               <thead>

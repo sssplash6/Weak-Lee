@@ -25,10 +25,12 @@ export function CollapsibleSection({
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="flex w-full items-center gap-2 px-4 py-3 text-left"
+        className={`group flex w-full items-center gap-2 px-4 py-3 text-left transition hover:bg-canvas/60 ${
+          open ? "rounded-t-xl" : "rounded-xl"
+        }`}
       >
         <span
-          className={`shrink-0 text-muted-fg transition-transform ${
+          className={`shrink-0 text-muted-fg transition group-hover:text-ink ${
             open ? "rotate-90" : ""
           }`}
           aria-hidden="true"
@@ -40,7 +42,7 @@ export function CollapsibleSection({
           {count}
         </span>
       </button>
-      {open && <div className="border-t border-line p-4">{children}</div>}
+      {open && <div className="rise-in border-t border-line p-4">{children}</div>}
     </div>
   );
 }
