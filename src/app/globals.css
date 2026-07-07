@@ -50,6 +50,14 @@ body {
   button:not(:disabled):active {
     transform: scale(0.98);
   }
+
+  /* Text fields ease into their focus border; text links ease their color. */
+  :is(input, select, textarea) {
+    transition: border-color 150ms var(--ease-out-strong);
+  }
+  a {
+    transition: color 150ms var(--ease-out-strong);
+  }
 }
 
 /* Enter transitions (exit is unmount — instant, which is the fast half). */
