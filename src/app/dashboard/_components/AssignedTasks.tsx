@@ -68,7 +68,7 @@ function AssignedRow({ task }: { task: AssignedTaskView }) {
       </button>
       <span className="min-w-0 flex-1">
         <span
-          className={`break-words ${
+          className={`break-words transition-colors ${
             done ? "text-amber-700/60 line-through" : "text-ink"
           }`}
         >

@@ -35,7 +35,7 @@ export function WeekProgress({
           strokeLinecap="round"
           strokeDasharray={circumference}
           strokeDashoffset={offset}
-          className="text-accent transition-[stroke-dashoffset] duration-500"
+          className="text-accent transition-[stroke-dashoffset] duration-500 ease-(--ease-in-out-strong)"
         />
       </svg>
       <span className="absolute inset-0 flex items-center justify-center text-sm font-semibold text-accent">

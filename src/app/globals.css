@@ -2,9 +2,9 @@
 
 /* Brand palette — minimal: blue for chrome/actions, orange for progress, grey neutrals. */
 @theme {
-  --color-canvas: #f5f5f6; /* page background */
+  --color-canvas: #f4f5f6; /* page background */
   --color-surface: #ffffff; /* cards */
-  --color-line: #e6e6e7; /* borders / tracks */
+  --color-line: #e5e6e8; /* borders / tracks */
 
   --color-brand: #124b84; /* deep blue */
   --color-brand-dark: #0e3c6a; /* hover */
@@ -19,10 +19,88 @@
 
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  /* Motion: strong ease-out on everything interactive (default curves feel
+     flat). In-out reserved for on-screen movement like progress bars. */
+  --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out-strong: cubic-bezier(0.77, 0, 0.175, 1);
+  --default-transition-duration: 150ms;
+  --default-transition-timing-function: var(--ease-out-strong);
 }
 
 body {
   background: var(--color-canvas);
   color: var(--color-ink);
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
+
+@layer base {
+  /* Keyboard focus: a visible brand ring on click targets. Text fields keep
+     their border-color convention instead (focus:border-brand). */
+  :is(button, a, select, [role="menuitem"], input[type="checkbox"]):focus-visible {
+    outline: 2px solid var(--color-brand);
+    outline-offset: 2px;
+  }
+
+  /* Press feedback: every enabled button acknowledges the click. Buttons with
+     a transition utility keep it (Tailwind's `transition` covers transform). */
+  button:not(:disabled) {
+    transition: transform 160ms var(--ease-out-strong);
+  }
+  button:not(:disabled):active {
+    transform: scale(0.98);
+  }
+}
+
+/* Enter transitions (exit is unmount — instant, which is the fast half). */
+
+/* Popovers and menus: scale in from the trigger corner. */
+@utility pop-in {
+  transform-origin: var(--pop-origin, top right);
+  transition:
+    opacity 140ms var(--ease-out-strong),
+    transform 140ms var(--ease-out-strong);
+  @starting-style {
+    opacity: 0;
+    transform: scale(0.96) translateY(-2px);
+  }
+}
+
+/* Modal panel (keep transform-origin centered) + its backdrop. */
+@utility modal-in {
+  transition:
+    opacity 200ms var(--ease-out-strong),
+    transform 200ms var(--ease-out-strong);
+  @starting-style {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+@utility overlay-in {
+  transition: opacity 200ms var(--ease-out-strong);
+  @starting-style {
+    opacity: 0;
+  }
+}
+
+/* Inline content that just got revealed (expanded rows, inline forms). */
+@utility rise-in {
+  transition:
+    opacity 180ms var(--ease-out-strong),
+    transform 180ms var(--ease-out-strong);
+  @starting-style {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+/* Reduced motion: keep state changes instant instead of animated. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

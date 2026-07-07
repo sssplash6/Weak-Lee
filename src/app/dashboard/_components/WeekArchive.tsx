@@ -96,7 +96,7 @@ function WeekRow({
       </button>
 
       {open && (
-        <div className="border-t border-line px-3 py-3">
+        <div className="rise-in border-t border-line px-3 py-3">
           {week.goals.length === 0 ? (
             <p className="text-sm text-muted-fg">No goals this {periodNoun}.</p>
           ) : (
@@ -152,7 +152,7 @@ function GoalSummary({ goal }: { goal: ArchivedGoal }) {
       </div>
 
       {open && hasSubtasks && (
-        <ul className="mt-2 flex flex-col gap-0.5">
+        <ul className="rise-in mt-2 flex flex-col gap-0.5">
           {goal.subtasks.map((s) => (
             <li key={s.id} className="flex items-start gap-1.5 text-xs">
               <span

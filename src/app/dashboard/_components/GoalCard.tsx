@@ -304,13 +304,13 @@ export function GoalCard({
       {/* progress bar */}
       <div className="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-line">
         <div
-          className="h-full rounded-full bg-accent transition-[width] duration-500"
+          className="h-full rounded-full bg-accent transition-[width] duration-500 ease-(--ease-in-out-strong)"
           style={{ width: `${percent}%` }}
         />
       </div>
 
       {tasksOpen && (
-        <>
+        <div className="rise-in">
           {/* subtasks */}
           <ul className="mt-4 flex flex-col gap-1">
             {subtasks.map((s) => (
@@ -341,18 +341,18 @@ export function GoalCard({
               }
             />
           )}
-        </>
+        </div>
       )}
 
       {confirmComplete && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/30 p-4 backdrop-blur-sm"
+          className="overlay-in fixed inset-0 z-50 flex items-center justify-center bg-ink/30 p-4 backdrop-blur-sm"
           onClick={() => setConfirmComplete(false)}
           role="dialog"
           aria-modal="true"
         >
           <div
-            className="w-full max-w-sm rounded-2xl border border-line bg-surface p-6 text-center shadow-xl"
+            className="modal-in w-full max-w-sm rounded-2xl border border-line bg-surface p-6 text-center shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <h2 className="text-base font-bold text-ink">
@@ -640,7 +640,7 @@ function SharePicker({
       </button>
 
       {open && (
-        <div className="absolute right-0 z-10 mt-1 w-52 rounded-xl border border-line bg-surface p-1 shadow-lg">
+        <div className="pop-in absolute right-0 z-10 mt-1 w-52 rounded-xl border border-line bg-surface p-1 shadow-lg">
           <p className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-fg">
             Delegate to
           </p>
@@ -760,7 +760,7 @@ function EditableText({
         }
       }}
       aria-label={ariaLabel}
-      className={`resize-none overflow-hidden break-words rounded border border-transparent bg-transparent px-1 py-0.5 focus:outline-none ${
+      className={`resize-none overflow-hidden break-words rounded border border-transparent bg-transparent px-1 py-0.5 transition-colors focus:outline-none ${
         readOnly
           ? "cursor-default focus:border-transparent"
           : "hover:border-line focus:border-brand focus:bg-surface"

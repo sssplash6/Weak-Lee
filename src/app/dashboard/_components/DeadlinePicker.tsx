@@ -96,7 +96,7 @@ export function DeadlinePicker({
       </button>
 
       {open && (
-        <div className="absolute right-0 z-20 mt-1 w-64 rounded-xl border border-line bg-surface p-3 shadow-lg">
+        <div className="pop-in absolute right-0 z-20 mt-1 w-64 rounded-xl border border-line bg-surface p-3 shadow-lg">
           {/* Typed date + time */}
           <label className="block text-[11px] font-semibold uppercase tracking-wide text-muted-fg">
             Deadline

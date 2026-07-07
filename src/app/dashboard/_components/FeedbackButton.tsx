@@ -65,13 +65,13 @@ export function FeedbackButton() {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/30 p-4 backdrop-blur-sm"
+      className="overlay-in fixed inset-0 z-50 flex items-center justify-center bg-ink/30 p-4 backdrop-blur-sm"
       onClick={() => !isPending && close()}
       role="dialog"
       aria-modal="true"
     >
       <div
-        className="w-full max-w-md rounded-2xl border border-line bg-surface p-6 shadow-xl"
+        className="modal-in w-full max-w-md rounded-2xl border border-line bg-surface p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         {sent ? (

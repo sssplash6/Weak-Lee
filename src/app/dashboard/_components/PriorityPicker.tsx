@@ -57,7 +57,7 @@ export function PriorityPicker({
       </button>
 
       {open && (
-        <div className="absolute right-0 z-20 mt-1 w-40 rounded-xl border border-line bg-surface p-1 shadow-lg">
+        <div className="pop-in absolute right-0 z-20 mt-1 w-40 rounded-xl border border-line bg-surface p-1 shadow-lg">
           {PRIORITIES.map((p) => (
             <button
               key={p}

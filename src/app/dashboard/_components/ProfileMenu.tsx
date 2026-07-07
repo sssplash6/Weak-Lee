@@ -74,7 +74,7 @@ export function ProfileMenu({
       {open && (
         <div
           role="menu"
-          className="absolute right-0 z-10 mt-2 w-64 rounded-xl border border-line bg-surface p-1 shadow-lg"
+          className="pop-in absolute right-0 z-10 mt-2 w-64 rounded-xl border border-line bg-surface p-1 shadow-lg"
         >
           <div className="px-3 py-2">
             <p className="truncate text-sm font-medium text-ink">
