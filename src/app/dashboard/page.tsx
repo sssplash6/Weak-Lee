@@ -34,6 +34,7 @@ import { WeekArchive } from "./_components/WeekArchive";
 import { WeekCalendar } from "./_components/WeekCalendar";
 import { WeekSubmit } from "./_components/WeekSubmit";
 import { PenaltyNotice } from "./_components/PenaltyNotice";
+import { RecentUpdates } from "./_components/RecentUpdates";
 import { BonusNotice } from "./_components/BonusNotice";
 import { AssignedTasks } from "./_components/AssignedTasks";
 import { PeriodToggle } from "./_components/PeriodToggle";
@@ -95,8 +96,18 @@ export default async function DashboardPage({
     })
   ).map((u) => u.avatar as string);
 
-  const [period, members, archivedPeriods, penalties, bonuses, assignedTasks] =
-    await Promise.all([
+  // The updates zone shows everything from the last 48 hours.
+  const updatesSince = new Date(Date.now() - 48 * 60 * 60 * 1000);
+
+  const [
+    period,
+    members,
+    archivedPeriods,
+    penalties,
+    bonuses,
+    assignedTasks,
+    recentNotifications,
+  ] = await Promise.all([
       isMonth ? getOrCreateCurrentMonth(userId) : getOrCreateCurrentWeek(userId),
       prisma.user.findMany({
         where: { id: { not: userId } },
@@ -131,6 +142,12 @@ export default async function DashboardPage({
           deadline: true,
           completedAt: true,
         },
+      }),
+      prisma.notification.findMany({
+        where: { userId, createdAt: { gte: updatesSince } },
+        orderBy: { createdAt: "desc" },
+        take: 30,
+        select: { id: true, type: true, message: true, createdAt: true },
       }),
     ]);
 
@@ -168,6 +185,14 @@ export default async function DashboardPage({
     amount: b.amount,
     note: b.note,
     dateLabel: formatDateTimeTz(b.createdAt),
+  }));
+
+  // Notifications from the last 48 hours, for the updates zone.
+  const updates = recentNotifications.map((n) => ({
+    id: n.id,
+    type: n.type,
+    message: n.message,
+    dateLabel: formatDateTimeTz(n.createdAt),
   }));
 
   // Admin-assigned tasks — shown as a standalone list, not part of week %.
@@ -288,6 +313,8 @@ export default async function DashboardPage({
       </header>
 
       <PeriodToggle view={view} />
+
+      <RecentUpdates updates={updates} />
 
       {((!isMonth && penaltyTotal > 0) || bonusTotal > 0) && (
         <div
