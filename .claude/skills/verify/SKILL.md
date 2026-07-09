@@ -28,10 +28,14 @@ curl -s -b jar http://localhost:3210/dashboard   # authenticated SSR HTML
 
 ## Fire a server action over HTTP
 
-Action IDs live in `.next/dev/server/server-reference-manifest.js`
-(`self.__RSC_SERVER_MANIFEST="<escaped json>"`; decode, look in `.node`,
-match the entry mentioning your function name). Then POST to any page the
-action is registered for:
+Find the action id by export name in the client chunks (the server manifest
+maps ids to modules but not names):
+
+```bash
+grep -rho '"[0-9a-f]\{42\}":{"name":"[a-zA-Z]*"' .next/dev/static/chunks/*.js | sort -u | grep -i myActionName
+```
+
+Then POST to any page the action is registered for:
 
 ```bash
 curl -s -b jar -X POST http://localhost:3210/dashboard \
