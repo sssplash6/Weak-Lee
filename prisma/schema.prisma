@@ -177,14 +177,15 @@ enum NotificationType {
 
 // An in-app notification addressed to one user. Written alongside fines,
 // bonuses, task assignments, and colleague reports (see lib/notifications.ts),
-// and surfaced in the dashboard's "Last 48 hours" updates zone. There is no
-// read tracking — the 48-hour window does the expiring.
+// and surfaced in the dashboard's "Last 48 hours" updates zone. `readAt` is
+// set when the user marks their notifications read — it drives the bell badge.
 model Notification {
   id        String           @id @default(cuid())
   userId    String
   type      NotificationType @default(OTHER)
   message   String
   createdAt DateTime         @default(now())
+  readAt    DateTime?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

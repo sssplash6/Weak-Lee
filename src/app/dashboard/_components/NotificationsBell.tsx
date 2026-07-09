@@ -1,26 +1,35 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import {
   NOTIFICATION_DOT,
   type NotificationType,
 } from "@/lib/notificationTypes";
+import { markAllNotificationsRead } from "@/app/notifications/actions";
 
 export type UpdateView = {
   id: string;
   type: NotificationType;
   message: string;
   dateLabel: string;
+  unread: boolean;
 };
 
 /**
- * The header bell: badge shows how many notifications arrived in the last 48
- * hours; clicking opens a dropdown with those updates and an "Expand" action
- * that leads to the full /notifications page.
+ * The header bell: badge shows how many notifications are unread; clicking
+ * opens a dropdown with the last 48 hours of updates, a "Mark all as read"
+ * action, and an "Expand" action that leads to the full /notifications page.
  */
-export function NotificationsBell({ updates }: { updates: UpdateView[] }) {
+export function NotificationsBell({
+  updates,
+  unreadCount,
+}: {
+  updates: UpdateView[];
+  unreadCount: number;
+}) {
   const [open, setOpen] = useState(false);
+  const [marking, startMarking] = useTransition();
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -41,9 +50,7 @@ export function NotificationsBell({ updates }: { updates: UpdateView[] }) {
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={
-          updates.length > 0
-            ? `Updates (${updates.length} in the last 48 hours)`
-            : "Updates"
+          unreadCount > 0 ? `Updates (${unreadCount} unread)` : "Updates"
         }
         className="relative flex h-10 w-10 items-center justify-center rounded-full border border-line bg-surface text-muted-fg transition hover:text-ink hover:ring-2 hover:ring-brand-soft"
       >
@@ -60,12 +67,12 @@ export function NotificationsBell({ updates }: { updates: UpdateView[] }) {
           <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
           <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
         </svg>
-        {updates.length > 0 && (
+        {unreadCount > 0 && (
           <span
             className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white"
             aria-hidden="true"
           >
-            {updates.length > 9 ? "9+" : updates.length}
+            {unreadCount > 9 ? "9+" : unreadCount}
           </span>
         )}
       </button>
@@ -94,21 +101,38 @@ export function NotificationsBell({ updates }: { updates: UpdateView[] }) {
                     className={`h-1.5 w-1.5 shrink-0 translate-y-px rounded-full ${NOTIFICATION_DOT[u.type]}`}
                     aria-hidden="true"
                   />
-                  <span className="min-w-0 flex-1 break-words text-ink">
+                  <span
+                    className={`min-w-0 flex-1 break-words text-ink ${
+                      u.unread ? "font-semibold" : ""
+                    }`}
+                  >
                     {u.message}
-                    <span className="text-muted-fg"> · {u.dateLabel}</span>
+                    <span className="font-normal text-muted-fg">
+                      {` · ${u.dateLabel}`}
+                    </span>
                   </span>
                 </li>
               ))}
             </ul>
           )}
 
-          <div className="border-t border-line p-1">
+          <div className="flex items-stretch gap-1 border-t border-line p-1">
+            {unreadCount > 0 && (
+              <button
+                type="button"
+                role="menuitem"
+                disabled={marking}
+                onClick={() => startMarking(() => markAllNotificationsRead())}
+                className="flex-1 rounded-lg px-3 py-2 text-center text-sm font-semibold text-muted-fg transition hover:bg-canvas hover:text-ink disabled:opacity-50"
+              >
+                {marking ? "Marking…" : "Mark all as read"}
+              </button>
+            )}
             <Link
               href="/notifications"
               role="menuitem"
               onClick={() => setOpen(false)}
-              className="block rounded-lg px-3 py-2 text-center text-sm font-semibold text-brand transition hover:bg-canvas"
+              className="flex-1 rounded-lg px-3 py-2 text-center text-sm font-semibold text-brand transition hover:bg-canvas"
             >
               Expand
             </Link>

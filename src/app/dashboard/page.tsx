@@ -108,6 +108,7 @@ export default async function DashboardPage({
     bonuses,
     assignedTasks,
     recentNotifications,
+    unreadCount,
   ] = await Promise.all([
       isMonth ? getOrCreateCurrentMonth(userId) : getOrCreateCurrentWeek(userId),
       prisma.user.findMany({
@@ -148,8 +149,17 @@ export default async function DashboardPage({
         where: { userId, createdAt: { gte: updatesSince } },
         orderBy: { createdAt: "desc" },
         take: 30,
-        select: { id: true, type: true, message: true, createdAt: true },
+        select: {
+          id: true,
+          type: true,
+          message: true,
+          createdAt: true,
+          readAt: true,
+        },
       }),
+      // Unread notifications of any age — the bell badge counts these, so an
+      // unread fine older than 48 hours doesn't silently drop off the badge.
+      prisma.notification.count({ where: { userId, readAt: null } }),
     ]);
 
   // The user's own fines: a running total, plus this week's broken out so
@@ -194,6 +204,7 @@ export default async function DashboardPage({
     type: n.type,
     message: n.message,
     dateLabel: formatDateTimeTz(n.createdAt),
+    unread: n.readAt == null,
   }));
 
   // Admin-assigned tasks — shown as a standalone list, not part of week %.
@@ -308,7 +319,7 @@ export default async function DashboardPage({
         <div className="flex items-center gap-4">
           <WeekProgress percent={overall} label={isMonth ? "Month" : "Week"} />
           <div className="flex items-center gap-2">
-            <NotificationsBell updates={updates} />
+            <NotificationsBell updates={updates} unreadCount={unreadCount} />
             <ProfileMenu
               name={session!.user.name}
               email={session!.user.email}

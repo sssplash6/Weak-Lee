@@ -4,12 +4,14 @@ import { prisma } from "@/lib/prisma";
 import { formatDateTimeTz } from "@/lib/dates";
 import { NOTIFICATION_DOT } from "@/lib/notificationTypes";
 import { BackLink } from "@/app/_components/BackLink";
+import { MarkAllReadButton } from "./_components/MarkAllReadButton";
 
 type Row = {
   id: string;
   dot: string;
   message: string;
   dateLabel: string;
+  unread: boolean;
 };
 
 /**
@@ -25,8 +27,15 @@ export default async function NotificationsPage() {
     where: { userId: session.user.id },
     orderBy: { createdAt: "desc" },
     take: 200,
-    select: { id: true, type: true, message: true, createdAt: true },
+    select: {
+      id: true,
+      type: true,
+      message: true,
+      createdAt: true,
+      readAt: true,
+    },
   });
+  const hasUnread = notifications.some((n) => n.readAt == null);
 
   const cutoff = Date.now() - 48 * 60 * 60 * 1000;
   const toRow = (n: (typeof notifications)[number]): Row => ({
@@ -34,6 +43,7 @@ export default async function NotificationsPage() {
     dot: NOTIFICATION_DOT[n.type],
     message: n.message,
     dateLabel: formatDateTimeTz(n.createdAt),
+    unread: n.readAt == null,
   });
   const recent = notifications
     .filter((n) => n.createdAt.getTime() >= cutoff)
@@ -55,7 +65,10 @@ export default async function NotificationsPage() {
             and reports.
           </p>
         </div>
-        <BackLink href="/dashboard" label="Dashboard" />
+        <div className="flex shrink-0 items-center gap-2">
+          {hasUnread && <MarkAllReadButton />}
+          <BackLink href="/dashboard" label="Dashboard" />
+        </div>
       </header>
 
       {notifications.length === 0 ? (
@@ -101,7 +114,11 @@ function Section({
                 className={`h-2 w-2 shrink-0 translate-y-px rounded-full ${r.dot}`}
                 aria-hidden="true"
               />
-              <span className="min-w-0 flex-1 break-words text-ink">
+              <span
+                className={`min-w-0 flex-1 break-words text-ink ${
+                  r.unread ? "font-semibold" : ""
+                }`}
+              >
                 {r.message}
               </span>
               <span className="shrink-0 text-xs text-muted-fg">
