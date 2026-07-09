@@ -35,6 +35,7 @@ import { WeekCalendar } from "./_components/WeekCalendar";
 import { WeekSubmit } from "./_components/WeekSubmit";
 import { PenaltyNotice } from "./_components/PenaltyNotice";
 import { RecentUpdates } from "./_components/RecentUpdates";
+import { SubmitReminder } from "./_components/SubmitReminder";
 import { BonusNotice } from "./_components/BonusNotice";
 import { AssignedTasks } from "./_components/AssignedTasks";
 import { PeriodToggle } from "./_components/PeriodToggle";
@@ -281,7 +282,11 @@ export default async function DashboardPage({
   }));
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-1 gap-6 px-4 py-8">
+    <>
+      {/* Entry alert: nags until this period's goals are submitted once. */}
+      {period.submittedAt == null && <SubmitReminder scope={view} />}
+
+      <div className="mx-auto flex w-full max-w-6xl flex-1 gap-6 px-4 py-8">
       <aside className="hidden w-64 shrink-0 lg:block">
         <div className="sticky top-8">
           <WeekArchive weeks={archive} periodNoun={view} />
@@ -399,6 +404,7 @@ export default async function DashboardPage({
       </aside>
 
       <FeedbackButton />
-    </div>
+      </div>
+    </>
   );
 }
