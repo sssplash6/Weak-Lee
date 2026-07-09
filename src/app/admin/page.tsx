@@ -81,6 +81,7 @@ export default async function AdminPage({
     currentMeeting,
     recentMeetings,
     assignedTasks,
+    allPenalties,
   ] = await Promise.all([
     prisma.user.findMany({
       orderBy: [{ name: "asc" }, { email: "asc" }],
@@ -209,9 +210,21 @@ export default async function AdminPage({
         user: { select: { name: true, email: true } },
       },
     }),
+    // Every penalty, uncapped, with the dates that can tie it to a week: the
+    // linked week's range, the meeting it was for, or when it was recorded.
+    // Feeds the "Fines this week" stat, which must not miss entries the capped
+    // recent-penalties list drops.
+    prisma.penalty.findMany({
+      select: {
+        amount: true,
+        createdAt: true,
+        week: { select: { startDate: true, endDate: true } },
+        meeting: { select: { scheduledAt: true } },
+      },
+    }),
   ]);
 
-  const thisWeekStart = getWeekBounds(new Date()).start;
+  const { start: weekStart, end: weekEnd } = getWeekBounds(now);
 
   // Build the shared, period-agnostic AdminUser shell. The caller supplies the
   // period-specific bits (label, goals, submission/lateness) so the same row UI
@@ -349,9 +362,19 @@ export default async function AdminPage({
     };
   });
 
-  // Fines issued this calendar week (by when they were recorded).
-  const finesThisWeek = recentPenalties
-    .filter((p) => p.createdAt.getTime() >= thisWeekStart.getTime())
+  // Fines counted toward this week — attributed to the week they're linked to
+  // (a late-submission fine is created on Sunday, *before* its week's Monday
+  // start, so filtering by createdAt alone undercounts), else to their
+  // meeting's date, else to when they were recorded.
+  const inThisWeek = (d: Date) =>
+    d.getTime() >= weekStart.getTime() && d.getTime() <= weekEnd.getTime();
+  const finesThisWeek = allPenalties
+    .filter((p) =>
+      p.week
+        ? p.week.startDate.getTime() <= weekEnd.getTime() &&
+          p.week.endDate.getTime() >= weekStart.getTime()
+        : inThisWeek(p.meeting?.scheduledAt ?? p.createdAt),
+    )
     .reduce((s, p) => s + p.amount, 0);
 
   // Per-tab aggregate stats. "Active" = has at least one goal in that period.
@@ -384,8 +407,7 @@ export default async function AdminPage({
     createdAtLabel: formatDateTimeTz(t.createdAt),
   }));
 
-  const bounds = getWeekBounds(new Date());
-  const weekRange = fmtRange(bounds.start, bounds.end);
+  const weekRange = fmtRange(weekStart, weekEnd);
   const monthRange = monthLabel(now);
 
   const subtitle =
