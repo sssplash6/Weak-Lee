@@ -41,6 +41,8 @@ model User {
 
   sharesSent     SubtaskShare[] @relation("SharesFrom")
   sharesReceived SubtaskShare[] @relation("SharesTo")
+  goalSharesSent     GoalShare[] @relation("GoalSharesFrom")
+  goalSharesReceived GoalShare[] @relation("GoalSharesTo")
   feedback       Feedback[]
 
   penalties       Penalty[] @relation("PenaltiesReceived")
@@ -303,6 +305,12 @@ model Goal {
   month    Month?    @relation(fields: [monthId], references: [id], onDelete: Cascade)
   subtasks Subtask[]
 
+  // Delegation: a goal may be the original of several shares (shared out)
+  // and/or the copy created by a single incoming share (received). Mirrors
+  // the subtask fields of the same names.
+  sharesOut GoalShare[] @relation("GoalShareOriginal")
+  shareIn   GoalShare?  @relation("GoalShareCopy")
+
   @@index([weekId])
   @@index([monthId])
 }
@@ -342,6 +350,27 @@ model SubtaskShare {
 
   @@unique([originalSubtaskId, toUserId])
   @@index([originalSubtaskId])
+}
+
+// A delegation of a whole goal (with or without subtasks) from one user to
+// another. Same shape as SubtaskShare: the original stays on the sender's list
+// (marked "shared to X"); a linked copy — goal plus fresh unchecked subtasks —
+// is added to the recipient's current period.
+model GoalShare {
+  id             String   @id @default(cuid())
+  originalGoalId String
+  copyGoalId     String   @unique
+  fromUserId     String
+  toUserId       String
+  createdAt      DateTime @default(now())
+
+  originalGoal Goal @relation("GoalShareOriginal", fields: [originalGoalId], references: [id], onDelete: Cascade)
+  copyGoal     Goal @relation("GoalShareCopy", fields: [copyGoalId], references: [id], onDelete: Cascade)
+  fromUser     User @relation("GoalSharesFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUser       User @relation("GoalSharesTo", fields: [toUserId], references: [id], onDelete: Cascade)
+
+  @@unique([originalGoalId, toUserId])
+  @@index([originalGoalId])
 }
 
 // Product feedback addressed to tech@freshman.academy. Stored here rather than

@@ -503,6 +503,78 @@ export async function shareSubtask(subtaskId: string, toUserId: string) {
 }
 
 /**
+ * Delegate a whole goal to another user — with or without subtasks. The
+ * original stays on the sender's list (marked "shared to X"); the recipient
+ * gets a linked copy of the goal (same title, priority, and deadline, plus
+ * fresh unchecked copies of any subtasks) appended to their current period —
+ * a weekly goal lands in the recipient's current week, a monthly one in their
+ * current month. The recipient is notified.
+ */
+export async function shareGoal(goalId: string, toUserId: string) {
+  const fromUserId = await requireUserId();
+  if (toUserId === fromUserId) return;
+
+  // Load the original goal (owned by sender) along with its subtasks.
+  const original = await prisma.goal.findFirst({
+    where: { id: goalId, ...goalOwnedWhere(fromUserId) },
+    include: { subtasks: { orderBy: { position: "asc" } } },
+  });
+  if (!original) throw new Error("Goal not found");
+
+  const recipient = await prisma.user.findUnique({ where: { id: toUserId } });
+  if (!recipient) throw new Error("Recipient not found");
+
+  // Don't share the same goal to the same person twice.
+  const already = await prisma.goalShare.findUnique({
+    where: { originalGoalId_toUserId: { originalGoalId: goalId, toUserId } },
+  });
+  if (already) return;
+
+  const isMonthly = original.monthId != null;
+  const recipientPeriod = isMonthly
+    ? await getOrCreateCurrentMonth(toUserId)
+    : await getOrCreateCurrentWeek(toUserId);
+
+  const sender = await prisma.user.findUnique({
+    where: { id: fromUserId },
+    select: { name: true, email: true },
+  });
+
+  await prisma.$transaction(async (tx) => {
+    // Create the recipient's copy — progress starts fresh (subtasks unchecked,
+    // no completion or manual percent carried over) and record the share.
+    await tx.goal.create({
+      data: {
+        ...(isMonthly
+          ? { monthId: recipientPeriod.id }
+          : { weekId: recipientPeriod.id }),
+        title: original.title,
+        position: recipientPeriod.goals.length + 1,
+        priority: original.priority,
+        deadline: original.deadline,
+        subtasks: {
+          create: original.subtasks.map((s, i) => ({
+            title: s.title,
+            position: i + 1,
+          })),
+        },
+        shareIn: {
+          create: { originalGoalId: goalId, fromUserId, toUserId },
+        },
+      },
+    });
+    await notify(
+      tx,
+      toUserId,
+      "TASK_ASSIGNED",
+      `${sender?.name ?? sender?.email ?? "A teammate"} delegated a goal to you: “${original.title}”.`,
+    );
+  });
+
+  revalidatePath("/dashboard");
+}
+
+/**
  * Archive the current week and start a fresh, empty one. Every goal that wasn't
  * marked complete must have a reflection reason — enforced here, not just in the UI.
  */

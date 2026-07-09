@@ -43,6 +43,12 @@ const monthInclude = {
   goals: {
     orderBy: { position: "asc" },
     include: {
+      sharesOut: {
+        include: { toUser: { select: { name: true, email: true } } },
+      },
+      shareIn: {
+        include: { fromUser: { select: { name: true, email: true } } },
+      },
       subtasks: {
         orderBy: { position: "asc" },
         include: {

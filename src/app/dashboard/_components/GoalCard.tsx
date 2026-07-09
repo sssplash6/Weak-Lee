@@ -20,6 +20,7 @@ import {
   setGoalDeadline,
   setGoalPercent,
   setGoalPriority,
+  shareGoal,
   shareSubtask,
   toggleSubtask,
 } from "../actions";
@@ -54,6 +55,8 @@ type GoalView = {
   deadline: string | null;
   priority: Priority | null;
   manualPercent: number | null;
+  sharedTo: string[];
+  receivedFrom: string | null;
   subtasks: SubtaskView[];
 };
 
@@ -294,12 +297,36 @@ export function GoalCard({
             onToggle={onToggleCompleted}
           />
         </span>
+        <span className="mt-1.5 shrink-0">
+          <SharePicker
+            team={team}
+            alreadyShared={goal.sharedTo}
+            onShare={(toUserId) => shareGoal(goal.id, toUserId)}
+            ariaLabel="Delegate goal"
+            iconClassName="h-5 w-5"
+          />
+        </span>
         {!locked && (
           <span className="mt-1 shrink-0">
             <DeleteGoalButton goalId={goal.id} />
           </span>
         )}
       </div>
+
+      {(goal.receivedFrom || goal.sharedTo.length > 0) && (
+        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-0.5 pl-10">
+          {goal.receivedFrom && (
+            <span className="rounded bg-brand-soft px-1.5 py-0.5 text-[11px] font-medium text-brand">
+              From {goal.receivedFrom}
+            </span>
+          )}
+          {goal.sharedTo.length > 0 && (
+            <span className="text-[11px] text-muted-fg">
+              Shared to {goal.sharedTo.join(", ")}
+            </span>
+          )}
+        </div>
+      )}
 
       {/* progress bar */}
       <div className="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-line">
@@ -580,7 +607,14 @@ function SubtaskRow({
       </div>
 
       {!isTemp && (
-        <SharePicker subtaskId={s.id} team={team} alreadyShared={s.sharedTo} />
+        <span className="mt-0.5">
+          <SharePicker
+            team={team}
+            alreadyShared={s.sharedTo}
+            onShare={(toUserId) => shareSubtask(s.id, toUserId)}
+            ariaLabel="Delegate subtask"
+          />
+        </span>
       )}
 
       {!locked && (
@@ -597,14 +631,22 @@ function SubtaskRow({
   );
 }
 
+/**
+ * The "delegate to a teammate" dropdown, shared by goal and subtask rows —
+ * what it delegates is up to the `onShare` callback.
+ */
 function SharePicker({
-  subtaskId,
   team,
   alreadyShared,
+  onShare,
+  ariaLabel,
+  iconClassName = "h-4 w-4",
 }: {
-  subtaskId: string;
   team: TeamMember[];
   alreadyShared: string[];
+  onShare: (toUserId: string) => Promise<void>;
+  ariaLabel: string;
+  iconClassName?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -622,21 +664,21 @@ function SharePicker({
 
   function share(toUserId: string) {
     startTransition(async () => {
-      await shareSubtask(subtaskId, toUserId);
+      await onShare(toUserId);
       setOpen(false);
     });
   }
 
   return (
-    <div className="relative mt-0.5" ref={ref}>
+    <div className="relative" ref={ref}>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         className="text-brand transition hover:text-brand-dark"
-        aria-label="Delegate subtask"
+        aria-label={ariaLabel}
         title="Delegate to a teammate"
       >
-        <ShareIcon className="h-4 w-4" />
+        <ShareIcon className={iconClassName} />
       </button>
 
       {open && (

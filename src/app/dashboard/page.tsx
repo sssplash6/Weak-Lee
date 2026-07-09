@@ -257,6 +257,8 @@ export default async function DashboardPage({
     deadline: goal.deadline ? toStamp(goal.deadline) : null,
     priority: goal.priority ?? null,
     manualPercent: goal.manualPercent,
+    sharedTo: goal.sharesOut.map((sh) => displayName(sh.toUser)),
+    receivedFrom: goal.shareIn ? displayName(goal.shareIn.fromUser) : null,
     subtasks: goal.subtasks.map((s) => ({
       id: s.id,
       title: s.title,
