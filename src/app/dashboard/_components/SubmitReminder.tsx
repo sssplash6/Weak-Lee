@@ -22,10 +22,12 @@ export function SubmitReminder({ scope }: { scope: "week" | "month" }) {
           <path d="M12 17h.01" />
         </svg>
         <p className="text-sm text-amber-800">
+          {/* One template string: this Next's compiler eats the JSX space
+              between the {scope} expression and the entity-bearing text. */}
           <span className="font-semibold">
-            Your goals for this {scope} aren&rsquo;t submitted yet
-          </span>{" "}
-          — don&rsquo;t forget to hit the Submit button below.
+            {`Your goals for this ${scope} aren’t submitted yet`}
+          </span>
+          {" — don’t forget to hit the Submit button below."}
         </p>
       </div>
     </div>
