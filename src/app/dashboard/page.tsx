@@ -34,7 +34,7 @@ import { WeekArchive } from "./_components/WeekArchive";
 import { WeekCalendar } from "./_components/WeekCalendar";
 import { WeekSubmit } from "./_components/WeekSubmit";
 import { PenaltyNotice } from "./_components/PenaltyNotice";
-import { RecentUpdates } from "./_components/RecentUpdates";
+import { NotificationsBell } from "./_components/NotificationsBell";
 import { SubmitReminder } from "./_components/SubmitReminder";
 import { BonusNotice } from "./_components/BonusNotice";
 import { AssignedTasks } from "./_components/AssignedTasks";
@@ -188,7 +188,7 @@ export default async function DashboardPage({
     dateLabel: formatDateTimeTz(b.createdAt),
   }));
 
-  // Notifications from the last 48 hours, for the updates zone.
+  // Notifications from the last 48 hours, for the header bell.
   const updates = recentNotifications.map((n) => ({
     id: n.id,
     type: n.type,
@@ -307,19 +307,20 @@ export default async function DashboardPage({
         </div>
         <div className="flex items-center gap-4">
           <WeekProgress percent={overall} label={isMonth ? "Month" : "Week"} />
-          <ProfileMenu
-            name={session!.user.name}
-            email={session!.user.email}
-            avatar={avatar}
-            takenAvatars={takenAvatars}
-            isAdmin={isAdmin(session!.user.email)}
-          />
+          <div className="flex items-center gap-2">
+            <NotificationsBell updates={updates} />
+            <ProfileMenu
+              name={session!.user.name}
+              email={session!.user.email}
+              avatar={avatar}
+              takenAvatars={takenAvatars}
+              isAdmin={isAdmin(session!.user.email)}
+            />
+          </div>
         </div>
       </header>
 
       <PeriodToggle view={view} />
-
-      <RecentUpdates updates={updates} />
 
       {((!isMonth && penaltyTotal > 0) || bonusTotal > 0) && (
         <div
