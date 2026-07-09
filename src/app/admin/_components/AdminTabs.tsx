@@ -4,12 +4,12 @@ export type AdminTab = "this" | "next" | "month";
 
 /**
  * Top-level admin tabs. Plain links; the active tab rides in the `tab` search
- * param so it survives reloads and is shareable. "Submissions" = who has opened
- * (submitted) the current week; "Reports" = who has closed/reported their week.
+ * param so it survives reloads and is shareable. "Goals" = the current week's
+ * submitted goals; "Reports" = who has closed/reported their week.
  */
 export function AdminTabs({ tab }: { tab: AdminTab }) {
   const TABS: { key: AdminTab; label: string; href: string }[] = [
-    { key: "this", label: "Submissions", href: "/admin" },
+    { key: "this", label: "Goals", href: "/admin" },
     { key: "next", label: "Reports", href: "/admin?tab=next" },
     { key: "month", label: "This month", href: "/admin?tab=month" },
   ];
