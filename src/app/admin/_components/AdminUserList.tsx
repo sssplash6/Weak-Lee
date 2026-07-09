@@ -25,6 +25,16 @@ export type AdminGoal = {
   deadlineLabel: string | null;
   // Reason given for not finishing, captured when the period was closed.
   incompleteReason: string | null;
+  subtasks: { title: string; isDone: boolean }[];
+};
+
+// An admin-assigned task (separate from the person's own weekly goals).
+export type AdminTask = {
+  id: string;
+  title: string;
+  note: string | null;
+  deadlineLabel: string | null;
+  done: boolean;
 };
 
 export type AdminPenalty = {
@@ -60,6 +70,7 @@ export type AdminUser = {
   bonusTotal: number;
   bonuses: AdminBonus[];
   goals: AdminGoal[];
+  tasks: AdminTask[];
 };
 
 type SubmitFilter = "all" | "submitted" | "not-submitted";
@@ -167,7 +178,10 @@ function UserRow({
   const [addingFine, setAddingFine] = useState(false);
   const [addingBonus, setAddingBonus] = useState(false);
   const canExpand =
-    u.goalCount > 0 || u.penalties.length > 0 || u.bonuses.length > 0;
+    u.goalCount > 0 ||
+    u.tasks.length > 0 ||
+    u.penalties.length > 0 ||
+    u.bonuses.length > 0;
   const periodNoun = labels.noun;
   const avatar = resolveAvatar(u.avatar, u.email ?? u.id);
 
@@ -350,13 +364,88 @@ function UserRow({
                       “{g.incompleteReason}”
                     </p>
                   )}
+                  {g.subtasks.length > 0 && (
+                    <ul className="mt-1 flex flex-col gap-0.5 pl-5">
+                      {g.subtasks.map((s, i) => (
+                        <li
+                          key={i}
+                          className="flex items-center gap-2 text-xs text-muted-fg"
+                        >
+                          <span
+                            className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border text-[9px] ${
+                              s.isDone
+                                ? "border-brand/40 bg-brand/10 text-brand"
+                                : "border-line text-transparent"
+                            }`}
+                            aria-hidden="true"
+                          >
+                            ✓
+                          </span>
+                          <span
+                            className={`min-w-0 break-words ${
+                              s.isDone ? "line-through opacity-70" : ""
+                            }`}
+                          >
+                            {s.title}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </li>
               ))}
             </ul>
           )}
 
-          {u.penalties.length > 0 && (
+          {u.tasks.length > 0 && (
             <div className={u.goals.length > 0 ? "mt-2 border-t border-line pt-2" : ""}>
+              <p className="py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-600">
+                Assigned tasks
+              </p>
+              <ul>
+                {u.tasks.map((t) => (
+                  <li key={t.id} className="flex items-center gap-3 py-1.5 text-sm">
+                    <span
+                      className={`h-2 w-2 shrink-0 rounded-full ${
+                        t.done ? "bg-amber-500" : "bg-amber-200"
+                      }`}
+                    />
+                    <span
+                      className={`min-w-0 flex-1 break-words ${
+                        t.done ? "text-muted-fg line-through" : "text-ink"
+                      }`}
+                    >
+                      {t.title}
+                      {t.note ? (
+                        <span className="text-muted-fg"> · {t.note}</span>
+                      ) : null}
+                    </span>
+                    {t.deadlineLabel && (
+                      <span className="shrink-0 rounded-full bg-canvas px-2 py-0.5 text-[11px] font-medium text-muted-fg">
+                        Due {t.deadlineLabel}
+                      </span>
+                    )}
+                    <span
+                      className={`shrink-0 text-xs font-semibold ${
+                        t.done ? "text-amber-600" : "text-muted-fg"
+                      }`}
+                    >
+                      {t.done ? "Done" : "Open"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {u.penalties.length > 0 && (
+            <div
+              className={
+                u.goals.length > 0 || u.tasks.length > 0
+                  ? "mt-2 border-t border-line pt-2"
+                  : ""
+              }
+            >
               <p className="py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-fg">
                 Fines
               </p>
@@ -371,7 +460,7 @@ function UserRow({
           {u.bonuses.length > 0 && (
             <div
               className={
-                u.goals.length > 0 || u.penalties.length > 0
+                u.goals.length > 0 || u.tasks.length > 0 || u.penalties.length > 0
                   ? "mt-2 border-t border-line pt-2"
                   : ""
               }

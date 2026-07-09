@@ -42,7 +42,10 @@ const goalSelect = {
     deadline: true,
     manualPercent: true,
     incompleteReason: true,
-    subtasks: { select: { isDone: true } },
+    subtasks: {
+      orderBy: { position: "asc" },
+      select: { title: true, isDone: true },
+    },
   },
 } as const;
 
@@ -53,7 +56,7 @@ type PeriodGoal = {
   deadline: Date | null;
   manualPercent: number | null;
   incompleteReason: string | null;
-  subtasks: { isDone: boolean }[];
+  subtasks: { title: string; isDone: boolean }[];
 };
 
 export default async function AdminPage({
@@ -202,6 +205,7 @@ export default async function AdminPage({
       orderBy: [{ completedAt: "asc" }, { createdAt: "desc" }],
       select: {
         id: true,
+        userId: true,
         title: true,
         note: true,
         deadline: true,
@@ -225,6 +229,15 @@ export default async function AdminPage({
   ]);
 
   const { start: weekStart, end: weekEnd } = getWeekBounds(now);
+
+  // Each person's admin-assigned tasks, keyed by user — shown inside their
+  // expanded row (period-agnostic, same on every tab).
+  const tasksByUser = new Map<string, typeof assignedTasks>();
+  for (const t of assignedTasks) {
+    const list = tasksByUser.get(t.userId) ?? [];
+    list.push(t);
+    tasksByUser.set(t.userId, list);
+  }
 
   // Build the shared, period-agnostic AdminUser shell. The caller supplies the
   // period-specific bits (label, goals, submission/lateness) so the same row UI
@@ -276,6 +289,17 @@ export default async function AdminPage({
         completed: isGoalComplete(g),
         deadlineLabel: g.deadline ? formatStamp(toStamp(g.deadline)) : null,
         incompleteReason: g.incompleteReason,
+        subtasks: g.subtasks.map((s) => ({
+          title: s.title,
+          isDone: s.isDone,
+        })),
+      })),
+      tasks: (tasksByUser.get(u.id) ?? []).map((t) => ({
+        id: t.id,
+        title: t.title,
+        note: t.note,
+        deadlineLabel: t.deadline ? formatYmd(toYmd(t.deadline)) : null,
+        done: t.completedAt != null,
       })),
     };
   }
