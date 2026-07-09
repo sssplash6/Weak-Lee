@@ -7,7 +7,8 @@ const BUILT_IN_ADMINS = [
   "shakhzod@freshman.academy",
 ];
 
-function adminEmails(): string[] {
+/** Every admin email: the built-ins plus any from ADMIN_EMAILS, lowercased. */
+export function adminEmails(): string[] {
   const fromEnv = (process.env.ADMIN_EMAILS ?? "")
     .split(",")
     .map((e) => e.trim().toLowerCase())

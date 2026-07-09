@@ -50,6 +50,7 @@ model User {
   assignedTasks   AssignedTask[] @relation("AssignedReceived")
   tasksAssigned   AssignedTask[] @relation("AssignedIssued")
   attendances     Attendance[]
+  notifications   Notification[]
 }
 
 model Account {
@@ -163,6 +164,31 @@ model AssignedTask {
   assignedBy User? @relation("AssignedIssued", fields: [assignedById], references: [id], onDelete: SetNull)
 
   @@index([userId])
+}
+
+// What a notification is about — drives its color/icon in the updates feed.
+enum NotificationType {
+  FINE
+  BONUS
+  TASK_ASSIGNED
+  REPORT
+  OTHER
+}
+
+// An in-app notification addressed to one user. Written alongside fines,
+// bonuses, task assignments, and colleague reports (see lib/notifications.ts),
+// and surfaced in the dashboard's "Last 48 hours" updates zone. There is no
+// read tracking — the 48-hour window does the expiring.
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType @default(OTHER)
+  message   String
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
 }
 
 // A recurring team meeting (Monday 11:00 company time). One row per time slot.

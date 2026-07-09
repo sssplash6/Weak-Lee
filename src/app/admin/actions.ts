@@ -7,11 +7,14 @@ import { isAdmin } from "@/lib/admin";
 import { getWeekBounds } from "@/lib/weeks";
 import { currentMeetingSlot } from "@/lib/meetings";
 import {
+  formatMoney,
   MAX_PENALTY,
   MEETING_LATE_PENALTY,
   meetingPenaltyAmount,
   type AttendanceStatus,
 } from "@/lib/penalties";
+import { formatYmd, toYmd } from "@/lib/dates";
+import { notify } from "@/lib/notifications";
 import type { Prisma } from "@/generated/prisma/client";
 
 /**
@@ -82,16 +85,23 @@ export async function addManualPenalty(
     select: { id: true },
   });
 
+  const cleanNote = note.trim().slice(0, 500) || null;
   await prisma.penalty.create({
     data: {
       userId,
       type: "OTHER",
       amount: value,
-      note: note.trim().slice(0, 500) || null,
+      note: cleanNote,
       weekId: week?.id ?? null,
       issuedById: session!.user.id,
     },
   });
+  await notify(
+    prisma,
+    userId,
+    "FINE",
+    `You were fined ${formatMoney(value)}${cleanNote ? ` — ${cleanNote}` : ""}.`,
+  );
   revalidatePath("/admin");
   revalidatePath("/dashboard");
 }
@@ -125,14 +135,21 @@ export async function addBonus(userId: string, amount: number, note: string) {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) throw new Error("User not found");
 
+  const cleanNote = note.trim().slice(0, 500) || null;
   await prisma.bonus.create({
     data: {
       userId,
       amount: value,
-      note: note.trim().slice(0, 500) || null,
+      note: cleanNote,
       issuedById: session!.user.id,
     },
   });
+  await notify(
+    prisma,
+    userId,
+    "BONUS",
+    `You received a ${formatMoney(value)} bonus${cleanNote ? ` — ${cleanNote}` : ""}.`,
+  );
   revalidatePath("/admin");
   revalidatePath("/dashboard");
 }
@@ -246,6 +263,16 @@ async function recomputeMeetingPenalties(
           issuedById,
         },
       });
+      // Only a newly created fine notifies — silent amount corrections from
+      // re-marking older meetings would just be noise.
+      await notify(
+        tx,
+        userId,
+        "FINE",
+        desired.type === "MEETING_SKIPPED"
+          ? `You were fined ${formatMoney(desired.amount)} for skipping the ${formatYmd(toYmd(a.meeting.scheduledAt))} meeting.`
+          : `You were fined ${formatMoney(desired.amount)} for being late to the ${formatYmd(toYmd(a.meeting.scheduledAt))} meeting.`,
+      );
     }
   }
 
@@ -297,6 +324,12 @@ export async function assignTask(
       deadline: due,
     },
   });
+  await notify(
+    prisma,
+    userId,
+    "TASK_ASSIGNED",
+    `You were assigned a task: “${cleanTitle}”${due ? ` — due ${formatYmd(toYmd(due))}` : ""}.`,
+  );
   revalidatePath("/admin");
   revalidatePath("/dashboard");
 }

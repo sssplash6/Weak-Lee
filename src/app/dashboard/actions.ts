@@ -9,9 +9,11 @@ import { submissionTiming } from "@/lib/lateness";
 import { clampPercent, needsCompletionReason } from "@/lib/progress";
 import { isPriority, type Priority } from "@/lib/priority";
 import {
+  formatMoney,
   LATE_SUBMISSION_PENALTY,
   MISSED_SUBMISSION_PENALTY,
 } from "@/lib/penalties";
+import { notify } from "@/lib/notifications";
 import { AVATAR_EMOJIS } from "@/lib/avatar";
 
 async function requireUserId(): Promise<string> {
@@ -581,17 +583,27 @@ export async function startNewWeek(
     // Sunday deadline.
     if (submittedLate) {
       const missed = timing === "missed";
+      const amount = missed
+        ? MISSED_SUBMISSION_PENALTY
+        : LATE_SUBMISSION_PENALTY;
+      const note = missed
+        ? "Goals submitted after the Monday 11:00 meeting — flagged not submitted"
+        : "Goals submitted after the Sunday 12:00 deadline";
       await tx.penalty.create({
         data: {
           userId,
           type: "LATE_SUBMISSION",
-          amount: missed ? MISSED_SUBMISSION_PENALTY : LATE_SUBMISSION_PENALTY,
-          note: missed
-            ? "Goals submitted after the Monday 11:00 meeting — flagged not submitted"
-            : "Goals submitted after the Sunday 12:00 deadline",
+          amount,
+          note,
           weekId: newWeek.id,
         },
       });
+      await notify(
+        tx,
+        userId,
+        "FINE",
+        `You were fined ${formatMoney(amount)} — ${note.toLowerCase()}.`,
+      );
     }
   });
   revalidatePath("/dashboard");
