@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-export type AdminTab = "this" | "next" | "month";
+export type AdminTab = "this" | "next" | "month" | "perf";
 
 /**
  * Top-level admin tabs. Plain links; the active tab rides in the `tab` search
@@ -12,6 +12,7 @@ export function AdminTabs({ tab }: { tab: AdminTab }) {
     { key: "this", label: "Goals", href: "/admin" },
     { key: "next", label: "Reports", href: "/admin?tab=next" },
     { key: "month", label: "This month", href: "/admin?tab=month" },
+    { key: "perf", label: "Performance", href: "/admin?tab=perf" },
   ];
   return (
     <nav className="mb-6 flex gap-6 border-b border-line">

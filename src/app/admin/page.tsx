@@ -20,6 +20,8 @@ import { AdminTabs, type AdminTab } from "./_components/AdminTabs";
 import { AssignedTasksPanel } from "./_components/AssignedTasksPanel";
 import { CollapsibleSection } from "./_components/CollapsibleSection";
 import { AdminUserList, type AdminUser } from "./_components/AdminUserList";
+import { PerformancePanel } from "./_components/PerformancePanel";
+import { buildPerformance } from "@/lib/performance";
 import { RecentBonuses } from "./_components/RecentBonuses";
 import { RecentPenalties } from "./_components/RecentPenalties";
 import { AttendancePanel } from "./_components/AttendancePanel";
@@ -71,7 +73,13 @@ export default async function AdminPage({
 
   const tabParam = (await searchParams).tab;
   const tab: AdminTab =
-    tabParam === "next" ? "next" : tabParam === "month" ? "month" : "this";
+    tabParam === "next"
+      ? "next"
+      : tabParam === "month"
+        ? "month"
+        : tabParam === "perf"
+          ? "perf"
+          : "this";
 
   const now = new Date();
 
@@ -85,6 +93,7 @@ export default async function AdminPage({
     recentMeetings,
     assignedTasks,
     allPenalties,
+    perfUsers,
   ] = await Promise.all([
     prisma.user.findMany({
       orderBy: [{ name: "asc" }, { email: "asc" }],
@@ -217,7 +226,56 @@ export default async function AdminPage({
     // Every penalty, uncapped. Feeds the "Total fines" stat, which must not
     // miss entries the capped recent-penalties list drops.
     prisma.penalty.findMany({ select: { amount: true } }),
+    // Full per-user history for the Performance tab — every week and month
+    // with goals, plus attendance/fines/bonuses/tasks. Heavy, so only loaded
+    // when that tab is actually open.
+    tab === "perf"
+      ? prisma.user.findMany({
+          orderBy: [{ name: "asc" }, { email: "asc" }],
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            department: true,
+            avatar: true,
+            weeks: {
+              select: {
+                startDate: true,
+                endDate: true,
+                submittedLate: true,
+                submittedAt: true,
+                goals: {
+                  select: {
+                    completedAt: true,
+                    manualPercent: true,
+                    subtasks: { select: { isDone: true } },
+                  },
+                },
+              },
+            },
+            months: {
+              select: {
+                startDate: true,
+                endDate: true,
+                goals: {
+                  select: {
+                    completedAt: true,
+                    manualPercent: true,
+                    subtasks: { select: { isDone: true } },
+                  },
+                },
+              },
+            },
+            attendances: { select: { status: true } },
+            penalties: { select: { amount: true } },
+            bonuses: { select: { amount: true } },
+            assignedTasks: { select: { completedAt: true } },
+          },
+        })
+      : null,
   ]);
+
+  const perf = perfUsers ? buildPerformance(perfUsers, now) : null;
 
   const { start: weekStart, end: weekEnd } = getWeekBounds(now);
 
@@ -418,7 +476,9 @@ export default async function AdminPage({
       ? "Who has closed and reported their week, and what they planned next."
       : tab === "month"
         ? `${monthRange} · monthly goals across everyone.`
-        : `${weekRange} · this week's submitted goals and progress across everyone.`;
+        : tab === "perf"
+          ? "All-time performance per person — goals, meetings, reliability."
+          : `${weekRange} · this week's submitted goals and progress across everyone.`;
 
   return (
     <div className="mx-auto w-full max-w-5xl flex-1 px-4 py-8">
@@ -635,6 +695,54 @@ export default async function AdminPage({
               currentUserId={session.user.id}
               variant="next-week"
             />
+          </section>
+        </>
+      )}
+
+      {tab === "perf" && perf && (
+        <>
+          <StatStrip
+            stats={[
+              {
+                label: "Team score",
+                value: perf.team.avgScore != null ? perf.team.avgScore : "—",
+              },
+              {
+                label: "Avg completion",
+                value:
+                  perf.team.avgCompletion != null
+                    ? `${perf.team.avgCompletion}%`
+                    : "—",
+              },
+              {
+                label: "Attendance",
+                value:
+                  perf.team.attendanceRate != null
+                    ? `${perf.team.attendanceRate}%`
+                    : "—",
+              },
+              {
+                label: "On-time reports",
+                value:
+                  perf.team.onTimeRate != null
+                    ? `${perf.team.onTimeRate}%`
+                    : "—",
+              },
+              { label: "Bonuses", value: formatMoney(perf.team.bonusTotal) },
+              { label: "Fines", value: formatMoney(perf.team.fineTotal) },
+            ]}
+          />
+          <section className="mt-8">
+            <h2 className="mb-1 px-1 text-sm font-semibold text-ink">
+              People ({perf.employees.length})
+            </h2>
+            <p className="mb-3 px-1 text-xs text-muted-fg">
+              Ranked by composite score — 50% goal completion, 25% meeting
+              attendance, 25% on-time reporting. Completion averages cover
+              closed weeks and months only, so the current period doesn&rsquo;t
+              drag anyone down mid-week.
+            </p>
+            <PerformancePanel employees={perf.employees} />
           </section>
         </>
       )}
