@@ -214,18 +214,9 @@ export default async function AdminPage({
         user: { select: { name: true, email: true } },
       },
     }),
-    // Every penalty, uncapped, with the dates that can tie it to a week: the
-    // linked week's range, the meeting it was for, or when it was recorded.
-    // Feeds the "Fines this week" stat, which must not miss entries the capped
-    // recent-penalties list drops.
-    prisma.penalty.findMany({
-      select: {
-        amount: true,
-        createdAt: true,
-        week: { select: { startDate: true, endDate: true } },
-        meeting: { select: { scheduledAt: true } },
-      },
-    }),
+    // Every penalty, uncapped. Feeds the "Total fines" stat, which must not
+    // miss entries the capped recent-penalties list drops.
+    prisma.penalty.findMany({ select: { amount: true } }),
   ]);
 
   const { start: weekStart, end: weekEnd } = getWeekBounds(now);
@@ -386,20 +377,8 @@ export default async function AdminPage({
     };
   });
 
-  // Fines counted toward this week — attributed to the week they're linked to
-  // (a late-submission fine is created on Sunday, *before* its week's Monday
-  // start, so filtering by createdAt alone undercounts), else to their
-  // meeting's date, else to when they were recorded.
-  const inThisWeek = (d: Date) =>
-    d.getTime() >= weekStart.getTime() && d.getTime() <= weekEnd.getTime();
-  const finesThisWeek = allPenalties
-    .filter((p) =>
-      p.week
-        ? p.week.startDate.getTime() <= weekEnd.getTime() &&
-          p.week.endDate.getTime() >= weekStart.getTime()
-        : inThisWeek(p.meeting?.scheduledAt ?? p.createdAt),
-    )
-    .reduce((s, p) => s + p.amount, 0);
+  // Every penalty ever issued — fines, late submissions, meeting skips/lates.
+  const finesTotal = allPenalties.reduce((s, p) => s + p.amount, 0);
 
   // Per-tab aggregate stats. "Active" = has at least one goal in that period.
   function statsOf(list: AdminUser[]) {
@@ -488,7 +467,7 @@ export default async function AdminPage({
                 value: statsOf(usersThisWeek).totalCompleted,
               },
               { label: "Avg completion", value: `${statsOf(usersThisWeek).avg}%` },
-              { label: "Fines this week", value: formatMoney(finesThisWeek) },
+              { label: "Total fines", value: formatMoney(finesTotal) },
             ]}
           />
 
