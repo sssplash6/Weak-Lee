@@ -88,9 +88,11 @@ export type TeamPerformance = {
   fineTotal: number;
 };
 
-// How the composite score is mixed. Components a person has no data for yet
-// are skipped and the remaining weights renormalized, so a brand-new user
-// isn't scored 0 for history they couldn't have.
+// How the composite score is mixed. Goal completion is the backbone: without
+// closed-week history there is no score at all — otherwise one attended
+// meeting would renormalize to a perfect 100 and outrank people with real,
+// slightly-imperfect records. The two smaller components are still skipped
+// (and their weight folded back) when genuinely absent.
 const SCORE_WEIGHTS: [keyof ScoreParts, number][] = [
   ["completion", 0.5],
   ["attendance", 0.25],
@@ -104,6 +106,7 @@ type ScoreParts = {
 };
 
 function compositeScore(parts: ScoreParts): number | null {
+  if (parts.completion == null) return null;
   let sum = 0;
   let weight = 0;
   for (const [key, w] of SCORE_WEIGHTS) {

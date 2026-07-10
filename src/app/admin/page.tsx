@@ -739,7 +739,8 @@ export default async function AdminPage({
               Ranked by composite score — 50% goal completion, 25% meeting
               attendance, 25% on-time reporting. Completion averages cover
               closed weeks and months only, so the current period doesn&rsquo;t
-              drag anyone down mid-week.
+              drag anyone down mid-week. People with no closed weeks yet
+              aren&rsquo;t scored and rank last until they close one.
             </p>
             <PerformancePanel employees={perf.employees} />
           </section>

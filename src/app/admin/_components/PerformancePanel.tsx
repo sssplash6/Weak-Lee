@@ -84,7 +84,7 @@ function EmployeeCard({
               </div>
             </>
           ) : (
-            <span className="text-xs text-muted-fg">No history yet</span>
+            <span className="text-xs text-muted-fg">Not scored yet</span>
           )}
         </div>
       </div>
