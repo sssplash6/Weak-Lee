@@ -67,7 +67,7 @@ function TaskRow({ task: t }: { task: AdminAssignedTask }) {
       </span>
       <span className="min-w-0 flex-1">
         <span className="break-words text-ink">{t.title}</span>
-        <span className="block text-xs text-muted-fg">
+        <span className="block break-words text-xs text-muted-fg">
           {t.assigneeName}
           {t.deadlineLabel ? ` · due ${t.deadlineLabel}` : ""}
           {t.note ? ` · ${t.note}` : ""}

@@ -80,7 +80,7 @@ function AssignedRow({ task }: { task: AssignedTaskView }) {
           </span>
         )}
         {task.note && (
-          <span className="mt-0.5 block text-xs text-amber-700/70">
+          <span className="mt-0.5 block break-words text-xs text-amber-700/70">
             {task.note}
           </span>
         )}

@@ -429,8 +429,8 @@ export default async function DashboardPage({
 
       <aside className="hidden w-64 shrink-0 xl:block">
         <div className="sticky top-8">
-          {isAdmin(session!.user.email) && <AssignGoalPanel people={team} />}
           <WeekCalendar deadlines={deadlineDots} />
+          {isAdmin(session!.user.email) && <AssignGoalPanel people={team} />}
         </div>
       </aside>
 

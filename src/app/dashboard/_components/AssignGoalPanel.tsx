@@ -53,7 +53,7 @@ export function AssignGoalPanel({
   }
 
   return (
-    <div className="mb-6 rounded-xl border border-line bg-surface">
+    <div className="mt-6 rounded-xl border border-line bg-surface">
       <button
         type="button"
         onClick={() => {
