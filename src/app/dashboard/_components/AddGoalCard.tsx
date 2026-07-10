@@ -8,8 +8,9 @@ import { DeadlinePicker } from "./DeadlinePicker";
 import { PriorityPicker } from "./PriorityPicker";
 
 /**
- * Add a new goal. Priority and deadline are required parts of setting a goal,
- * so "Add" stays disabled until a title, a priority, and a deadline are all set.
+ * Add a new goal. Priority and deadline are required parts of setting a goal —
+ * the card says so up front, and tapping "Add" before everything is set
+ * bounces the requirement hint instead of silently doing nothing.
  */
 export function AddGoalCard({
   nextIndex,
@@ -23,18 +24,37 @@ export function AddGoalCard({
   const [title, setTitle] = useState("");
   const [priority, setPriority] = useState<Priority | null>(null);
   const [deadline, setDeadline] = useState<string | null>(null);
+  // Bumped on every futile "Add" tap; keying the hint on it restarts the
+  // bounce animation, so repeated taps keep nudging.
+  const [nudge, setNudge] = useState(0);
   const [isPending, startTransition] = useTransition();
 
   const ready = title.trim().length > 0 && priority != null && deadline != null;
 
+  const missing: string[] = [];
+  if (title.trim().length === 0) missing.push("a title");
+  if (priority == null) missing.push("a priority");
+  if (deadline == null) missing.push("a deadline");
+  const listed =
+    missing.length > 1
+      ? `${missing.slice(0, -1).join(", ")} and ${missing[missing.length - 1]}`
+      : missing[0];
+  const hint = listed
+    ? `${listed[0].toUpperCase()}${listed.slice(1)} ${missing.length > 1 ? "are" : "is"} required.`
+    : null;
+
   function submit() {
-    if (!ready || !priority || !deadline) return;
+    if (!ready || !priority || !deadline) {
+      setNudge((n) => n + 1);
+      return;
+    }
     const trimmed = title.trim();
     startTransition(async () => {
       await addGoal({ title: trimmed, priority, deadline, scope });
       setTitle("");
       setPriority(null);
       setDeadline(null);
+      setNudge(0);
     });
   }
 
@@ -48,7 +68,7 @@ export function AddGoalCard({
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && ready) submit();
+            if (e.key === "Enter") submit();
           }}
           placeholder={`Add goal ${nextIndex}…`}
           maxLength={200}
@@ -64,20 +84,24 @@ export function AddGoalCard({
         <button
           type="button"
           onClick={submit}
-          disabled={!ready || isPending}
-          className="shrink-0 rounded-lg bg-brand px-3 py-1.5 text-sm font-medium text-white transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={isPending}
+          aria-disabled={!ready || isPending}
+          className={`shrink-0 rounded-lg bg-brand px-3 py-1.5 text-sm font-medium text-white transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-50 ${
+            ready ? "" : "cursor-not-allowed opacity-50"
+          }`}
         >
           {isPending ? "Adding…" : "Add"}
         </button>
       </div>
 
-      {!ready && title.trim().length > 0 && (
-        <p className="mt-2 pl-10 text-xs text-muted-fg">
-          {priority == null && deadline == null
-            ? "Set a priority and a deadline to add this goal."
-            : priority == null
-              ? "Set a priority to add this goal."
-              : "Set a deadline to add this goal."}
+      {hint && (
+        <p
+          key={nudge}
+          className={`mt-2 pl-10 text-xs font-medium ${
+            nudge > 0 ? "hint-bounce text-amber-600" : "text-muted-fg"
+          }`}
+        >
+          {hint}
         </p>
       )}
       {priority != null && (

@@ -102,6 +102,27 @@ body {
   }
 }
 
+/* Attention nudge: a hint that bounces when an action is tapped too early
+   (e.g. "Add" before the goal's required priority/deadline are set). */
+@keyframes hint-bounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  30% {
+    transform: translateY(-5px);
+  }
+  55% {
+    transform: translateY(2px);
+  }
+  75% {
+    transform: translateY(-1px);
+  }
+}
+@utility hint-bounce {
+  animation: hint-bounce 450ms var(--ease-out-strong);
+}
+
 /* Reduced motion: keep state changes instant instead of animated. */
 @media (prefers-reduced-motion: reduce) {
   *,
