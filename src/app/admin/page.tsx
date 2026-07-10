@@ -217,6 +217,7 @@ export default async function AdminPage({
         userId: true,
         title: true,
         note: true,
+        scope: true,
         deadline: true,
         completedAt: true,
         createdAt: true,
@@ -453,16 +454,13 @@ export default async function AdminPage({
 
   const reportedCount = usersNextWeek.filter((u) => u.misdated).length;
 
-  // Assigned-task tracking data + the person picker for the assign form.
-  const assignPeople = rawUsers.map((u) => ({
-    id: u.id,
-    name: u.name ?? u.email ?? "—",
-  }));
+  // Assigned-goal tracking rows for the monitoring list.
   const assignedTaskRows = assignedTasks.map((t) => ({
     id: t.id,
     title: t.title,
     note: t.note,
     assigneeName: t.user.name ?? t.user.email ?? "—",
+    scopeLabel: t.scope === "MONTHLY" ? "Monthly" : "Weekly",
     deadlineLabel: t.deadline ? formatYmd(toYmd(t.deadline)) : null,
     done: t.completedAt != null,
     createdAtLabel: formatDateTimeTz(t.createdAt),
@@ -558,13 +556,14 @@ export default async function AdminPage({
 
           <section className="mt-8">
             <h2 className="mb-1 px-1 text-sm font-semibold text-ink">
-              Assign &amp; track goals
+              Assigned goals
             </h2>
             <p className="mb-3 px-1 text-xs text-muted-fg">
-              Give someone a goal to work on. It shows up in their &ldquo;Assigned
-              to you&rdquo; list, separate from their own weekly goals.
+              Progress on everything assigned. To assign a new goal, use
+              &ldquo;Assign a goal&rdquo; in your dashboard&rsquo;s right
+              sidebar — weekly or monthly.
             </p>
-            <AssignedTasksPanel people={assignPeople} tasks={assignedTaskRows} />
+            <AssignedTasksPanel tasks={assignedTaskRows} />
           </section>
 
           <section className="mt-10">

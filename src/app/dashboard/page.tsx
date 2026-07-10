@@ -38,6 +38,7 @@ import { NotificationsBell } from "./_components/NotificationsBell";
 import { SubmitReminder } from "./_components/SubmitReminder";
 import { BonusNotice } from "./_components/BonusNotice";
 import { AssignedTasks } from "./_components/AssignedTasks";
+import { AssignGoalPanel } from "./_components/AssignGoalPanel";
 import { PeriodToggle } from "./_components/PeriodToggle";
 import { PENALTY_LABEL } from "@/lib/penalties";
 
@@ -141,6 +142,7 @@ export default async function DashboardPage({
           id: true,
           title: true,
           note: true,
+          scope: true,
           deadline: true,
           completedAt: true,
         },
@@ -208,13 +210,16 @@ export default async function DashboardPage({
   }));
 
   // Admin-assigned tasks — shown as a standalone list, not part of week %.
-  const assignedTaskViews = assignedTasks.map((t) => ({
-    id: t.id,
-    title: t.title,
-    note: t.note,
-    deadlineLabel: t.deadline ? formatYmd(toYmd(t.deadline)) : null,
-    done: t.completedAt != null,
-  }));
+  // Weekly-scoped ones surface on the week view, monthly ones on the month view.
+  const assignedTaskViews = assignedTasks
+    .filter((t) => (t.scope === "MONTHLY") === isMonth)
+    .map((t) => ({
+      id: t.id,
+      title: t.title,
+      note: t.note,
+      deadlineLabel: t.deadline ? formatYmd(toYmd(t.deadline)) : null,
+      done: t.completedAt != null,
+    }));
 
   const overall = weekPercent(period.goals);
   const locked = period.goalsLocked;
@@ -424,6 +429,7 @@ export default async function DashboardPage({
 
       <aside className="hidden w-64 shrink-0 xl:block">
         <div className="sticky top-8">
+          {isAdmin(session!.user.email) && <AssignGoalPanel people={team} />}
           <WeekCalendar deadlines={deadlineDots} />
         </div>
       </aside>

@@ -149,6 +149,13 @@ model Bonus {
   @@index([userId])
 }
 
+// Whether an assigned goal is a weekly or a monthly one — controls which
+// dashboard view (week/month) surfaces it to the assignee.
+enum AssignScope {
+  WEEKLY
+  MONTHLY
+}
+
 // A goal an admin assigns to a specific person. Lives outside the weekly/monthly
 // goal flow — it's a standalone task the assignee tracks and marks done, and it
 // does NOT count toward their week completion percent.
@@ -158,6 +165,7 @@ model AssignedTask {
   assignedById String?
   title        String
   note         String?
+  scope        AssignScope @default(WEEKLY)
   deadline     DateTime?
   completedAt  DateTime?
   createdAt    DateTime  @default(now())

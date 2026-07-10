@@ -286,14 +286,16 @@ async function recomputeMeetingPenalties(
 /**
  * Create a goal and assign it to a specific person. Lives outside the weekly
  * goal flow (see the AssignedTask model) — a standalone task the assignee
- * tracks. Admin-only. Deadline is an optional YYYY-MM-DD (stored at UTC
- * midnight, treated as date-only like goal deadlines).
+ * tracks. Admin-only. `scope` picks which dashboard view (week/month) surfaces
+ * it. Deadline is an optional YYYY-MM-DD (stored at UTC midnight, treated as
+ * date-only like goal deadlines).
  */
 export async function assignTask(
   userId: string,
   title: string,
   deadline?: string | null,
   note?: string,
+  scope: "WEEKLY" | "MONTHLY" = "WEEKLY",
 ) {
   const session = await auth();
   if (!isAdmin(session?.user?.email)) {
@@ -315,12 +317,17 @@ export async function assignTask(
     if (Number.isNaN(due.getTime())) throw new Error("Invalid deadline");
   }
 
+  if (scope !== "WEEKLY" && scope !== "MONTHLY") {
+    throw new Error("Invalid scope");
+  }
+
   await prisma.assignedTask.create({
     data: {
       userId,
       assignedById: session!.user.id,
       title: cleanTitle,
       note: note?.trim().slice(0, 500) || null,
+      scope,
       deadline: due,
     },
   });
@@ -328,7 +335,7 @@ export async function assignTask(
     prisma,
     userId,
     "TASK_ASSIGNED",
-    `You were assigned a task: “${cleanTitle}”${due ? ` — due ${formatYmd(toYmd(due))}` : ""}.`,
+    `You were assigned a ${scope === "MONTHLY" ? "monthly" : "weekly"} goal: “${cleanTitle}”${due ? ` — due ${formatYmd(toYmd(due))}` : ""}.`,
   );
   revalidatePath("/admin");
   revalidatePath("/dashboard");
