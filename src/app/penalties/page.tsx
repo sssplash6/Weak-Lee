@@ -1,45 +1,12 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { formatMoney, type PenaltyType } from "@/lib/penalties";
 import { resolveAvatar } from "@/lib/avatar";
+import { formatDateTimeTz } from "@/lib/dates";
 import { BackLink } from "@/app/_components/BackLink";
 import { ReportForm } from "./_components/ReportForm";
-
-// The penalty ledger's four reasons, in the order the matrix shows them. Each
-// carries its own accent so a column reads consistently with the policy card
-// it comes from — colorful, but each color means one thing.
-const REASONS: {
-  type: PenaltyType;
-  label: string;
-  dot: string;
-  chip: string;
-}[] = [
-  {
-    type: "MEETING_SKIPPED",
-    label: "Skipped meeting",
-    dot: "bg-red-500",
-    chip: "bg-red-50 text-red-700",
-  },
-  {
-    type: "MEETING_LATE",
-    label: "Late to meeting",
-    dot: "bg-orange-400",
-    chip: "bg-orange-50 text-orange-700",
-  },
-  {
-    type: "LATE_SUBMISSION",
-    label: "Late submission",
-    dot: "bg-brand",
-    chip: "bg-brand-soft text-brand",
-  },
-  {
-    type: "OTHER",
-    label: "Other",
-    dot: "bg-violet-500",
-    chip: "bg-violet-50 text-violet-700",
-  },
-];
+import { PenaltyMatrix } from "./_components/PenaltyMatrix";
+import { REASONS } from "./reasons";
 
 // The written penalty policy, digitized from the company sheet. Amounts here
 // are the policy; the matrix below is what's actually been issued.
@@ -116,11 +83,21 @@ export default async function PenaltiesPage() {
       email: true,
       department: true,
       avatar: true,
-      penalties: { select: { type: true, amount: true } },
+      penalties: {
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          type: true,
+          amount: true,
+          note: true,
+          createdAt: true,
+        },
+      },
     },
   });
 
-  // One matrix row per employee: their issued fines summed per reason.
+  // One matrix row per employee: their issued fines summed per reason, plus
+  // the individual fines behind the sums (shown when the row is expanded).
   // Heaviest totals first so the table leads with what needs attention.
   const rows = users
     .map((u) => {
@@ -137,6 +114,17 @@ export default async function PenaltiesPage() {
         bg: av.bg,
         cells: REASONS.map((r) => byType[r.type] ?? 0),
         total: u.penalties.reduce((s, p) => s + p.amount, 0),
+        fines: u.penalties.map((p) => {
+          const idx = REASONS.findIndex((r) => r.type === p.type);
+          return {
+            id: p.id,
+            // Unknown types land in the "Other" column rather than crashing.
+            reasonIndex: idx === -1 ? REASONS.length - 1 : idx,
+            note: p.note,
+            dateLabel: formatDateTimeTz(p.createdAt),
+            amount: p.amount,
+          };
+        }),
       };
     })
     .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
@@ -224,95 +212,10 @@ export default async function PenaltiesPage() {
           Current penalties
         </h2>
         <p className="mb-3 px-1 text-xs text-muted-fg">
-          Everyone&rsquo;s issued fines to date, by reason.
+          Everyone&rsquo;s issued fines to date, by reason. Tap a person to see
+          each fine and why it was issued.
         </p>
-        <div className="overflow-x-auto rounded-xl border border-line bg-surface">
-          <table className="w-full min-w-[40rem] text-sm">
-            <thead>
-              <tr className="border-b border-line text-left text-[11px] font-semibold uppercase tracking-wide text-muted-fg">
-                <th className="px-4 py-3 font-semibold">Employee</th>
-                {REASONS.map((r) => (
-                  <th key={r.type} className="px-3 py-3 font-semibold">
-                    <span className="flex items-center gap-1.5">
-                      <span
-                        className={`h-2 w-2 rounded-full ${r.dot}`}
-                        aria-hidden="true"
-                      />
-                      {r.label}
-                    </span>
-                  </th>
-                ))}
-                <th className="px-4 py-3 text-right font-semibold">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr
-                  key={r.id}
-                  className="border-b border-line transition last:border-b-0 hover:bg-canvas/60"
-                >
-                  <td className="px-4 py-2.5">
-                    <span className="flex items-center gap-2.5">
-                      <span
-                        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm ${r.bg}`}
-                        aria-hidden="true"
-                      >
-                        {r.emoji}
-                      </span>
-                      <span className="min-w-0">
-                        <span className="block truncate font-medium text-ink">
-                          {r.name}
-                        </span>
-                        {r.department && (
-                          <span className="block truncate text-xs text-muted-fg">
-                            {r.department}
-                          </span>
-                        )}
-                      </span>
-                    </span>
-                  </td>
-                  {r.cells.map((amount, i) => (
-                    <td key={REASONS[i].type} className="px-3 py-2.5">
-                      {amount > 0 ? (
-                        <span
-                          className={`inline-block rounded-full px-2 py-0.5 text-xs font-bold tabular-nums ${REASONS[i].chip}`}
-                        >
-                          {formatMoney(amount)}
-                        </span>
-                      ) : (
-                        <span className="text-muted-fg">—</span>
-                      )}
-                    </td>
-                  ))}
-                  <td className="px-4 py-2.5 text-right">
-                    {r.total > 0 ? (
-                      <span className="font-bold tabular-nums text-red-600">
-                        {formatMoney(r.total)}
-                      </span>
-                    ) : (
-                      <span className="text-muted-fg">—</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-            {grandTotal > 0 && (
-              <tfoot>
-                <tr className="border-t border-line bg-canvas/60">
-                  <td
-                    className="px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-muted-fg"
-                    colSpan={1 + REASONS.length}
-                  >
-                    Team total
-                  </td>
-                  <td className="px-4 py-2.5 text-right font-bold tabular-nums text-red-600">
-                    {formatMoney(grandTotal)}
-                  </td>
-                </tr>
-              </tfoot>
-            )}
-          </table>
-        </div>
+        <PenaltyMatrix rows={rows} grandTotal={grandTotal} />
       </section>
     </div>
   );
