@@ -294,6 +294,24 @@ export default async function DashboardPage({
     })),
   }));
 
+  // The user's own money block — fines (week view only) and bonuses. Lives in
+  // the left sidebar on desktop; on smaller screens (no sidebar) it renders at
+  // the top of the main column instead.
+  const moneyNotices =
+    (!isMonth && penaltyTotal > 0) || bonusTotal > 0 ? (
+      <>
+        {!isMonth && penaltyTotal > 0 && (
+          <PenaltyNotice
+            weekPenalties={weekPenalties}
+            earlierPenalties={earlierPenalties}
+            weekTotal={weekPenaltyTotal}
+            allTimeTotal={penaltyTotal}
+          />
+        )}
+        {bonusTotal > 0 && <BonusNotice bonuses={bonusRows} total={bonusTotal} />}
+      </>
+    ) : null;
+
   return (
     <>
       {/* Entry alert: nags until this period's goals are submitted once. */}
@@ -303,6 +321,9 @@ export default async function DashboardPage({
       <aside className="hidden w-64 shrink-0 lg:block">
         <div className="sticky top-8">
           <WeekArchive weeks={archive} periodNoun={view} />
+          {moneyNotices && (
+            <div className="mt-6 flex flex-col gap-3">{moneyNotices}</div>
+          )}
         </div>
       </aside>
 
@@ -335,25 +356,15 @@ export default async function DashboardPage({
 
       <PeriodToggle view={view} />
 
-      {((!isMonth && penaltyTotal > 0) || bonusTotal > 0) && (
+      {moneyNotices && (
         <div
-          className={`mb-5 grid items-start gap-3 ${
+          className={`mb-5 grid items-start gap-3 lg:hidden ${
             !isMonth && penaltyTotal > 0 && bonusTotal > 0
               ? "sm:grid-cols-2"
               : ""
           }`}
         >
-          {!isMonth && penaltyTotal > 0 && (
-            <PenaltyNotice
-              weekPenalties={weekPenalties}
-              earlierPenalties={earlierPenalties}
-              weekTotal={weekPenaltyTotal}
-              allTimeTotal={penaltyTotal}
-            />
-          )}
-          {bonusTotal > 0 && (
-            <BonusNotice bonuses={bonusRows} total={bonusTotal} />
-          )}
+          {moneyNotices}
         </div>
       )}
 
