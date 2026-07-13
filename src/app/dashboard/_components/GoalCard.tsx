@@ -229,88 +229,93 @@ export function GoalCard({
         completed ? "border-brand ring-1 ring-brand/20" : "border-line"
       }`}
     >
-      <div className="flex items-start gap-3">
-        <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-soft text-xs font-bold text-brand">
-          {index}
-        </span>
-        <GoalTitle goalId={goal.id} title={goal.title} readOnly={locked} />
-        <button
-          type="button"
-          onClick={() => setTasksOpen((v) => !v)}
-          aria-expanded={tasksOpen}
-          aria-label={tasksOpen ? "Hide subtasks" : "Show subtasks"}
-          title={tasksOpen ? "Hide subtasks" : "Show subtasks"}
-          className="ml-auto mt-0.5 inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-muted-fg transition hover:bg-canvas hover:text-ink"
-        >
-          <ChevronIcon
-            className={`h-3.5 w-3.5 transition-transform ${
-              tasksOpen ? "rotate-90" : ""
-            }`}
-          />
-          <span className="text-xs font-semibold tabular-nums">
-            {subtasks.length}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-3">
+        <div className="flex min-w-0 items-start gap-3 sm:flex-1">
+          <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-soft text-xs font-bold text-brand">
+            {index}
           </span>
-        </button>
-        <PercentChip percent={percent} editable onCommit={onSetPercent} />
+          <GoalTitle goalId={goal.id} title={goal.title} readOnly={locked} />
+        </div>
 
-        {locked ? (
-          <div className="mt-0.5 flex shrink-0 items-center gap-2">
-            {priority && (
-              <span
-                className={`inline-flex items-center gap-1 text-xs font-semibold ${PRIORITY_TEXT[priority]}`}
-                title={`Priority: ${PRIORITY_LABEL[priority]}`}
-              >
-                <FlagIcon className="h-4 w-4" filled />
-                {PRIORITY_LABEL[priority]}
-              </span>
-            )}
-            {deadline && (
-              <span
-                className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold tabular-nums ${
-                  overdue
-                    ? "bg-red-50 text-red-600"
-                    : "bg-brand-soft text-brand"
-                }`}
-                title="Deadline"
-              >
-                <CalendarIcon className="h-4 w-4" />
-                {formatStamp(deadline, curYear)}
-              </span>
-            )}
-          </div>
-        ) : (
-          <div className="mt-0.5 flex shrink-0 items-center gap-2">
-            <PriorityPicker value={priority} onChange={onSetPriority} />
-            <DeadlinePicker
-              value={deadline}
-              todayYmd={todayYmd}
-              overdue={overdue}
-              onChange={onSetDeadline}
+        <div className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1 sm:shrink-0">
+          <button
+            type="button"
+            onClick={() => setTasksOpen((v) => !v)}
+            aria-expanded={tasksOpen}
+            aria-label={tasksOpen ? "Hide subtasks" : "Show subtasks"}
+            title={tasksOpen ? "Hide subtasks" : "Show subtasks"}
+            className="inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-muted-fg transition hover:bg-canvas hover:text-ink"
+          >
+            <ChevronIcon
+              className={`h-3.5 w-3.5 transition-transform ${
+                tasksOpen ? "rotate-90" : ""
+              }`}
             />
-          </div>
-        )}
+            <span className="text-xs font-semibold tabular-nums">
+              {subtasks.length}
+            </span>
+          </button>
+          <PercentChip percent={percent} editable onCommit={onSetPercent} />
 
-        <span className="mt-0.5 shrink-0">
-          <CompleteButton
-            completed={completed}
-            allDone={percent === 100}
-            onToggle={onToggleCompleted}
-          />
-        </span>
-        <span className="mt-1.5 shrink-0">
-          <SharePicker
-            team={team}
-            alreadyShared={goal.sharedTo}
-            onShare={(toUserId) => shareGoal(goal.id, toUserId)}
-            ariaLabel="Delegate goal"
-            iconClassName="h-5 w-5"
-          />
-        </span>
-        {!locked && (
-          <span className="mt-1 shrink-0">
-            <DeleteGoalButton goalId={goal.id} />
+          {locked ? (
+            <div className="flex shrink-0 items-center gap-2">
+              {priority && (
+                <span
+                  className={`inline-flex items-center gap-1 text-xs font-semibold ${PRIORITY_TEXT[priority]}`}
+                  title={`Priority: ${PRIORITY_LABEL[priority]}`}
+                >
+                  <FlagIcon className="h-4 w-4" filled />
+                  {PRIORITY_LABEL[priority]}
+                </span>
+              )}
+              {deadline && (
+                <span
+                  className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold tabular-nums ${
+                    overdue
+                      ? "bg-red-50 text-red-600"
+                      : "bg-brand-soft text-brand"
+                  }`}
+                  title="Deadline"
+                >
+                  <CalendarIcon className="h-4 w-4" />
+                  {formatStamp(deadline, curYear)}
+                </span>
+              )}
+            </div>
+          ) : (
+            <div className="flex shrink-0 items-center gap-2">
+              <PriorityPicker value={priority} onChange={onSetPriority} />
+              <DeadlinePicker
+                value={deadline}
+                todayYmd={todayYmd}
+                overdue={overdue}
+                onChange={onSetDeadline}
+              />
+            </div>
+          )}
+
+          <span className="shrink-0">
+            <CompleteButton
+              completed={completed}
+              allDone={percent === 100}
+              onToggle={onToggleCompleted}
+            />
           </span>
-        )}
+          <span className="shrink-0">
+            <SharePicker
+              team={team}
+              alreadyShared={goal.sharedTo}
+              onShare={(toUserId) => shareGoal(goal.id, toUserId)}
+              ariaLabel="Delegate goal"
+              iconClassName="h-5 w-5"
+            />
+          </span>
+          {!locked && (
+            <span className="shrink-0">
+              <DeleteGoalButton goalId={goal.id} />
+            </span>
+          )}
+        </div>
       </div>
 
       {(goal.receivedFrom || goal.sharedTo.length > 0) && (
@@ -455,7 +460,7 @@ function PercentChip({
 
   if (!editable) {
     return (
-      <span className="mt-1 shrink-0 text-sm font-semibold tabular-nums text-accent">
+      <span className="shrink-0 text-sm font-semibold tabular-nums text-accent">
         {percent}%
       </span>
     );
@@ -471,7 +476,7 @@ function PercentChip({
         }}
         title="Click to set the percent yourself"
         aria-label="Edit goal progress percent"
-        className="mt-0.5 shrink-0 rounded-md border border-transparent px-1 py-0.5 text-sm font-semibold tabular-nums text-accent transition hover:border-accent/40 hover:bg-accent-soft"
+        className="shrink-0 rounded-md border border-transparent px-1 py-0.5 text-sm font-semibold tabular-nums text-accent transition hover:border-accent/40 hover:bg-accent-soft"
       >
         {percent}%
       </button>
@@ -487,7 +492,7 @@ function PercentChip({
   }
 
   return (
-    <span className="mt-0.5 flex shrink-0 items-center text-sm font-semibold text-accent">
+    <span className="flex shrink-0 items-center text-sm font-semibold text-accent">
       <input
         autoFocus
         type="number"

@@ -333,18 +333,18 @@ export default async function DashboardPage({
       </aside>
 
       <main className="flex w-full min-w-0 max-w-3xl flex-1 flex-col">
-        <header className="mb-6 flex items-start justify-between gap-4">
-        <div>
+        <header className="mb-6 flex items-start justify-between gap-3 sm:gap-4">
+        <div className="min-w-0">
           <div className="text-xs font-semibold uppercase tracking-widest text-brand">
             freshman.academy
           </div>
-          <h1 className="mt-1 text-2xl font-bold text-ink">
+          <h1 className="mt-1 text-xl font-bold text-ink sm:text-2xl">
             {isMonth
               ? monthLabel(period.startDate)
               : formatRange(period.startDate, period.endDate)}
           </h1>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex shrink-0 items-center gap-2 sm:gap-4">
           <WeekProgress percent={overall} label={isMonth ? "Month" : "Week"} />
           <div className="flex items-center gap-2">
             <NotificationsBell updates={updates} unreadCount={unreadCount} />
@@ -409,6 +409,16 @@ export default async function DashboardPage({
           </p>
         )}
       </section>
+
+      {/* Both sidebars are hidden on narrow screens (archive below lg, calendar
+          below xl); surface their content inline so nothing is lost on mobile. */}
+      <div className="mt-8 lg:hidden">
+        <WeekArchive weeks={archive} periodNoun={view} />
+      </div>
+      <div className="mt-8 flex flex-col gap-6 xl:hidden">
+        <WeekCalendar deadlines={deadlineDots} />
+        {isAdmin(session!.user.email) && <AssignGoalPanel people={team} />}
+      </div>
 
         <footer className="mt-10 border-t border-line pt-6">
           {isMonth ? (

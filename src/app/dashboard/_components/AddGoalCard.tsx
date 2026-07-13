@@ -60,38 +60,42 @@ export function AddGoalCard({
 
   return (
     <div className="rounded-2xl border border-dashed border-line bg-surface/50 p-5">
-      <div className="flex items-center gap-3">
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-line text-xs font-bold text-muted-fg">
-          {nextIndex}
-        </span>
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") submit();
-          }}
-          placeholder={`Add goal ${nextIndex}…`}
-          maxLength={200}
-          className="min-w-0 flex-1 bg-transparent text-base font-medium text-ink placeholder:text-muted-fg focus:outline-none"
-        />
-        <PriorityPicker value={priority} onChange={setPriority} />
-        <DeadlinePicker
-          value={deadline}
-          todayYmd={todayYmd}
-          overdue={false}
-          onChange={setDeadline}
-        />
-        <button
-          type="button"
-          onClick={submit}
-          disabled={isPending}
-          aria-disabled={!ready || isPending}
-          className={`shrink-0 rounded-lg bg-brand px-3 py-1.5 text-sm font-medium text-white transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-50 ${
-            ready ? "" : "cursor-not-allowed opacity-50"
-          }`}
-        >
-          {isPending ? "Adding…" : "Add"}
-        </button>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+        <div className="flex min-w-0 items-center gap-3 sm:flex-1">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-line text-xs font-bold text-muted-fg">
+            {nextIndex}
+          </span>
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") submit();
+            }}
+            placeholder={`Add goal ${nextIndex}…`}
+            maxLength={200}
+            className="min-w-0 flex-1 bg-transparent text-base font-medium text-ink placeholder:text-muted-fg focus:outline-none"
+          />
+        </div>
+        <div className="flex items-center justify-end gap-2 pl-10 sm:shrink-0 sm:pl-0">
+          <PriorityPicker value={priority} onChange={setPriority} />
+          <DeadlinePicker
+            value={deadline}
+            todayYmd={todayYmd}
+            overdue={false}
+            onChange={setDeadline}
+          />
+          <button
+            type="button"
+            onClick={submit}
+            disabled={isPending}
+            aria-disabled={!ready || isPending}
+            className={`shrink-0 rounded-lg bg-brand px-3 py-1.5 text-sm font-medium text-white transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-50 ${
+              ready ? "" : "cursor-not-allowed opacity-50"
+            }`}
+          >
+            {isPending ? "Adding…" : "Add"}
+          </button>
+        </div>
       </div>
 
       {hint && (
