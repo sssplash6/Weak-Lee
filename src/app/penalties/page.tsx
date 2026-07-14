@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { isAdmin } from "@/lib/admin";
 import { resolveAvatar } from "@/lib/avatar";
 import { formatDateTimeTz } from "@/lib/dates";
 import { BackLink } from "@/app/_components/BackLink";
@@ -75,6 +76,8 @@ export default async function PenaltiesPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/signin");
 
+  const viewerIsAdmin = isAdmin(session.user.email);
+
   const users = await prisma.user.findMany({
     orderBy: [{ name: "asc" }, { email: "asc" }],
     select: {
@@ -83,6 +86,7 @@ export default async function PenaltiesPage() {
       email: true,
       department: true,
       avatar: true,
+      finesPaid: true,
       penalties: {
         orderBy: { createdAt: "desc" },
         select: {
@@ -106,6 +110,7 @@ export default async function PenaltiesPage() {
       for (const p of u.penalties) {
         byType[p.type] = (byType[p.type] ?? 0) + p.amount;
       }
+      const total = u.penalties.reduce((s, p) => s + p.amount, 0);
       return {
         id: u.id,
         name: u.name ?? u.email ?? "—",
@@ -113,7 +118,9 @@ export default async function PenaltiesPage() {
         emoji: av.emoji,
         bg: av.bg,
         cells: REASONS.map((r) => byType[r.type] ?? 0),
-        total: u.penalties.reduce((s, p) => s + p.amount, 0),
+        total,
+        // Never show more paid than owed, even if a fine was deleted after payment.
+        paid: Math.min(u.finesPaid, total),
         fines: u.penalties.map((p) => {
           const idx = REASONS.findIndex((r) => r.type === p.type);
           return {
@@ -130,6 +137,8 @@ export default async function PenaltiesPage() {
     .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
 
   const grandTotal = rows.reduce((s, r) => s + r.total, 0);
+  const grandPaid = rows.reduce((s, r) => s + r.paid, 0);
+  const grandOutstanding = Math.max(0, grandTotal - grandPaid);
 
   const colleagues = users
     .filter((u) => u.id !== session.user.id)
@@ -215,7 +224,12 @@ export default async function PenaltiesPage() {
           Everyone&rsquo;s issued fines to date, by reason. Tap a person to see
           each fine and why it was issued.
         </p>
-        <PenaltyMatrix rows={rows} grandTotal={grandTotal} />
+        <PenaltyMatrix
+          rows={rows}
+          grandTotal={grandTotal}
+          grandOutstanding={grandOutstanding}
+          viewerIsAdmin={viewerIsAdmin}
+        />
       </section>
     </div>
   );

@@ -117,6 +117,55 @@ export async function deletePenalty(penaltyId: string) {
   revalidatePath("/dashboard");
 }
 
+/** The total fines (whole USD) ever issued to a user. */
+async function userFinesTotal(userId: string): Promise<number> {
+  const agg = await prisma.penalty.aggregate({
+    where: { userId },
+    _sum: { amount: true },
+  });
+  return agg._sum.amount ?? 0;
+}
+
+/**
+ * Record how much of a user's fines they've paid back so far (an absolute
+ * running total, not an increment). Clamped to [0, total owed] so "paid" can
+ * never exceed what was issued. Admin-only.
+ */
+export async function setFinesPaid(userId: string, paidAmount: number) {
+  const session = await auth();
+  if (!isAdmin(session?.user?.email)) {
+    throw new Error("Not authorized");
+  }
+  const value = Math.round(Number(paidAmount));
+  if (!Number.isFinite(value) || value < 0) {
+    throw new Error("Enter a valid amount.");
+  }
+  const total = await userFinesTotal(userId);
+  await prisma.user.update({
+    where: { id: userId },
+    data: { finesPaid: Math.min(value, total) },
+  });
+  revalidatePath("/penalties");
+  revalidatePath("/admin");
+  revalidatePath("/dashboard");
+}
+
+/** Mark a user's fines fully settled — sets paid to the current total. Admin-only. */
+export async function markFinesPaidInFull(userId: string) {
+  const session = await auth();
+  if (!isAdmin(session?.user?.email)) {
+    throw new Error("Not authorized");
+  }
+  const total = await userFinesTotal(userId);
+  await prisma.user.update({
+    where: { id: userId },
+    data: { finesPaid: total },
+  });
+  revalidatePath("/penalties");
+  revalidatePath("/admin");
+  revalidatePath("/dashboard");
+}
+
 /**
  * Award a bonus to a user — the positive counterpart of a manual fine, tracked
  * separately (no netting). Amount is a whole number in the app currency.

@@ -34,6 +34,10 @@ model User {
   // Assigned preset animal avatar (emoji). Unique so no two users share one.
   avatar String? @unique
 
+  // How much of their fines this person has paid back so far (whole USD), set by
+  // admins on the penalties page. Outstanding = total fines issued − finesPaid.
+  finesPaid Int @default(0)
+
   accounts Account[]
   sessions Session[]
   weeks    Week[]
