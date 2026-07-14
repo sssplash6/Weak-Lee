@@ -229,15 +229,15 @@ export function GoalCard({
         completed ? "border-brand ring-1 ring-brand/20" : "border-line"
       }`}
     >
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-3">
-        <div className="flex min-w-0 items-start gap-3 sm:flex-1">
+      <div className="flex flex-col gap-2">
+        <div className="flex items-start gap-3">
           <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-soft text-xs font-bold text-brand">
             {index}
           </span>
           <GoalTitle goalId={goal.id} title={goal.title} readOnly={locked} />
         </div>
 
-        <div className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1 sm:shrink-0">
+        <div className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1">
           <button
             type="button"
             onClick={() => setTasksOpen((v) => !v)}
