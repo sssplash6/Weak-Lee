@@ -258,6 +258,13 @@ export default async function DashboardPage({
     .filter((g) => needsCompletionReason(g))
     .map((g) => ({ id: g.id, title: g.title, percent: goalPercent(g) }));
 
+  // Candidates to carry into the new week — every current goal, with unfinished
+  // ones pre-checked in the Start-new-week dialog.
+  const carryGoals = period.goals.map((g) => {
+    const percent = goalPercent(g);
+    return { id: g.id, title: g.title, percent, done: percent === 100 };
+  });
+
   const now = new Date();
   const todayYmd = toYmd(now);
   const nowStamp = toStamp(now);
@@ -359,6 +366,11 @@ export default async function DashboardPage({
               <AssignedByMe items={assignedByMeViews} />
             </div>
           )}
+          {isAdmin(session!.user.email) && (
+            <div className="mt-6">
+              <AssignGoalButton people={team} />
+            </div>
+          )}
         </div>
       </aside>
 
@@ -406,6 +418,12 @@ export default async function DashboardPage({
       {assignedByMeViews.length > 0 && (
         <div className="mb-5 lg:hidden">
           <AssignedByMe items={assignedByMeViews} />
+        </div>
+      )}
+
+      {isAdmin(session!.user.email) && (
+        <div className="mb-5 lg:hidden">
+          <AssignGoalButton people={team} />
         </div>
       )}
 
@@ -465,6 +483,7 @@ export default async function DashboardPage({
           ) : (
             <StartNewWeekButton
               incompleteGoals={incompleteGoals}
+              carryGoals={carryGoals}
               defaultStart={defaultWeekStart}
               defaultEnd={defaultWeekEnd}
             />
@@ -478,7 +497,6 @@ export default async function DashboardPage({
         </div>
       </aside>
 
-      {isAdmin(session!.user.email) && <AssignGoalButton people={team} />}
       <FeedbackButton />
       </div>
     </>

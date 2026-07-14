@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import { startNewWeek } from "../actions";
 
 type IncompleteGoal = { id: string; title: string; percent: number };
+type CarryGoal = { id: string; title: string; percent: number; done: boolean };
 
 const MONTHS = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -28,15 +29,25 @@ function formatRangeLabel(startYmd: string, endYmd: string): string {
 
 export function StartNewWeekButton({
   incompleteGoals,
+  carryGoals,
   defaultStart,
   defaultEnd,
 }: {
   incompleteGoals: IncompleteGoal[];
+  carryGoals: CarryGoal[];
   defaultStart: string;
   defaultEnd: string;
 }) {
   const [open, setOpen] = useState(false);
   const [reasons, setReasons] = useState<Record<string, string>>({});
+  // Which goals to copy into the new week (unfinished ones default on), and the
+  // fresh deadline for each (defaults to the new week's end).
+  const [carry, setCarry] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(carryGoals.map((g) => [g.id, !g.done])),
+  );
+  const [carryDeadlines, setCarryDeadlines] = useState<Record<string, string>>(
+    () => Object.fromEntries(carryGoals.map((g) => [g.id, defaultEnd])),
+  );
   const [start, setStart] = useState(defaultStart);
   const [end, setEnd] = useState(defaultEnd);
   // Set once the user tries to start the week; drives the "what's missing" hints
@@ -49,16 +60,25 @@ export function StartNewWeekButton({
     (g) => (reasons[g.id] ?? "").trim().length > 0,
   );
   const validRange = !!start && !!end && start <= end;
+  // Every goal being carried forward needs a new deadline.
+  const carryValid = carryGoals.every(
+    (g) => !carry[g.id] || (carryDeadlines[g.id] ?? "").length > 0,
+  );
 
   // Everything that's stopping the week from starting, in plain language.
   const missing: string[] = [];
   if (hasUnfinished && !allFilled)
     missing.push("a reason for every goal below 100%");
+  if (!carryValid) missing.push("a deadline for each carried goal");
   if (!validRange) missing.push("a valid start date");
 
   function close() {
     setOpen(false);
     setReasons({});
+    setCarry(Object.fromEntries(carryGoals.map((g) => [g.id, !g.done])));
+    setCarryDeadlines(
+      Object.fromEntries(carryGoals.map((g) => [g.id, defaultEnd])),
+    );
     setStart(defaultStart);
     setEnd(defaultEnd);
     setAttempted(false);
@@ -80,7 +100,7 @@ export function StartNewWeekButton({
   }, [open, isPending]);
 
   function submit() {
-    if ((hasUnfinished && !allFilled) || !validRange) {
+    if ((hasUnfinished && !allFilled) || !carryValid || !validRange) {
       // Don't silently no-op — reveal exactly which fields still need filling.
       setAttempted(true);
       return;
@@ -89,8 +109,11 @@ export function StartNewWeekButton({
       goalId: g.id,
       reason: (reasons[g.id] ?? "").trim(),
     }));
+    const carryPayload = carryGoals
+      .filter((g) => carry[g.id])
+      .map((g) => ({ goalId: g.id, deadline: carryDeadlines[g.id] }));
     startTransition(async () => {
-      await startNewWeek(payload, { start, end });
+      await startNewWeek(payload, { start, end }, carryPayload);
       close();
     });
   }
@@ -122,8 +145,9 @@ export function StartNewWeekButton({
         <div className="mb-5">
           <h2 className="text-base font-bold text-ink">Start a new week</h2>
           <p className="mt-1 text-sm text-muted-fg">
-            Pick when the week starts — it ends on the preset date. The week
-            opens empty; add your goals afterwards.
+            Pick when the week starts — it ends on the preset date. Carry
+            unfinished goals forward below, or start fresh and add goals
+            afterwards.
           </p>
           <div className="mt-3 flex items-end gap-3">
             <label className="flex-1">
@@ -193,6 +217,61 @@ export function StartNewWeekButton({
         <p className="text-sm text-muted-fg">
           Start a fresh week? Your current goals will be archived.
         </p>
+      )}
+
+      {carryGoals.length > 0 && (
+        <div className="mt-6">
+          <h2 className="text-base font-bold text-ink">
+            Carry goals into the new week
+          </h2>
+          <p className="mt-1 text-sm text-muted-fg">
+            Checked goals are copied into the new week with the deadline you set.
+          </p>
+          <div className="mt-3 flex flex-col gap-2">
+            {carryGoals.map((g) => {
+              const checked = carry[g.id] ?? false;
+              return (
+                <div
+                  key={g.id}
+                  className="rounded-lg border border-line px-3 py-2.5"
+                >
+                  <label className="flex items-start gap-2.5">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(e) =>
+                        setCarry((c) => ({ ...c, [g.id]: e.target.checked }))
+                      }
+                      className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer rounded border-line accent-accent"
+                    />
+                    <span className="min-w-0 flex-1 text-sm font-medium text-ink">
+                      {g.title}
+                    </span>
+                    <span className="shrink-0 text-xs font-semibold tabular-nums text-accent">
+                      {g.percent}%
+                    </span>
+                  </label>
+                  {checked && (
+                    <label className="mt-2 flex items-center gap-2 pl-[26px] text-xs font-medium text-muted-fg">
+                      New deadline
+                      <input
+                        type="date"
+                        value={carryDeadlines[g.id] ?? ""}
+                        onChange={(e) =>
+                          setCarryDeadlines((d) => ({
+                            ...d,
+                            [g.id]: e.target.value,
+                          }))
+                        }
+                        className="rounded-lg border border-line px-2.5 py-1.5 text-sm text-ink focus:border-brand focus:outline-none"
+                      />
+                    </label>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
       )}
 
       {attempted && missing.length > 0 && (

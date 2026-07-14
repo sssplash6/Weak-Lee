@@ -586,6 +586,7 @@ export async function shareGoal(goalId: string, toUserId: string) {
 export async function startNewWeek(
   reasons: { goalId: string; reason: string }[] = [],
   range?: { start: string; end: string },
+  carry: { goalId: string; deadline: string }[] = [],
 ) {
   const userId = await requireUserId();
   const week = await getOrCreateCurrentWeek(userId);
@@ -609,6 +610,25 @@ export async function startNewWeek(
   const autoComplete = week.goals.filter(
     (g) => !isGoalComplete(g) && goalPercent(g) === 100,
   );
+
+  // Goals the user chose to carry into the new week, each with a fresh deadline
+  // (date-only, stored at UTC midnight to match how goal deadlines are kept).
+  const ymdRe = /^\d{4}-\d{2}-\d{2}$/;
+  const weekGoalById = new Map(week.goals.map((g) => [g.id, g]));
+  const carryPlan: { goal: (typeof week.goals)[number]; deadline: Date }[] = [];
+  for (const c of carry) {
+    const goal = weekGoalById.get(c.goalId);
+    if (!goal) continue; // ignore anything not in the closing week
+    if (!ymdRe.test(c.deadline)) {
+      throw new Error("Invalid carry-over deadline");
+    }
+    const [y, m, d] = c.deadline.split("-").map(Number);
+    const deadline = new Date(Date.UTC(y, m - 1, d));
+    if (Number.isNaN(deadline.getTime())) {
+      throw new Error("Invalid carry-over deadline");
+    }
+    carryPlan.push({ goal, deadline });
+  }
 
   // The new week's date range: either an explicit one chosen in the UI, or, by
   // default, the week immediately following the one being closed (so ranges stay
@@ -696,6 +716,28 @@ export async function startNewWeek(
         "FINE",
         `You were fined ${formatMoney(amount)} — ${note.toLowerCase()}.`,
       );
+    }
+
+    // Copy carried goals into the new week — title, priority, the fresh deadline,
+    // and their subtasks (done-state preserved so progress continues).
+    for (let i = 0; i < carryPlan.length; i++) {
+      const { goal, deadline } = carryPlan[i];
+      await tx.goal.create({
+        data: {
+          weekId: newWeek.id,
+          title: goal.title,
+          position: i + 1,
+          priority: goal.priority,
+          deadline,
+          subtasks: {
+            create: goal.subtasks.map((s, j) => ({
+              title: s.title,
+              position: j + 1,
+              isDone: s.isDone,
+            })),
+          },
+        },
+      });
     }
   });
   revalidatePath("/dashboard");
