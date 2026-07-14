@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { createPortal } from "react-dom";
 import { assignTask } from "../../admin/actions";
 
 type Scope = "WEEKLY" | "MONTHLY";
@@ -76,8 +77,8 @@ export function AssignGoalButton({
 
   if (people.length === 0) return null;
 
-  if (!open) {
-    return (
+  return (
+    <>
       <button
         type="button"
         onClick={() => setOpen(true)}
@@ -89,16 +90,18 @@ export function AssignGoalButton({
           Assign a goal
         </span>
       </button>
-    );
-  }
 
-  return (
-    <div
-      className="overlay-in fixed inset-0 z-50 flex items-center justify-center bg-ink/30 p-4 backdrop-blur-sm"
-      onClick={() => !isPending && close()}
-      role="dialog"
-      aria-modal="true"
-    >
+      {/* Portal to <body> so the modal escapes the sidebar's sticky stacking
+          context — otherwise the goal cards paint on top of it. */}
+      {open &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            className="overlay-in fixed inset-0 z-50 flex items-center justify-center bg-ink/30 p-4 backdrop-blur-sm"
+            onClick={() => !isPending && close()}
+            role="dialog"
+            aria-modal="true"
+          >
       <div
         className="modal-in w-full max-w-md rounded-2xl border border-line bg-surface p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
@@ -198,7 +201,10 @@ export function AssignGoalButton({
           </button>
         </div>
       </div>
-    </div>
+          </div>,
+          document.body,
+        )}
+    </>
   );
 }
 
