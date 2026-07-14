@@ -237,7 +237,7 @@ export function GoalCard({
           <GoalTitle goalId={goal.id} title={goal.title} readOnly={locked} />
         </div>
 
-        <div className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1">
+        <div className="flex w-full flex-wrap items-center justify-end gap-x-2 gap-y-1">
           <button
             type="button"
             onClick={() => setTasksOpen((v) => !v)}
