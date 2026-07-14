@@ -41,17 +41,18 @@ export function isGoalComplete(goal: {
 }
 
 /**
- * Whether a goal must carry a reflection reason when its period closes. Any goal
- * that isn't fully done needs one — that includes goals left incomplete AND
- * goals marked complete at a partial rate (e.g. "done at 70%"). Only a goal that
- * is both marked complete and at 100% is exempt.
+ * Whether a goal must carry a reflection reason when its period closes. A goal
+ * that has reached 100% — whether explicitly marked complete, set to a manual
+ * 100, or with every subtask done — is exempt and auto-counts as done (it gets
+ * marked complete as the period closes). Anything below 100% needs a reason,
+ * including a goal marked complete at a partial rate (e.g. "done at 70%").
  */
 export function needsCompletionReason(goal: {
   completedAt?: Date | string | null;
   manualPercent?: number | null;
   subtasks: { isDone: boolean }[];
 }): boolean {
-  return !isGoalComplete(goal) || goalPercent(goal) < 100;
+  return goalPercent(goal) < 100;
 }
 
 /**

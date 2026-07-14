@@ -6,7 +6,12 @@ import { prisma } from "@/lib/prisma";
 import { getOrCreateCurrentWeek, nextWeekBounds } from "@/lib/weeks";
 import { getOrCreateCurrentMonth, nextMonthBounds } from "@/lib/months";
 import { submissionTiming } from "@/lib/lateness";
-import { clampPercent, needsCompletionReason } from "@/lib/progress";
+import {
+  clampPercent,
+  goalPercent,
+  isGoalComplete,
+  needsCompletionReason,
+} from "@/lib/progress";
 import { isPriority, type Priority } from "@/lib/priority";
 import {
   formatMoney,
@@ -598,6 +603,13 @@ export async function startNewWeek(
     }
   }
 
+  // Goals that reached 100% (every subtask done, or a manual 100) but were never
+  // explicitly marked complete are auto-completed as the week closes, so they
+  // archive as done rather than reading as unfinished.
+  const autoComplete = week.goals.filter(
+    (g) => !isGoalComplete(g) && goalPercent(g) === 100,
+  );
+
   // The new week's date range: either an explicit one chosen in the UI, or, by
   // default, the week immediately following the one being closed (so ranges stay
   // sequential and never collide, even when several weeks close in one calendar week).
@@ -631,6 +643,14 @@ export async function startNewWeek(
         tx.goal.update({
           where: { id: goal.id },
           data: { incompleteReason: reasonByGoal.get(goal.id) },
+        }),
+      ),
+    );
+    await Promise.all(
+      autoComplete.map((goal) =>
+        tx.goal.update({
+          where: { id: goal.id },
+          data: { completedAt: new Date() },
         }),
       ),
     );
@@ -716,6 +736,12 @@ export async function startNewMonth(
     }
   }
 
+  // Goals at 100% that were never explicitly marked complete are auto-completed
+  // as the month closes, so they archive as done. Mirrors startNewWeek.
+  const autoComplete = month.goals.filter(
+    (g) => !isGoalComplete(g) && goalPercent(g) === 100,
+  );
+
   const { start, end } = nextMonthBounds(month.endDate);
 
   await prisma.$transaction(async (tx) => {
@@ -724,6 +750,14 @@ export async function startNewMonth(
         tx.goal.update({
           where: { id: goal.id },
           data: { incompleteReason: reasonByGoal.get(goal.id) },
+        }),
+      ),
+    );
+    await Promise.all(
+      autoComplete.map((goal) =>
+        tx.goal.update({
+          where: { id: goal.id },
+          data: { completedAt: new Date() },
         }),
       ),
     );
