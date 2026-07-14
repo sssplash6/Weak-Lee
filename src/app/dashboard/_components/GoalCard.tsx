@@ -39,6 +39,7 @@ import {
 } from "./icons";
 import { DeadlinePicker } from "./DeadlinePicker";
 import { PriorityPicker } from "./PriorityPicker";
+import { CONTROL_PILL } from "./controlPill";
 
 type SubtaskView = {
   id: string;
@@ -237,22 +238,23 @@ export function GoalCard({
           <GoalTitle goalId={goal.id} title={goal.title} readOnly={locked} />
         </div>
 
-        <div className="flex w-full flex-wrap items-center justify-end gap-x-2 gap-y-1">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pl-10">
           <button
             type="button"
             onClick={() => setTasksOpen((v) => !v)}
             aria-expanded={tasksOpen}
             aria-label={tasksOpen ? "Hide subtasks" : "Show subtasks"}
             title={tasksOpen ? "Hide subtasks" : "Show subtasks"}
-            className="inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-muted-fg transition hover:bg-canvas hover:text-ink"
+            className={`${CONTROL_PILL} shrink-0 text-muted-fg hover:bg-canvas hover:text-ink`}
           >
             <ChevronIcon
               className={`h-3.5 w-3.5 transition-transform ${
                 tasksOpen ? "rotate-90" : ""
               }`}
             />
-            <span className="text-xs font-semibold tabular-nums">
-              {subtasks.length}
+            <span className="tabular-nums">
+              {subtasks.length}{" "}
+              {subtasks.length === 1 ? "subtask" : "subtasks"}
             </span>
           </button>
           <PercentChip percent={percent} editable onCommit={onSetPercent} />
@@ -261,35 +263,40 @@ export function GoalCard({
             <div className="flex shrink-0 items-center gap-2">
               {priority && (
                 <span
-                  className={`inline-flex items-center gap-1 text-xs font-semibold ${PRIORITY_TEXT[priority]}`}
+                  className={`${CONTROL_PILL} ${PRIORITY_TEXT[priority]}`}
                   title={`Priority: ${PRIORITY_LABEL[priority]}`}
                 >
-                  <FlagIcon className="h-4 w-4" filled />
+                  <FlagIcon className="h-3.5 w-3.5" filled />
                   {PRIORITY_LABEL[priority]}
                 </span>
               )}
               {deadline && (
                 <span
-                  className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold tabular-nums ${
+                  className={`${CONTROL_PILL} tabular-nums ${
                     overdue
                       ? "bg-red-50 text-red-600"
                       : "bg-brand-soft text-brand"
                   }`}
                   title="Deadline"
                 >
-                  <CalendarIcon className="h-4 w-4" />
+                  <CalendarIcon className="h-3.5 w-3.5" />
                   {formatStamp(deadline, curYear)}
                 </span>
               )}
             </div>
           ) : (
             <div className="flex shrink-0 items-center gap-2">
-              <PriorityPicker value={priority} onChange={onSetPriority} />
+              <PriorityPicker
+                value={priority}
+                onChange={onSetPriority}
+                align="left"
+              />
               <DeadlinePicker
                 value={deadline}
                 todayYmd={todayYmd}
                 overdue={overdue}
                 onChange={onSetDeadline}
+                align="left"
               />
             </div>
           )}
@@ -307,7 +314,9 @@ export function GoalCard({
               alreadyShared={goal.sharedTo}
               onShare={(toUserId) => shareGoal(goal.id, toUserId)}
               ariaLabel="Delegate goal"
-              iconClassName="h-5 w-5"
+              iconClassName="h-3.5 w-3.5"
+              align="left"
+              showLabel
             />
           </span>
           {!locked && (
@@ -460,7 +469,7 @@ function PercentChip({
 
   if (!editable) {
     return (
-      <span className="shrink-0 text-sm font-semibold tabular-nums text-accent">
+      <span className={`${CONTROL_PILL} shrink-0 tabular-nums text-accent`}>
         {percent}%
       </span>
     );
@@ -476,7 +485,7 @@ function PercentChip({
         }}
         title="Click to set the percent yourself"
         aria-label="Edit goal progress percent"
-        className="shrink-0 rounded-md border border-transparent px-1 py-0.5 text-sm font-semibold tabular-nums text-accent transition hover:border-accent/40 hover:bg-accent-soft"
+        className={`${CONTROL_PILL} shrink-0 tabular-nums text-accent hover:bg-accent-soft`}
       >
         {percent}%
       </button>
@@ -536,9 +545,10 @@ function CompleteButton({
         onClick={onToggle}
         title="Completed — click to reopen"
         aria-label="Mark goal as not completed"
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand text-white transition hover:bg-brand-dark"
+        className={`${CONTROL_PILL} bg-brand text-white hover:bg-brand-dark`}
       >
-        <CheckCircleIcon className="h-5 w-5" />
+        <CheckCircleIcon className="h-3.5 w-3.5" />
+        Done
       </button>
     );
   }
@@ -551,11 +561,12 @@ function CompleteButton({
       onClick={onToggle}
       title="Mark this goal as completed"
       aria-label="Mark goal as completed"
-      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition hover:bg-brand-soft ${
-        allDone ? "text-brand" : "text-muted-fg hover:text-brand"
+      className={`${CONTROL_PILL} hover:bg-brand-soft hover:text-brand ${
+        allDone ? "text-brand" : "text-muted-fg"
       }`}
     >
-      <CheckCircleIcon className="h-5 w-5" />
+      <CheckCircleIcon className="h-3.5 w-3.5" />
+      Done
     </button>
   );
 }
@@ -646,12 +657,18 @@ function SharePicker({
   onShare,
   ariaLabel,
   iconClassName = "h-4 w-4",
+  align = "right",
+  showLabel = false,
 }: {
   team: TeamMember[];
   alreadyShared: string[];
   onShare: (toUserId: string) => Promise<void>;
   ariaLabel: string;
   iconClassName?: string;
+  align?: "left" | "right";
+  // When true, render as a labelled control pill ("Delegate") to match the
+  // other goal controls; otherwise a bare icon (used on compact subtask rows).
+  showLabel?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -679,15 +696,24 @@ function SharePicker({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="text-brand transition hover:text-brand-dark"
+        className={
+          showLabel
+            ? `${CONTROL_PILL} text-brand hover:bg-brand-soft`
+            : "text-brand transition hover:text-brand-dark"
+        }
         aria-label={ariaLabel}
         title="Delegate to a teammate"
       >
         <ShareIcon className={iconClassName} />
+        {showLabel && <span>Delegate</span>}
       </button>
 
       {open && (
-        <div className="pop-in absolute right-0 z-10 mt-1 w-52 rounded-xl border border-line bg-surface p-1 shadow-lg">
+        <div
+          className={`pop-in absolute z-10 mt-1 w-52 rounded-xl border border-line bg-surface p-1 shadow-lg ${
+            align === "left" ? "left-0" : "right-0"
+          }`}
+        >
           <p className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-fg">
             Delegate to
           </p>
@@ -844,10 +870,11 @@ function DeleteGoalButton({ goalId }: { goalId: string }) {
     <button
       type="button"
       onClick={() => setConfirming(true)}
-      className="text-red-500 transition hover:text-red-600"
+      className={`${CONTROL_PILL} text-red-500 hover:bg-red-50 hover:text-red-600`}
       aria-label="Delete goal"
     >
-      <TrashIcon className="h-5 w-5" />
+      <TrashIcon className="h-3.5 w-3.5" />
+      Delete
     </button>
   );
 }

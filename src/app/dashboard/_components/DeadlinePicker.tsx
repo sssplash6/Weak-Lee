@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { END_OF_DAY, formatStamp } from "@/lib/dates";
 import { CalendarIcon } from "./icons";
+import { CONTROL_PILL } from "./controlPill";
 
 const WEEKDAYS = ["M", "T", "W", "T", "F", "S", "S"];
 const MONTHS = [
@@ -30,6 +31,7 @@ export function DeadlinePicker({
   overdue,
   onChange,
   invalid = false,
+  align = "right",
 }: {
   value: string | null;
   todayYmd: string;
@@ -37,6 +39,8 @@ export function DeadlinePicker({
   onChange: (stamp: string | null) => void;
   // When true (and no date set), ring the icon in red as a required field.
   invalid?: boolean;
+  // Which edge the popover opens from ("left" opens rightward).
+  align?: "left" | "right";
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -79,24 +83,26 @@ export function DeadlinePicker({
         type="button"
         onClick={openPicker}
         title={value ? "Change deadline" : "Set a deadline"}
-        className={
+        className={`${CONTROL_PILL} tabular-nums ${
           value
-            ? `inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold tabular-nums transition ${
-                overdue
-                  ? "bg-red-50 text-red-600 hover:bg-red-100"
-                  : "bg-brand-soft text-brand hover:bg-brand-soft/70"
-              }`
-            : `flex h-8 w-8 items-center justify-center rounded-full text-muted-fg transition hover:bg-brand-soft hover:text-brand ${
+            ? overdue
+              ? "bg-red-50 text-red-600 hover:bg-red-100"
+              : "bg-brand-soft text-brand hover:bg-brand-soft/70"
+            : `text-muted-fg hover:bg-brand-soft hover:text-brand ${
                 invalid ? "ring-1 ring-red-400" : ""
               }`
-        }
+        }`}
       >
-        <CalendarIcon className="h-4 w-4" />
-        {value && <span>{formatStamp(value, curYear)}</span>}
+        <CalendarIcon className="h-3.5 w-3.5" />
+        {value ? formatStamp(value, curYear) : "Deadline"}
       </button>
 
       {open && (
-        <div className="pop-in absolute right-0 z-20 mt-1 w-64 rounded-xl border border-line bg-surface p-3 shadow-lg">
+        <div
+          className={`pop-in absolute z-20 mt-1 w-64 rounded-xl border border-line bg-surface p-3 shadow-lg ${
+            align === "left" ? "left-0" : "right-0"
+          }`}
+        >
           {/* Typed date + time */}
           <label className="block text-[11px] font-semibold uppercase tracking-wide text-muted-fg">
             Deadline

@@ -9,6 +9,7 @@ import {
   type Priority,
 } from "@/lib/priority";
 import { FlagIcon } from "./icons";
+import { CONTROL_PILL } from "./controlPill";
 
 /**
  * A goal's priority flag: a flag icon (tinted by the current priority, or muted
@@ -18,11 +19,15 @@ export function PriorityPicker({
   value,
   onChange,
   invalid = false,
+  align = "right",
 }: {
   value: Priority | null;
   onChange: (priority: Priority | null) => void;
   // When true, ring the flag in red to flag it as a required-but-unset field.
   invalid?: boolean;
+  // Which edge the menu opens from ("left" opens rightward — use when the
+  // trigger sits near the left edge so the menu doesn't spill off-screen).
+  align?: "left" | "right";
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -49,15 +54,20 @@ export function PriorityPicker({
         onClick={() => setOpen((v) => !v)}
         title={value ? `Priority: ${PRIORITY_LABEL[value]}` : "Set priority"}
         aria-label="Set priority"
-        className={`flex h-8 w-8 items-center justify-center rounded-full transition hover:bg-canvas ${
-          value ? PRIORITY_TEXT[value] : "text-muted-fg hover:text-ink"
+        className={`${CONTROL_PILL} ${
+          value ? PRIORITY_TEXT[value] : "text-muted-fg hover:bg-canvas hover:text-ink"
         } ${invalid ? "ring-1 ring-red-400" : ""}`}
       >
-        <FlagIcon className="h-4 w-4" filled={value != null} />
+        <FlagIcon className="h-3.5 w-3.5" filled={value != null} />
+        {value ? PRIORITY_LABEL[value] : "Priority"}
       </button>
 
       {open && (
-        <div className="pop-in absolute right-0 z-20 mt-1 w-40 rounded-xl border border-line bg-surface p-1 shadow-lg">
+        <div
+          className={`pop-in absolute z-20 mt-1 w-40 rounded-xl border border-line bg-surface p-1 shadow-lg ${
+            align === "left" ? "left-0" : "right-0"
+          }`}
+        >
           {PRIORITIES.map((p) => (
             <button
               key={p}
