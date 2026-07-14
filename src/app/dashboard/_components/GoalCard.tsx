@@ -245,7 +245,9 @@ export function GoalCard({
             aria-expanded={tasksOpen}
             aria-label={tasksOpen ? "Hide subtasks" : "Show subtasks"}
             title={tasksOpen ? "Hide subtasks" : "Show subtasks"}
-            className={`${CONTROL_PILL} shrink-0 text-muted-fg hover:bg-canvas hover:text-ink`}
+            // -ml-2 cancels the pill's own left padding so the chevron lines up
+            // exactly with the start of the goal title above it.
+            className={`${CONTROL_PILL} -ml-2 shrink-0 text-muted-fg hover:bg-canvas hover:text-ink`}
           >
             <ChevronIcon
               className={`h-3.5 w-3.5 transition-transform ${
@@ -253,8 +255,7 @@ export function GoalCard({
               }`}
             />
             <span className="tabular-nums">
-              {subtasks.length}{" "}
-              {subtasks.length === 1 ? "subtask" : "subtasks"}
+              {subtasks.length} {subtasks.length === 1 ? "task" : "tasks"}
             </span>
           </button>
           <PercentChip percent={percent} editable onCommit={onSetPercent} />
