@@ -9,9 +9,10 @@ type WeekPenalty = {
 };
 
 /**
- * The signed-in user's own fines, shown on their dashboard. Leads with this
- * week's fines (if any) and always shows the running total. Red-tinted, since
- * fines are a negative — but kept compact so it informs rather than alarms.
+ * The signed-in user's own fines, shown on their dashboard. Leads with the
+ * running total as the hero figure — that's the number that matters — then
+ * breaks it down into this week's fines and earlier ones. Red-tinted, since
+ * fines are a negative, but calm rather than alarming.
  */
 export function PenaltyNotice({
   weekPenalties,
@@ -24,57 +25,78 @@ export function PenaltyNotice({
   weekTotal: number;
   allTimeTotal: number;
 }) {
+  const hasWeek = weekPenalties.length > 0;
+  const hasEarlier = earlierPenalties.length > 0;
+
   return (
-    <div className="rounded-xl border border-red-200 bg-red-50/60 px-4 py-3">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-sm font-semibold text-red-700">
-          {weekTotal > 0 ? "Fines this week" : "Fines"}
-        </p>
-        <p className="text-sm font-bold tabular-nums text-red-700">
-          {formatMoney(weekTotal > 0 ? weekTotal : allTimeTotal)}
-        </p>
-      </div>
+    <div className="rounded-xl border border-red-200 bg-red-50/60 p-4">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-red-700/70">
+        Fines
+      </p>
+      <p className="mt-0.5 text-3xl font-bold leading-none tabular-nums text-red-700">
+        {formatMoney(allTimeTotal)}
+      </p>
+      <p className="mt-1.5 text-xs text-red-700/60">
+        total to date
+        {weekTotal > 0 && (
+          <> · {formatMoney(weekTotal)} this week</>
+        )}
+      </p>
 
-      {weekPenalties.length > 0 && (
-        <ul className="mt-2 flex flex-col gap-1">
-          {weekPenalties.map((p) => (
-            <PenaltyLine key={p.id} penalty={p} />
-          ))}
-        </ul>
+      {hasWeek && (
+        <PenaltyGroup
+          title={hasEarlier ? "This week" : null}
+          items={weekPenalties}
+        />
       )}
-
-      {earlierPenalties.length > 0 && (
-        <>
-          <p className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-red-700/70">
-            Earlier fines
-          </p>
-          <ul className="mt-1 flex flex-col gap-1">
-            {earlierPenalties.map((p) => (
-              <PenaltyLine key={p.id} penalty={p} />
-            ))}
-          </ul>
-          <p className="mt-2 text-xs font-medium text-red-700/70">
-            Total to date: {formatMoney(allTimeTotal)}
-          </p>
-        </>
+      {hasEarlier && (
+        <PenaltyGroup title={hasWeek ? "Earlier" : null} items={earlierPenalties} />
       )}
     </div>
   );
 }
 
-/** One fine: its reason (label + note) and amount, on a single line. */
-function PenaltyLine({ penalty: p }: { penalty: WeekPenalty }) {
+/** A titled block of fine lines. Title is omitted when there's only one group. */
+function PenaltyGroup({
+  title,
+  items,
+}: {
+  title: string | null;
+  items: WeekPenalty[];
+}) {
   return (
-    <li className="flex items-center gap-2 text-xs text-red-700/90">
-      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-red-500" />
-      <span className="min-w-0 flex-1 truncate">
-        {p.label}
-        {p.note ? ` · ${p.note}` : ""}
-        <span className="text-red-700/60"> · {p.dateLabel}</span>
-      </span>
-      <span className="shrink-0 font-semibold tabular-nums">
-        {formatMoney(p.amount)}
-      </span>
+    <div className="mt-3">
+      {title && (
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-red-700/60">
+          {title}
+        </p>
+      )}
+      <ul className={title ? "mt-1" : ""}>
+        {items.map((p) => (
+          <PenaltyLine key={p.id} penalty={p} />
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/**
+ * One fine: reason + amount on the top line (amount right-aligned, stays put
+ * when the reason wraps), with the note and date on a quieter line below.
+ */
+function PenaltyLine({ penalty: p }: { penalty: WeekPenalty }) {
+  const sub = [p.note, p.dateLabel].filter(Boolean).join(" · ");
+  return (
+    <li className="border-t border-red-200/70 py-1.5 first:border-t-0">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="min-w-0 text-xs font-medium text-red-800">
+          {p.label}
+        </span>
+        <span className="shrink-0 text-xs font-bold tabular-nums text-red-700">
+          {formatMoney(p.amount)}
+        </span>
+      </div>
+      {sub && <p className="mt-0.5 text-[11px] text-red-700/55">{sub}</p>}
     </li>
   );
 }
