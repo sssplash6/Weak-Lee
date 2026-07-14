@@ -38,7 +38,8 @@ import { NotificationsBell } from "./_components/NotificationsBell";
 import { SubmitReminder } from "./_components/SubmitReminder";
 import { BonusNotice } from "./_components/BonusNotice";
 import { AssignedTasks } from "./_components/AssignedTasks";
-import { AssignGoalPanel } from "./_components/AssignGoalPanel";
+import { AssignGoalButton } from "./_components/AssignGoalButton";
+import { AssignedByMe } from "./_components/AssignedByMe";
 import { PeriodToggle } from "./_components/PeriodToggle";
 import { PENALTY_LABEL } from "@/lib/penalties";
 
@@ -108,6 +109,7 @@ export default async function DashboardPage({
     penalties,
     bonuses,
     assignedTasks,
+    assignedByMe,
     recentNotifications,
     unreadCount,
   ] = await Promise.all([
@@ -145,6 +147,19 @@ export default async function DashboardPage({
           scope: true,
           deadline: true,
           completedAt: true,
+        },
+      }),
+      // Goals this user has assigned to others — shown beneath their fines.
+      prisma.assignedTask.findMany({
+        where: { assignedById: userId },
+        orderBy: [{ completedAt: "asc" }, { createdAt: "desc" }],
+        select: {
+          id: true,
+          title: true,
+          scope: true,
+          deadline: true,
+          completedAt: true,
+          user: { select: { name: true, email: true } },
         },
       }),
       prisma.notification.findMany({
@@ -220,6 +235,16 @@ export default async function DashboardPage({
       deadlineLabel: t.deadline ? formatYmd(toYmd(t.deadline)) : null,
       done: t.completedAt != null,
     }));
+
+  // Goals this user handed to others (both scopes), pending first.
+  const assignedByMeViews = assignedByMe.map((t) => ({
+    id: t.id,
+    title: t.title,
+    recipient: displayName(t.user),
+    scope: t.scope,
+    deadlineLabel: t.deadline ? formatYmd(toYmd(t.deadline)) : null,
+    done: t.completedAt != null,
+  }));
 
   const overall = weekPercent(period.goals);
   const locked = period.goalsLocked;
@@ -329,6 +354,11 @@ export default async function DashboardPage({
           {moneyNotices && (
             <div className="mt-6 flex flex-col gap-3">{moneyNotices}</div>
           )}
+          {assignedByMeViews.length > 0 && (
+            <div className="mt-6">
+              <AssignedByMe items={assignedByMeViews} />
+            </div>
+          )}
         </div>
       </aside>
 
@@ -370,6 +400,12 @@ export default async function DashboardPage({
           }`}
         >
           {moneyNotices}
+        </div>
+      )}
+
+      {assignedByMeViews.length > 0 && (
+        <div className="mb-5 lg:hidden">
+          <AssignedByMe items={assignedByMeViews} />
         </div>
       )}
 
@@ -415,9 +451,8 @@ export default async function DashboardPage({
       <div className="mt-8 lg:hidden">
         <WeekArchive weeks={archive} periodNoun={view} />
       </div>
-      <div className="mt-8 flex flex-col gap-6 xl:hidden">
+      <div className="mt-8 xl:hidden">
         <WeekCalendar deadlines={deadlineDots} />
-        {isAdmin(session!.user.email) && <AssignGoalPanel people={team} />}
       </div>
 
         <footer className="mt-10 border-t border-line pt-6">
@@ -440,10 +475,10 @@ export default async function DashboardPage({
       <aside className="hidden w-64 shrink-0 xl:block">
         <div className="sticky top-8">
           <WeekCalendar deadlines={deadlineDots} />
-          {isAdmin(session!.user.email) && <AssignGoalPanel people={team} />}
         </div>
       </aside>
 
+      {isAdmin(session!.user.email) && <AssignGoalButton people={team} />}
       <FeedbackButton />
       </div>
     </>
