@@ -373,7 +373,7 @@ export default async function DashboardPage({
             </div>
           )}
           {isAdmin(session!.user.email) && (
-            <div className="mt-6">
+            <div className="mt-72">
               <AssignGoalButton people={team} />
             </div>
           )}

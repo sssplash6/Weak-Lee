@@ -81,12 +81,13 @@ export function AssignGoalButton({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex w-full items-center gap-2 rounded-xl border border-line bg-surface px-4 py-3 text-sm font-semibold text-ink transition hover:border-brand hover:text-brand"
+        aria-label="Assign a goal"
+        className="group inline-flex items-center rounded-full bg-brand px-2.5 py-2 text-sm font-medium text-white shadow-md transition hover:bg-brand-dark"
       >
-        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand text-white">
-          <PlusIcon className="h-3.5 w-3.5" />
+        <PlusIcon className="h-4 w-4 shrink-0" />
+        <span className="ml-0 max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-300 ease-out group-hover:ml-2 group-hover:max-w-[8rem] group-hover:opacity-100">
+          Assign a goal
         </span>
-        Assign a goal
       </button>
     );
   }
