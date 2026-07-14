@@ -26,8 +26,9 @@ const CELL: Record<
 
 /**
  * A read-only per-person history of the last few Monday meetings: one row per
- * person, one cell per meeting (newest on the left). Hover a cell for its date
- * and status. Collapsed by default to keep the admin page tidy.
+ * person, one cell per meeting (oldest on the left, newest on the right). Hover
+ * a cell for its date and status. Collapsed by default to keep the admin page
+ * tidy.
  */
 export function AttendanceHistory({
   columns,
@@ -37,6 +38,10 @@ export function AttendanceHistory({
   rows: AttendanceHistoryRow[];
 }) {
   const [open, setOpen] = useState(false);
+
+  // Data arrives newest → oldest; render it oldest → newest so the most recent
+  // meeting sits on the right (the natural "latest" position on a timeline).
+  const orderedColumns = [...columns].reverse();
 
   if (rows.length === 0 || columns.length === 0) {
     return (
@@ -75,7 +80,7 @@ export function AttendanceHistory({
               <thead>
                 <tr>
                   <th className="sticky left-0 bg-surface" />
-                  {columns.map((c, i) => (
+                  {orderedColumns.map((c, i) => (
                     <th
                       key={i}
                       className="px-1 text-center text-[10px] font-medium tabular-nums text-muted-fg"
@@ -101,18 +106,18 @@ export function AttendanceHistory({
                         </span>
                       </span>
                     </td>
-                    {r.cells.map((s, i) => (
+                    {[...r.cells].reverse().map((s, i) => (
                       <td key={i} className="text-center">
                         {s ? (
                           <span
-                            title={`${columns[i]} · ${CELL[s].label}`}
+                            title={`${orderedColumns[i]} · ${CELL[s].label}`}
                             className={`inline-flex h-6 w-6 items-center justify-center rounded-md text-[11px] font-bold ${CELL[s].cls}`}
                           >
                             {CELL[s].ch}
                           </span>
                         ) : (
                           <span
-                            title={`${columns[i]} · not marked`}
+                            title={`${orderedColumns[i]} · not marked`}
                             className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-fg/40"
                           >
                             –
