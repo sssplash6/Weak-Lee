@@ -311,6 +311,12 @@ export default async function DashboardPage({
   // returns it to its original spot.
   goals.sort((a, b) => Number(a.completed) - Number(b.completed));
 
+  // Goals delegated to this user by a teammate move into the Inbox section
+  // instead of the main list — but they're still real goals in the period, so
+  // they keep counting toward the week/month percent.
+  const inboxGoals = goals.filter((g) => g.receivedFrom);
+  const ownGoals = goals.filter((g) => !g.receivedFrom);
+
   const team = members.map((m) => ({ id: m.id, name: displayName(m) }));
 
   const archive = archivedPeriods.map((p) => ({
@@ -427,7 +433,35 @@ export default async function DashboardPage({
         </div>
       )}
 
-      <AssignedTasks tasks={assignedTaskViews} />
+      {(inboxGoals.length > 0 || assignedTaskViews.length > 0) && (
+        <section className="mb-6">
+          <div className="mb-3 flex items-center gap-2">
+            <h2 className="text-sm font-semibold text-ink">Inbox</h2>
+            <span className="rounded-full bg-canvas px-2 py-0.5 text-[11px] font-bold tabular-nums text-muted-fg">
+              {inboxGoals.length + assignedTaskViews.length}
+            </span>
+            <span className="text-xs text-muted-fg">from your team</span>
+          </div>
+
+          <AssignedTasks tasks={assignedTaskViews} />
+
+          {inboxGoals.length > 0 && (
+            <div className="flex flex-col gap-4">
+              {inboxGoals.map((goal, i) => (
+                <GoalCard
+                  key={goal.id}
+                  goal={goal}
+                  index={i + 1}
+                  team={team}
+                  todayYmd={todayYmd}
+                  nowStamp={nowStamp}
+                  locked={locked}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       <WeekSubmit
         scope={view}
@@ -437,7 +471,7 @@ export default async function DashboardPage({
       />
 
       <section className="flex flex-col gap-4">
-        {goals.map((goal, i) => (
+        {ownGoals.map((goal, i) => (
           <GoalCard
             key={goal.id}
             goal={goal}
@@ -451,13 +485,13 @@ export default async function DashboardPage({
 
         {!locked && (
           <AddGoalCard
-            nextIndex={goals.length + 1}
+            nextIndex={ownGoals.length + 1}
             todayYmd={todayYmd}
             scope={view}
           />
         )}
 
-        {goals.length === 0 && (
+        {ownGoals.length === 0 && (
           <p className="px-1 text-sm text-muted-fg">
             Add your goals for the {view}, then break each one into subtasks.
           </p>
