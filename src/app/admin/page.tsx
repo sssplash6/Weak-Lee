@@ -471,8 +471,10 @@ export default async function AdminPage({
     title: t.title,
     note: t.note,
     assigneeName: t.user.name ?? t.user.email ?? "—",
+    scope: t.scope,
     scopeLabel: t.scope === "MONTHLY" ? "Monthly" : "Weekly",
     deadlineLabel: t.deadline ? formatYmd(toYmd(t.deadline)) : null,
+    deadline: t.deadline ? toYmd(t.deadline) : null,
     done: t.completedAt != null,
     createdAtLabel: formatDateTimeTz(t.createdAt),
   }));

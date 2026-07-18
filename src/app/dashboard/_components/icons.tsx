@@ -25,6 +25,25 @@ export function TrashIcon({ className }: IconProps) {
   );
 }
 
+/** A pencil — used for edit actions. */
+export function PencilIcon({ className }: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M16.5 4.5l3 3L8 19l-3.5.5L5 16z" />
+      <path d="M14.5 6.5l3 3" />
+    </svg>
+  );
+}
+
 /** A circle with a check — used for the "mark as completed" action. */
 export function CheckCircleIcon({ className }: IconProps) {
   return (

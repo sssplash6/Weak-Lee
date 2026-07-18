@@ -2,6 +2,7 @@
 
 import { useTransition } from "react";
 import { TrashIcon } from "../../dashboard/_components/icons";
+import { EditAssignedTask } from "../../dashboard/_components/EditAssignedTask";
 import { deleteAssignedTask } from "../actions";
 
 export type AdminAssignedTask = {
@@ -9,8 +10,10 @@ export type AdminAssignedTask = {
   title: string;
   note: string | null;
   assigneeName: string;
+  scope: "WEEKLY" | "MONTHLY";
   scopeLabel: string; // "Weekly" | "Monthly"
   deadlineLabel: string | null;
+  deadline: string | null; // YYYY-MM-DD, for the edit form
   done: boolean;
   createdAtLabel: string;
 };
@@ -76,6 +79,16 @@ function TaskRow({ task: t }: { task: AdminAssignedTask }) {
       <span className="shrink-0 rounded-full bg-canvas px-2 py-0.5 text-[11px] font-medium text-muted-fg">
         {t.scopeLabel}
       </span>
+      <EditAssignedTask
+        task={{
+          id: t.id,
+          title: t.title,
+          note: t.note,
+          deadline: t.deadline,
+          scope: t.scope,
+          recipientName: t.assigneeName,
+        }}
+      />
       <button
         type="button"
         disabled={isPending}

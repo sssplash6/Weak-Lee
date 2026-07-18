@@ -1,9 +1,13 @@
+import { EditAssignedTask } from "./EditAssignedTask";
+
 export type AssignedByMeItem = {
   id: string;
   title: string;
   recipient: string;
   scope: "WEEKLY" | "MONTHLY";
   deadlineLabel: string | null;
+  deadline: string | null; // YYYY-MM-DD, for the edit form
+  note: string | null;
   done: boolean;
 };
 
@@ -38,12 +42,24 @@ export function AssignedByMe({ items }: { items: AssignedByMeItem[] }) {
               >
                 {t.title}
               </span>
-              <span
-                className={`shrink-0 text-[11px] font-semibold ${
-                  t.done ? "text-green-700" : "text-muted-fg"
-                }`}
-              >
-                {t.done ? "Done" : "Pending"}
+              <span className="flex shrink-0 items-center gap-1.5">
+                <span
+                  className={`text-[11px] font-semibold ${
+                    t.done ? "text-green-700" : "text-muted-fg"
+                  }`}
+                >
+                  {t.done ? "Done" : "Pending"}
+                </span>
+                <EditAssignedTask
+                  task={{
+                    id: t.id,
+                    title: t.title,
+                    note: t.note,
+                    deadline: t.deadline,
+                    scope: t.scope,
+                    recipientName: t.recipient,
+                  }}
+                />
               </span>
             </div>
             <p className="mt-0.5 text-[11px] text-muted-fg">

@@ -20,6 +20,7 @@ import {
   MISSED_SUBMISSION_PENALTY,
 } from "@/lib/penalties";
 import { notify } from "@/lib/notifications";
+import { formatYmd, toYmd } from "@/lib/dates";
 import { AVATAR_EMOJIS } from "@/lib/avatar";
 
 async function requireUserId(): Promise<string> {
@@ -106,6 +107,74 @@ function parseRequiredDeadline(stamp: string): Date {
   const deadline = new Date(`${stamp}:00.000Z`);
   if (Number.isNaN(deadline.getTime())) throw new Error("Invalid deadline");
   return deadline;
+}
+
+/** A sender's display name, for the notifications sent to share recipients. */
+async function displayNameOf(userId: string): Promise<string> {
+  const u = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { name: true, email: true },
+  });
+  return u?.name ?? u?.email ?? "A teammate";
+}
+
+/**
+ * After the sender edits a goal they've delegated, mirror the change onto every
+ * recipient's linked copy and notify them. No-op (one indexed lookup) when the
+ * goal isn't shared, so normal goal edits stay cheap. The recipient's own
+ * progress (subtasks, completion) is untouched — only the definition changes.
+ */
+async function syncGoalShares(
+  goalId: string,
+  senderId: string,
+  update: { title?: string; deadline?: Date | null },
+  message: (sender: string) => string,
+) {
+  const shares = await prisma.goalShare.findMany({
+    where: { originalGoalId: goalId },
+    select: { copyGoalId: true, toUserId: true },
+  });
+  if (shares.length === 0) return;
+  const sender = await displayNameOf(senderId);
+  await prisma.$transaction(async (tx) => {
+    await tx.goal.updateMany({
+      where: { id: { in: shares.map((s) => s.copyGoalId) } },
+      data: update,
+    });
+    await notify(
+      tx,
+      shares.map((s) => s.toUserId),
+      "TASK_ASSIGNED",
+      message(sender),
+    );
+  });
+}
+
+/** The subtask counterpart of `syncGoalShares` — mirrors a renamed delegated
+ * subtask onto every recipient's copy and notifies them. */
+async function syncSubtaskShares(
+  subtaskId: string,
+  senderId: string,
+  title: string,
+) {
+  const shares = await prisma.subtaskShare.findMany({
+    where: { originalSubtaskId: subtaskId },
+    select: { copySubtaskId: true, toUserId: true },
+  });
+  if (shares.length === 0) return;
+  const sender = await displayNameOf(senderId);
+  await prisma.$transaction(async (tx) => {
+    await tx.subtask.updateMany({
+      where: { id: { in: shares.map((s) => s.copySubtaskId) } },
+      data: { title },
+    });
+    await notify(
+      tx,
+      shares.map((s) => s.toUserId),
+      "TASK_ASSIGNED",
+      `${sender} renamed a subtask they shared with you to “${title}”.`,
+    );
+  });
 }
 
 /** Which period a goal-list action targets: the current week or current month. */
@@ -223,6 +292,12 @@ export async function renameGoal(goalId: string, title: string) {
   if (!trimmed) return;
   await assertGoalEditable(goalId, userId);
   await prisma.goal.update({ where: { id: goalId }, data: { title: trimmed } });
+  await syncGoalShares(
+    goalId,
+    userId,
+    { title: trimmed },
+    (sender) => `${sender} renamed a goal they shared with you to “${trimmed}”.`,
+  );
   revalidatePath("/dashboard");
 }
 
@@ -305,6 +380,11 @@ export async function setGoalDeadline(goalId: string, stamp: string | null) {
   }
 
   await prisma.goal.update({ where: { id: goalId }, data: { deadline } });
+  await syncGoalShares(goalId, userId, { deadline }, (sender) =>
+    deadline
+      ? `${sender} set the deadline on a goal they shared with you to ${formatYmd(toYmd(deadline))}.`
+      : `${sender} cleared the deadline on a goal they shared with you.`,
+  );
   revalidatePath("/dashboard");
 }
 
@@ -415,6 +495,7 @@ export async function renameSubtask(subtaskId: string, title: string) {
     where: { id: subtaskId },
     data: { title: trimmed },
   });
+  await syncSubtaskShares(subtaskId, userId, trimmed);
   revalidatePath("/dashboard");
 }
 

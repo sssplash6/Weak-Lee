@@ -162,6 +162,7 @@ export default async function DashboardPage({
         select: {
           id: true,
           title: true,
+          note: true,
           scope: true,
           deadline: true,
           completedAt: true,
@@ -281,6 +282,8 @@ export default async function DashboardPage({
     recipient: displayName(t.user),
     scope: t.scope,
     deadlineLabel: t.deadline ? formatYmd(toYmd(t.deadline)) : null,
+    deadline: t.deadline ? toYmd(t.deadline) : null,
+    note: t.note,
     done: t.completedAt != null,
   }));
 

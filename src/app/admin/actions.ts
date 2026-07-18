@@ -458,6 +458,69 @@ export async function assignTask(
   revalidatePath("/dashboard");
 }
 
+/**
+ * Edit an assigned task's definition — title, note, deadline, weekly/monthly
+ * scope. Changing the scope moves it to the matching view on the assignee's
+ * dashboard. The assignee is notified that their assignment changed. The
+ * original assigner or an admin may edit; the assignee is never reassigned.
+ */
+export async function editAssignedTask(
+  taskId: string,
+  title: string,
+  deadline?: string | null,
+  note?: string,
+  scope: "WEEKLY" | "MONTHLY" = "WEEKLY",
+) {
+  const session = await auth();
+  const editorId = session?.user?.id;
+  if (!editorId) throw new Error("Not authenticated");
+
+  const task = await prisma.assignedTask.findUnique({
+    where: { id: taskId },
+    select: { id: true, userId: true, assignedById: true },
+  });
+  if (!task) throw new Error("Task not found");
+  // The assigner or an admin may edit — nobody else.
+  if (!isAdmin(session?.user?.email) && task.assignedById !== editorId) {
+    throw new Error("Not authorized");
+  }
+
+  const cleanTitle = title.trim().slice(0, 300);
+  if (!cleanTitle) throw new Error("A title is required.");
+
+  let due: Date | null = null;
+  if (deadline) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(deadline)) {
+      throw new Error("Invalid deadline");
+    }
+    const [y, m, d] = deadline.split("-").map(Number);
+    due = new Date(Date.UTC(y, m - 1, d));
+    if (Number.isNaN(due.getTime())) throw new Error("Invalid deadline");
+  }
+
+  if (scope !== "WEEKLY" && scope !== "MONTHLY") {
+    throw new Error("Invalid scope");
+  }
+
+  await prisma.assignedTask.update({
+    where: { id: taskId },
+    data: {
+      title: cleanTitle,
+      note: note?.trim().slice(0, 500) || null,
+      scope,
+      deadline: due,
+    },
+  });
+  await notify(
+    prisma,
+    task.userId,
+    "TASK_ASSIGNED",
+    `Your assigned ${scope === "MONTHLY" ? "monthly" : "weekly"} goal was updated: “${cleanTitle}”${due ? ` — due ${formatYmd(toYmd(due))}` : ""}.`,
+  );
+  revalidatePath("/admin");
+  revalidatePath("/dashboard");
+}
+
 /** Remove an assigned task (e.g. created by mistake or no longer needed). Admin-only. */
 export async function deleteAssignedTask(taskId: string) {
   const session = await auth();
