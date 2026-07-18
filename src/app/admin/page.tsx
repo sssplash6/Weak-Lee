@@ -501,6 +501,12 @@ export default async function AdminPage({
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <Link
+            href="/admin/review"
+            className="inline-flex shrink-0 items-center rounded-lg border border-line bg-surface px-4 py-2 text-sm font-medium text-ink transition hover:border-brand/40 hover:bg-canvas hover:text-brand"
+          >
+            Week in review
+          </Link>
+          <Link
             href="/dashboard"
             className="group inline-flex shrink-0 items-center gap-2 rounded-lg border border-line bg-surface px-4 py-2 text-sm font-medium text-ink transition hover:border-brand/40 hover:bg-canvas hover:text-brand"
           >
