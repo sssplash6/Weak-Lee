@@ -4,9 +4,11 @@ import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/admin";
 import { resolveAvatar } from "@/lib/avatar";
 import { formatDateTimeTz } from "@/lib/dates";
+import { formatMoney } from "@/lib/penalties";
 import { BackLink } from "@/app/_components/BackLink";
 import { ReportForm } from "./_components/ReportForm";
 import { PenaltyMatrix } from "./_components/PenaltyMatrix";
+import { FineArchive } from "./_components/FineArchive";
 import { REASONS } from "./reasons";
 
 // The written penalty policy, digitized from the company sheet. Amounts here
@@ -86,7 +88,6 @@ export default async function PenaltiesPage() {
       email: true,
       department: true,
       avatar: true,
-      finesPaid: true,
       penalties: {
         orderBy: { createdAt: "desc" },
         select: {
@@ -95,50 +96,85 @@ export default async function PenaltiesPage() {
           amount: true,
           note: true,
           createdAt: true,
+          paidAt: true,
         },
       },
     },
   });
 
-  // One matrix row per employee: their issued fines summed per reason, plus
-  // the individual fines behind the sums (shown when the row is expanded).
-  // Heaviest totals first so the table leads with what needs attention.
-  const rows = users
-    .map((u) => {
-      const av = resolveAvatar(u.avatar, u.email ?? u.id);
-      const byType: Record<string, number> = {};
-      for (const p of u.penalties) {
-        byType[p.type] = (byType[p.type] ?? 0) + p.amount;
-      }
-      const total = u.penalties.reduce((s, p) => s + p.amount, 0);
-      return {
-        id: u.id,
-        name: u.name ?? u.email ?? "—",
-        department: u.department,
-        emoji: av.emoji,
-        bg: av.bg,
-        cells: REASONS.map((r) => byType[r.type] ?? 0),
-        total,
-        // Never show more paid than owed, even if a fine was deleted after payment.
-        paid: Math.min(u.finesPaid, total),
-        fines: u.penalties.map((p) => {
-          const idx = REASONS.findIndex((r) => r.type === p.type);
-          return {
-            id: p.id,
-            // Unknown types land in the "Other" column rather than crashing.
-            reasonIndex: idx === -1 ? REASONS.length - 1 : idx,
-            note: p.note,
-            dateLabel: formatDateTimeTz(p.createdAt),
-            amount: p.amount,
-          };
-        }),
-      };
-    })
-    .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+  const reasonIndexOf = (type: string) => {
+    const idx = REASONS.findIndex((r) => r.type === type);
+    // Unknown types land in the "Other" column rather than crashing.
+    return idx === -1 ? REASONS.length - 1 : idx;
+  };
 
-  const grandTotal = rows.reduce((s, r) => s + r.total, 0);
-  const grandPaid = rows.reduce((s, r) => s + r.paid, 0);
-  const grandOutstanding = Math.max(0, grandTotal - grandPaid);
+  // Split each person's fines into active (outstanding) and archived (settled),
+  // then build one row per group. The active matrix leads the page with what's
+  // still owed; the archive records what's already been paid.
+  const built = users.map((u) => {
+    const av = resolveAvatar(u.avatar, u.email ?? u.id);
+    const active = u.penalties.filter((p) => p.paidAt == null);
+    const settled = u.penalties.filter((p) => p.paidAt != null);
+
+    const byType: Record<string, number> = {};
+    for (const p of active) byType[p.type] = (byType[p.type] ?? 0) + p.amount;
+    const outstanding = active.reduce((s, p) => s + p.amount, 0);
+    const paid = settled.reduce((s, p) => s + p.amount, 0);
+
+    const person = {
+      id: u.id,
+      name: u.name ?? u.email ?? "—",
+      department: u.department,
+      emoji: av.emoji,
+      bg: av.bg,
+    };
+
+    return {
+      ...person,
+      outstanding,
+      paid,
+      cells: REASONS.map((r) => byType[r.type] ?? 0),
+      fines: active.map((p) => ({
+        id: p.id,
+        reasonIndex: reasonIndexOf(p.type),
+        note: p.note,
+        dateLabel: formatDateTimeTz(p.createdAt),
+        amount: p.amount,
+      })),
+      // Archived fines, most recently settled first.
+      archived: settled
+        .map((p) => ({
+          id: p.id,
+          reasonIndex: reasonIndexOf(p.type),
+          note: p.note,
+          paidLabel: formatDateTimeTz(p.paidAt!),
+          amount: p.amount,
+        }))
+        .sort((a, b) => (a.paidLabel < b.paidLabel ? 1 : -1)),
+    };
+  });
+
+  // Active matrix: only people who still owe, heaviest first.
+  const rows = built
+    .filter((r) => r.outstanding > 0)
+    .sort((a, b) => b.outstanding - a.outstanding || a.name.localeCompare(b.name));
+
+  // Archive: only people with at least one settled fine, most paid first.
+  const archiveRows = built
+    .filter((r) => r.archived.length > 0)
+    .map((r) => ({
+      id: r.id,
+      name: r.name,
+      department: r.department,
+      emoji: r.emoji,
+      bg: r.bg,
+      paid: r.paid,
+      fines: r.archived,
+    }))
+    .sort((a, b) => b.paid - a.paid || a.name.localeCompare(b.name));
+
+  const grandOutstanding = rows.reduce((s, r) => s + r.outstanding, 0);
+  const grandPaid = built.reduce((s, r) => s + r.paid, 0);
 
   const colleagues = users
     .filter((u) => u.id !== session.user.id)
@@ -218,19 +254,47 @@ export default async function PenaltiesPage() {
 
       <section className="mt-8">
         <h2 className="mb-1 px-1 text-sm font-semibold text-ink">
-          Current penalties
+          Active fines
         </h2>
         <p className="mb-3 px-1 text-xs text-muted-fg">
-          Everyone&rsquo;s issued fines to date, by reason. Tap a person to see
-          each fine and why it was issued.
+          Outstanding fines by reason — what each person still owes. Tap a
+          person to see each fine.
+          {viewerIsAdmin && (
+            <> Settle a fine once it&rsquo;s been cut from their salary.</>
+          )}
         </p>
-        <PenaltyMatrix
-          rows={rows}
-          grandTotal={grandTotal}
-          grandOutstanding={grandOutstanding}
-          viewerIsAdmin={viewerIsAdmin}
-        />
+        {rows.length > 0 ? (
+          <PenaltyMatrix
+            rows={rows}
+            grandOutstanding={grandOutstanding}
+            viewerIsAdmin={viewerIsAdmin}
+          />
+        ) : (
+          <div className="rounded-xl border border-line bg-surface px-4 py-8 text-center">
+            <p className="text-sm font-semibold text-green-600">
+              No outstanding fines 🎉
+            </p>
+            <p className="mt-1 text-xs text-muted-fg">
+              Everyone&rsquo;s all settled up.
+            </p>
+          </div>
+        )}
       </section>
+
+      {archiveRows.length > 0 && (
+        <section className="mt-8">
+          <h2 className="mb-1 px-1 text-sm font-semibold text-ink">
+            Archive
+          </h2>
+          <p className="mb-3 px-1 text-xs text-muted-fg">
+            Settled fines — cut from salaries and paid off.
+            {grandPaid > 0 && (
+              <> {formatMoney(grandPaid)} paid to date.</>
+            )}
+          </p>
+          <FineArchive rows={archiveRows} viewerIsAdmin={viewerIsAdmin} />
+        </section>
+      )}
     </div>
   );
 }

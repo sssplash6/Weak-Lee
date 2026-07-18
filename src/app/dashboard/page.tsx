@@ -129,6 +129,7 @@ export default async function DashboardPage({
           amount: true,
           note: true,
           createdAt: true,
+          paidAt: true,
           meeting: { select: { scheduledAt: true } },
         },
       }),
@@ -179,11 +180,18 @@ export default async function DashboardPage({
       prisma.notification.count({ where: { userId, readAt: null } }),
     ]);
 
-  // The user's own fines: a running total, plus this week's broken out so
-  // they're shown front-and-centre (week view only — fines are week-scoped).
+  // The user's own fines. Only *outstanding* (unpaid) fines drive the money
+  // block — once a fine is settled (cut from salary) it drops out, so the
+  // figure reflects what they actually still owe. Settled fines are summed
+  // separately as a "paid to date" note. This week's outstanding fines are
+  // broken out front-and-centre (week view only — fines are week-scoped).
   // A fine's "date" is the meeting it relates to (for skips) or when it was
   // recorded (late submissions / manual fines).
-  const penaltyTotal = penalties.reduce((s, p) => s + p.amount, 0);
+  const activePenalties = penalties.filter((p) => p.paidAt == null);
+  const outstandingTotal = activePenalties.reduce((s, p) => s + p.amount, 0);
+  const paidTotal = penalties
+    .filter((p) => p.paidAt != null)
+    .reduce((s, p) => s + p.amount, 0);
   const periodStartMs = period.startDate.getTime();
   const periodEndMs = period.endDate.getTime();
   const penaltyDate = (p: (typeof penalties)[number]) =>
@@ -199,10 +207,12 @@ export default async function DashboardPage({
     const d = penaltyDate(p).getTime();
     return d >= periodStartMs && d <= periodEndMs;
   };
-  const weekPenalties = penalties.filter(inThisWeek).map(toRow);
-  // Earlier fines are itemised too (not just summed) so the reason for every
-  // fine stays visible to the person, not only this week's.
-  const earlierPenalties = penalties.filter((p) => !inThisWeek(p)).map(toRow);
+  const weekPenalties = activePenalties.filter(inThisWeek).map(toRow);
+  // Earlier outstanding fines are itemised too (not just summed) so the reason
+  // for every unpaid fine stays visible, not only this week's.
+  const earlierPenalties = activePenalties
+    .filter((p) => !inThisWeek(p))
+    .map(toRow);
   const weekPenaltyTotal = weekPenalties.reduce((s, p) => s + p.amount, 0);
 
   // The user's own bonuses — tracked separately from fines (no netting), shown
@@ -341,14 +351,15 @@ export default async function DashboardPage({
   // the left sidebar on desktop; on smaller screens (no sidebar) it renders at
   // the top of the main column instead.
   const moneyNotices =
-    (!isMonth && penaltyTotal > 0) || bonusTotal > 0 ? (
+    (!isMonth && outstandingTotal > 0) || bonusTotal > 0 ? (
       <>
-        {!isMonth && penaltyTotal > 0 && (
+        {!isMonth && outstandingTotal > 0 && (
           <PenaltyNotice
             weekPenalties={weekPenalties}
             earlierPenalties={earlierPenalties}
             weekTotal={weekPenaltyTotal}
-            allTimeTotal={penaltyTotal}
+            outstandingTotal={outstandingTotal}
+            paidTotal={paidTotal}
           />
         )}
         {bonusTotal > 0 && <BonusNotice bonuses={bonusRows} total={bonusTotal} />}
@@ -412,7 +423,7 @@ export default async function DashboardPage({
       {moneyNotices && (
         <div
           className={`mb-5 grid items-start gap-3 lg:hidden ${
-            !isMonth && penaltyTotal > 0 && bonusTotal > 0
+            !isMonth && outstandingTotal > 0 && bonusTotal > 0
               ? "sm:grid-cols-2"
               : ""
           }`}

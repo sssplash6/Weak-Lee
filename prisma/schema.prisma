@@ -34,10 +34,6 @@ model User {
   // Assigned preset animal avatar (emoji). Unique so no two users share one.
   avatar String? @unique
 
-  // How much of their fines this person has paid back so far (whole USD), set by
-  // admins on the penalties page. Outstanding = total fines issued − finesPaid.
-  finesPaid Int @default(0)
-
   accounts Account[]
   sessions Session[]
   weeks    Week[]
@@ -49,8 +45,9 @@ model User {
   goalSharesReceived GoalShare[] @relation("GoalSharesTo")
   feedback       Feedback[]
 
-  penalties       Penalty[] @relation("PenaltiesReceived")
-  penaltiesIssued Penalty[] @relation("PenaltiesIssued")
+  penalties        Penalty[] @relation("PenaltiesReceived")
+  penaltiesIssued  Penalty[] @relation("PenaltiesIssued")
+  penaltiesSettled Penalty[] @relation("PenaltiesSettled")
   bonuses         Bonus[]   @relation("BonusesReceived")
   bonusesIssued   Bonus[]   @relation("BonusesIssued")
   assignedTasks   AssignedTask[] @relation("AssignedReceived")
@@ -115,6 +112,11 @@ enum PenaltyType {
 // A fine issued to a user. Amount is a whole number in the app's configured
 // currency (see lib/penalties.ts). Optionally linked to the week and/or meeting
 // it relates to so it can surface in the right view and be recomputed.
+//
+// Settlement lifecycle: a fine is "active" (outstanding) while `paidAt` is null.
+// When an admin records that it was cut from the person's salary, `paidAt` and
+// `settledById` are set — the fine then leaves the active ledger and lives in
+// the archive. Outstanding for a user = sum of amounts where paidAt is null.
 model Penalty {
   id         String      @id @default(cuid())
   userId     String
@@ -125,9 +127,14 @@ model Penalty {
   meetingId  String?
   issuedById String?
   createdAt  DateTime    @default(now())
+  // Set when the fine is settled (deducted from salary and marked paid). Null
+  // means still outstanding. `settledBy` is the admin who recorded it.
+  paidAt      DateTime?
+  settledById String?
 
   user     User     @relation("PenaltiesReceived", fields: [userId], references: [id], onDelete: Cascade)
   issuedBy User?    @relation("PenaltiesIssued", fields: [issuedById], references: [id], onDelete: SetNull)
+  settledBy User?   @relation("PenaltiesSettled", fields: [settledById], references: [id], onDelete: SetNull)
   week     Week?    @relation(fields: [weekId], references: [id], onDelete: SetNull)
   meeting  Meeting? @relation(fields: [meetingId], references: [id], onDelete: Cascade)
 

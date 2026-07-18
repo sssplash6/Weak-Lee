@@ -127,7 +127,11 @@ export default async function AdminPage({
             goals: goalSelect,
           },
         },
+        // Only outstanding (unpaid) fines — the per-user total and list here
+        // mean "what they still owe". Settled fines live in the /penalties
+        // archive.
         penalties: {
+          where: { paidAt: null },
           orderBy: { createdAt: "desc" },
           select: {
             id: true,
@@ -224,9 +228,12 @@ export default async function AdminPage({
         user: { select: { name: true, email: true } },
       },
     }),
-    // Every penalty, uncapped. Feeds the "Total fines" stat, which must not
-    // miss entries the capped recent-penalties list drops.
-    prisma.penalty.findMany({ select: { amount: true } }),
+    // Every outstanding penalty, uncapped. Feeds the "Outstanding" stat, which
+    // must not miss entries the capped recent-penalties list drops.
+    prisma.penalty.findMany({
+      where: { paidAt: null },
+      select: { amount: true },
+    }),
     // Full per-user history for the Performance tab — every week and month
     // with goals, plus attendance/fines/bonuses/tasks. Heavy, so only loaded
     // when that tab is actually open.
@@ -436,7 +443,8 @@ export default async function AdminPage({
     };
   });
 
-  // Every penalty ever issued — fines, late submissions, meeting skips/lates.
+  // Outstanding fines across everyone — settled fines are excluded (archived
+  // on /penalties), so this tracks what the team still owes.
   const finesTotal = allPenalties.reduce((s, p) => s + p.amount, 0);
 
   // Per-tab aggregate stats. "Active" = has at least one goal in that period.
@@ -525,7 +533,7 @@ export default async function AdminPage({
                 value: statsOf(usersThisWeek).totalCompleted,
               },
               { label: "Avg completion", value: `${statsOf(usersThisWeek).avg}%` },
-              { label: "Total fines", value: formatMoney(finesTotal) },
+              { label: "Outstanding", value: formatMoney(finesTotal) },
             ]}
           />
 

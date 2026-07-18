@@ -9,21 +9,25 @@ type WeekPenalty = {
 };
 
 /**
- * The signed-in user's own fines, shown on their dashboard. Leads with the
- * running total as the hero figure — that's the number that matters — then
- * breaks it down into this week's fines and earlier ones. Red-tinted, since
- * fines are a negative, but calm rather than alarming.
+ * The signed-in user's own outstanding fines, shown on their dashboard. Leads
+ * with what they still owe as the hero figure — the number that matters — then
+ * breaks it down into this week's fines and earlier ones. Once a fine is
+ * settled (cut from salary) it drops out of these lists; the whole block hides
+ * when nothing is outstanding, with a quiet "paid to date" note while it shows.
+ * Red-tinted, since fines are a negative, but calm rather than alarming.
  */
 export function PenaltyNotice({
   weekPenalties,
   earlierPenalties = [],
   weekTotal,
-  allTimeTotal,
+  outstandingTotal,
+  paidTotal = 0,
 }: {
   weekPenalties: WeekPenalty[];
   earlierPenalties?: WeekPenalty[];
   weekTotal: number;
-  allTimeTotal: number;
+  outstandingTotal: number;
+  paidTotal?: number;
 }) {
   const hasWeek = weekPenalties.length > 0;
   const hasEarlier = earlierPenalties.length > 0;
@@ -34,13 +38,12 @@ export function PenaltyNotice({
         Fines
       </p>
       <p className="mt-0.5 text-3xl font-bold leading-none tabular-nums text-red-700">
-        {formatMoney(allTimeTotal)}
+        {formatMoney(outstandingTotal)}
       </p>
       <p className="mt-1.5 text-xs text-red-700/60">
-        total to date
-        {weekTotal > 0 && (
-          <> · {formatMoney(weekTotal)} this week</>
-        )}
+        outstanding
+        {weekTotal > 0 && <> · {formatMoney(weekTotal)} this week</>}
+        {paidTotal > 0 && <> · {formatMoney(paidTotal)} paid</>}
       </p>
 
       {hasWeek && (
