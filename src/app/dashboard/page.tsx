@@ -1,4 +1,7 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+
+export const metadata: Metadata = { title: "Dashboard" };
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { isProfileComplete } from "@/lib/profile";

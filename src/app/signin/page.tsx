@@ -1,5 +1,8 @@
+import type { Metadata } from "next";
 import { signIn, devLoginEnabled } from "@/auth";
 import { googleEnabled, ALLOWED_EMAIL_DOMAIN } from "@/auth.config";
+
+export const metadata: Metadata = { title: "Sign in" };
 
 export default async function SignInPage({
   searchParams,

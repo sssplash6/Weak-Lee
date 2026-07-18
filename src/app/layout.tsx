@@ -13,7 +13,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "FreshWeek",
+  title: {
+    template: "%s · FreshWeek",
+    default: "FreshWeek",
+  },
   description: "Track up to 5 weekly goals and their subtasks.",
 };
 
