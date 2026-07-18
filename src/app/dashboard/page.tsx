@@ -45,6 +45,7 @@ import { AssignGoalButton } from "./_components/AssignGoalButton";
 import { AssignedByMe } from "./_components/AssignedByMe";
 import { PeriodToggle } from "./_components/PeriodToggle";
 import { PENALTY_LABEL } from "@/lib/penalties";
+import { MAX_GOALS } from "@/lib/goals";
 
 // Render by the UTC calendar date the bounds were stored at, so the week label
 // doesn't drift by the viewer's timezone.
@@ -530,6 +531,7 @@ export default async function DashboardPage({
             nextIndex={ownGoals.length + 1}
             todayYmd={todayYmd}
             scope={view}
+            atCap={ownGoals.length >= MAX_GOALS}
           />
         )}
 
