@@ -111,6 +111,7 @@ export default async function DashboardPage({
     assignedTasks,
     assignedByMe,
     recentNotifications,
+    olderUnreadNotifications,
     unreadCount,
   ] = await Promise.all([
       isMonth ? getOrCreateCurrentMonth(userId) : getOrCreateCurrentWeek(userId),
@@ -167,6 +168,20 @@ export default async function DashboardPage({
         where: { userId, createdAt: { gte: updatesSince } },
         orderBy: { createdAt: "desc" },
         take: 30,
+        select: {
+          id: true,
+          type: true,
+          message: true,
+          createdAt: true,
+          readAt: true,
+        },
+      }),
+      // Unread notifications older than the 48-hour window — the badge counts
+      // them, so the dropdown must surface them too (below the recent list).
+      prisma.notification.findMany({
+        where: { userId, readAt: null, createdAt: { lt: updatesSince } },
+        orderBy: { createdAt: "desc" },
+        take: 10,
         select: {
           id: true,
           type: true,
@@ -232,6 +247,15 @@ export default async function DashboardPage({
     message: n.message,
     dateLabel: formatDateTimeTz(n.createdAt),
     unread: n.readAt == null,
+  }));
+
+  // Older unread ones — everything the badge counts is listed somewhere.
+  const olderUnread = olderUnreadNotifications.map((n) => ({
+    id: n.id,
+    type: n.type,
+    message: n.message,
+    dateLabel: formatDateTimeTz(n.createdAt),
+    unread: true,
   }));
 
   // Admin-assigned tasks — shown as a standalone list, not part of week %.
@@ -406,7 +430,11 @@ export default async function DashboardPage({
         <div className="flex shrink-0 items-center gap-2 sm:gap-4">
           <WeekProgress percent={overall} label={isMonth ? "Month" : "Week"} />
           <div className="flex items-center gap-2">
-            <NotificationsBell updates={updates} unreadCount={unreadCount} />
+            <NotificationsBell
+              updates={updates}
+              olderUnread={olderUnread}
+              unreadCount={unreadCount}
+            />
             <ProfileMenu
               name={session!.user.name}
               email={session!.user.email}

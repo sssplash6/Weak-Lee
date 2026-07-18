@@ -20,12 +20,16 @@ export type UpdateView = {
  * The header bell: badge shows how many notifications are unread; clicking
  * opens a dropdown with the last 48 hours of updates, a "Mark all as read"
  * action, and an "Expand" action that leads to the full /notifications page.
+ * Unread items older than 48 hours get their own section — the badge counts
+ * them, so they must be findable here.
  */
 export function NotificationsBell({
   updates,
+  olderUnread = [],
   unreadCount,
 }: {
   updates: UpdateView[];
+  olderUnread?: UpdateView[];
   unreadCount: number;
 }) {
   const [open, setOpen] = useState(false);
@@ -96,24 +100,22 @@ export function NotificationsBell({
           ) : (
             <ul className="max-h-80 overflow-y-auto px-4 py-2">
               {updates.map((u) => (
-                <li key={u.id} className="flex items-baseline gap-2 py-1 text-xs">
-                  <span
-                    className={`h-1.5 w-1.5 shrink-0 translate-y-px rounded-full ${NOTIFICATION_DOT[u.type]}`}
-                    aria-hidden="true"
-                  />
-                  <span
-                    className={`min-w-0 flex-1 break-words text-ink ${
-                      u.unread ? "font-semibold" : ""
-                    }`}
-                  >
-                    {u.message}
-                    <span className="font-normal text-muted-fg">
-                      {` · ${u.dateLabel}`}
-                    </span>
-                  </span>
-                </li>
+                <UpdateRow key={u.id} update={u} />
               ))}
             </ul>
+          )}
+
+          {olderUnread.length > 0 && (
+            <div className="border-t border-line px-4 py-2">
+              <p className="py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-fg">
+                Earlier unread
+              </p>
+              <ul>
+                {olderUnread.map((u) => (
+                  <UpdateRow key={u.id} update={u} />
+                ))}
+              </ul>
+            </div>
           )}
 
           <div className="flex items-stretch gap-1 border-t border-line p-1">
@@ -140,5 +142,27 @@ export function NotificationsBell({
         </div>
       )}
     </div>
+  );
+}
+
+/** One notification line: type dot, message (bold while unread), timestamp. */
+function UpdateRow({ update: u }: { update: UpdateView }) {
+  return (
+    <li className="flex items-baseline gap-2 py-1 text-xs">
+      <span
+        className={`h-1.5 w-1.5 shrink-0 translate-y-px rounded-full ${NOTIFICATION_DOT[u.type]}`}
+        aria-hidden="true"
+      />
+      <span
+        className={`min-w-0 flex-1 break-words text-ink ${
+          u.unread ? "font-semibold" : ""
+        }`}
+      >
+        {u.message}
+        <span className="font-normal text-muted-fg">
+          {` · ${u.dateLabel}`}
+        </span>
+      </span>
+    </li>
   );
 }
