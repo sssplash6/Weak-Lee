@@ -83,7 +83,7 @@ export function StartNewMonthButton({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="w-full rounded-xl border border-accent bg-surface px-4 py-3 text-sm font-semibold text-accent transition hover:bg-accent-soft"
+        className="w-full rounded-xl border border-accent bg-surface px-4 py-3 text-sm font-semibold text-accent-ink transition hover:bg-accent-soft"
       >
         Close month &amp; start {nextMonthLabel}
       </button>
@@ -154,7 +154,7 @@ export function StartNewMonthButton({
                     <span className="text-sm font-semibold text-ink">
                       {g.title}
                     </span>
-                    <span className="text-xs font-semibold tabular-nums text-accent">
+                    <span className="text-xs font-semibold tabular-nums text-accent-ink">
                       {g.percent}%
                     </span>
                   </label>
@@ -190,7 +190,7 @@ export function StartNewMonthButton({
             type="button"
             disabled={isPending || (hasUnfinished && !allFilled) || !hasFirstGoal}
             onClick={submit}
-            className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white transition hover:bg-accent-dark disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-lg bg-accent-ink px-4 py-2 text-sm font-semibold text-white transition hover:bg-accent-ink-dark disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isPending ? "Starting…" : `Start ${nextMonthLabel}`}
           </button>

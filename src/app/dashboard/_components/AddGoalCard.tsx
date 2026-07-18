@@ -102,7 +102,7 @@ export function AddGoalCard({
         <p
           key={nudge}
           className={`mt-2 pl-10 text-xs font-medium ${
-            nudge > 0 ? "hint-bounce text-amber-600" : "text-muted-fg"
+            nudge > 0 ? "hint-bounce text-amber-700" : "text-muted-fg"
           }`}
         >
           {hint}

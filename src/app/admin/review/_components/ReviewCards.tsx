@@ -91,7 +91,7 @@ export function ReviewCards({
               </span>
               {showReported &&
                 (m.reported ? (
-                  <span className="ml-auto shrink-0 rounded-full bg-green-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-green-600">
+                  <span className="ml-auto shrink-0 rounded-full bg-green-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-green-700">
                     Reported
                   </span>
                 ) : (
@@ -151,7 +151,7 @@ function MemberModal({
             </p>
           </div>
           {m.goalCount > 0 && (
-            <span className="shrink-0 text-sm font-semibold tabular-nums text-accent">
+            <span className="shrink-0 text-sm font-semibold tabular-nums text-accent-ink">
               {m.percent}%
             </span>
           )}
@@ -172,7 +172,7 @@ function MemberModal({
                     )}
                     <span className="min-w-0 break-words">{g.title}</span>
                   </span>
-                  <span className="shrink-0 text-xs font-semibold tabular-nums text-accent">
+                  <span className="shrink-0 text-xs font-semibold tabular-nums text-accent-ink">
                     {g.percent}%
                   </span>
                 </div>

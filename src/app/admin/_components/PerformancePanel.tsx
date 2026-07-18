@@ -29,9 +29,9 @@ export function PerformancePanel({
 // Score bands — coarse on purpose; the number carries the detail.
 function band(score: number): { label: string; className: string } {
   if (score >= 80)
-    return { label: "Strong", className: "bg-green-50 text-green-600" };
+    return { label: "Strong", className: "bg-green-50 text-green-700" };
   if (score >= 55)
-    return { label: "Steady", className: "bg-amber-50 text-amber-600" };
+    return { label: "Steady", className: "bg-amber-50 text-amber-700" };
   return { label: "Behind", className: "bg-red-50 text-red-600" };
 }
 
@@ -147,7 +147,7 @@ function EmployeeCard({
             Bonuses · fines
           </p>
           <p className="mt-1 text-sm font-semibold tabular-nums">
-            <span className={e.money.net >= 0 ? "text-green-600" : "text-red-600"}>
+            <span className={e.money.net >= 0 ? "text-green-700" : "text-red-600"}>
               {e.money.net >= 0 ? "+" : "−"}
               {formatMoney(Math.abs(e.money.net))}
             </span>

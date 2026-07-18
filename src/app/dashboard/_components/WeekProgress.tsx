@@ -38,7 +38,7 @@ export function WeekProgress({
           className="text-accent transition-[stroke-dashoffset] duration-500 ease-(--ease-in-out-strong)"
         />
       </svg>
-      <span className="absolute inset-0 flex items-center justify-center text-sm font-semibold text-accent">
+      <span className="absolute inset-0 flex items-center justify-center text-sm font-semibold text-accent-ink">
         {percent}%
       </span>
     </div>

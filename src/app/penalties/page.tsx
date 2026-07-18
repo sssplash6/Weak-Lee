@@ -271,7 +271,7 @@ export default async function PenaltiesPage() {
           />
         ) : (
           <div className="rounded-xl border border-line bg-surface px-4 py-8 text-center">
-            <p className="text-sm font-semibold text-green-600">
+            <p className="text-sm font-semibold text-green-700">
               No outstanding fines 🎉
             </p>
             <p className="mt-1 text-xs text-muted-fg">

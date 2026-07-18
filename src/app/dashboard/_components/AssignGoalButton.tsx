@@ -179,7 +179,7 @@ export function AssignGoalButton({
 
         {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
         {assigned && !error && (
-          <p className="mt-2 text-xs font-medium text-green-600">{assigned}</p>
+          <p className="mt-2 text-xs font-medium text-green-700">{assigned}</p>
         )}
 
         <div className="mt-5 flex items-center justify-end gap-2">

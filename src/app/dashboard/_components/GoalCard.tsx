@@ -407,7 +407,7 @@ export function GoalCard({
               <span className="text-xs font-semibold uppercase tracking-wide text-muted-fg">
                 Completion rate
               </span>
-              <span className="flex items-center rounded-lg border border-accent px-2 py-1 text-sm font-semibold text-accent focus-within:ring-2 focus-within:ring-accent/30">
+              <span className="flex items-center rounded-lg border border-accent px-2 py-1 text-sm font-semibold text-accent-ink focus-within:ring-2 focus-within:ring-accent/30">
                 <input
                   autoFocus
                   type="number"
@@ -470,7 +470,7 @@ function PercentChip({
 
   if (!editable) {
     return (
-      <span className={`${CONTROL_PILL} shrink-0 tabular-nums text-accent`}>
+      <span className={`${CONTROL_PILL} shrink-0 tabular-nums text-accent-ink`}>
         {percent}%
       </span>
     );
@@ -486,7 +486,7 @@ function PercentChip({
         }}
         title="Click to set the percent yourself"
         aria-label="Edit goal progress percent"
-        className={`${CONTROL_PILL} shrink-0 tabular-nums text-accent hover:bg-accent-soft`}
+        className={`${CONTROL_PILL} shrink-0 tabular-nums text-accent-ink hover:bg-accent-soft`}
       >
         {percent}%
       </button>
@@ -502,7 +502,7 @@ function PercentChip({
   }
 
   return (
-    <span className="flex shrink-0 items-center text-sm font-semibold text-accent">
+    <span className="flex shrink-0 items-center text-sm font-semibold text-accent-ink">
       <input
         autoFocus
         type="number"
@@ -523,7 +523,7 @@ function PercentChip({
           }
         }}
         aria-label="Goal progress percent"
-        className="w-12 rounded-md border border-accent bg-surface px-1 py-0.5 text-right text-sm font-semibold tabular-nums text-accent focus:outline-none"
+        className="w-12 rounded-md border border-accent bg-surface px-1 py-0.5 text-right text-sm font-semibold tabular-nums text-accent-ink focus:outline-none"
       />
       %
     </span>
@@ -907,7 +907,7 @@ function AddSubtaskForm({
       <button
         type="submit"
         disabled={disabled}
-        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-line text-muted-fg transition hover:border-accent hover:text-accent disabled:opacity-50"
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-line text-muted-fg transition hover:border-accent hover:text-accent-ink disabled:opacity-50"
         aria-label="Add subtask"
       >
         +

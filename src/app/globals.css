@@ -13,6 +13,11 @@
   --color-accent: #f18d05; /* orange */
   --color-accent-dark: #ed7a2d; /* hover */
   --color-accent-soft: #fdebcf; /* tint background */
+  /* The bright accent sits at ~2.5:1 on white — fine for bars and the progress
+     ring, too light for text. accent-ink is the same hue darkened to pass AA
+     (~5:1 on white) for percent readouts and other orange text. */
+  --color-accent-ink: #b45309;
+  --color-accent-ink-dark: #8f4208; /* hover for accent-ink buttons */
 
   --color-ink: #1a2733; /* primary text */
   --color-muted-fg: #6b7480; /* secondary text */

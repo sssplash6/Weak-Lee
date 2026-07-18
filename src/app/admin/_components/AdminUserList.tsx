@@ -211,7 +211,7 @@ function UserRow({
               </span>
             )}
             {u.goalCount === 0 && (
-              <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-600">
+              <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700">
                 No goals
               </span>
             )}
@@ -221,12 +221,12 @@ function UserRow({
               </span>
             )}
             {u.bonusTotal > 0 && (
-              <span className="shrink-0 rounded-full bg-green-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-green-600">
+              <span className="shrink-0 rounded-full bg-green-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-green-700">
                 +{formatMoney(u.bonusTotal)}
               </span>
             )}
             {u.submittedAtLabel ? (
-              <span className="shrink-0 rounded-full bg-green-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-green-600">
+              <span className="shrink-0 rounded-full bg-green-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-green-700">
                 {labels.done}
               </span>
             ) : (
@@ -253,7 +253,7 @@ function UserRow({
                 <span>
                   {u.completedCount}/{u.goalCount} done
                 </span>
-                <span className="font-semibold tabular-nums text-accent">
+                <span className="font-semibold tabular-nums text-accent-ink">
                   {u.percent}%
                 </span>
               </div>
@@ -299,7 +299,7 @@ function UserRow({
             setAddingFine(false);
             setAddingBonus((v) => !v);
           }}
-          className="shrink-0 rounded-lg border border-green-200 px-2.5 py-1 text-xs font-medium text-green-600 transition hover:bg-green-50"
+          className="shrink-0 rounded-lg border border-green-200 px-2.5 py-1 text-xs font-medium text-green-700 transition hover:bg-green-50"
           title="Award a bonus to this person"
         >
           Bonus
@@ -355,7 +355,7 @@ function UserRow({
                         Due {g.deadlineLabel}
                       </span>
                     )}
-                    <span className="shrink-0 text-xs font-semibold tabular-nums text-accent">
+                    <span className="shrink-0 text-xs font-semibold tabular-nums text-accent-ink">
                       {g.percent}%
                     </span>
                   </div>
@@ -399,7 +399,7 @@ function UserRow({
 
           {u.tasks.length > 0 && (
             <div className={u.goals.length > 0 ? "mt-2 border-t border-line pt-2" : ""}>
-              <p className="py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-600">
+              <p className="py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-700">
                 Assigned tasks
               </p>
               <ul>
@@ -427,7 +427,7 @@ function UserRow({
                     )}
                     <span
                       className={`shrink-0 text-xs font-semibold ${
-                        t.done ? "text-amber-600" : "text-muted-fg"
+                        t.done ? "text-amber-700" : "text-muted-fg"
                       }`}
                     >
                       {t.done ? "Done" : "Open"}
@@ -599,7 +599,7 @@ function BonusRow({ bonus: b }: { bonus: AdminBonus }) {
         {b.note ? <span className="text-muted-fg"> · {b.note}</span> : ""}
       </span>
       <span className="shrink-0 text-[11px] text-muted-fg">{b.dateLabel}</span>
-      <span className="shrink-0 text-xs font-semibold tabular-nums text-green-600">
+      <span className="shrink-0 text-xs font-semibold tabular-nums text-green-700">
         +{formatMoney(b.amount)}
       </span>
       <button
@@ -738,7 +738,7 @@ function FixWeekButton({
     <button
       type="button"
       onClick={() => setConfirming(true)}
-      className="shrink-0 rounded-lg border border-orange-200 px-2.5 py-1 text-xs font-medium text-orange-600 transition hover:bg-orange-50"
+      className="shrink-0 rounded-lg border border-orange-200 px-2.5 py-1 text-xs font-medium text-orange-700 transition hover:bg-orange-50"
       title="Move this user's week to the current calendar week (keeps all goals)"
     >
       Fix week

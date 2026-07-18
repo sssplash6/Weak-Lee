@@ -40,7 +40,7 @@ export function AssignedByMe({ items }: { items: AssignedByMeItem[] }) {
               </span>
               <span
                 className={`shrink-0 text-[11px] font-semibold ${
-                  t.done ? "text-green-600" : "text-muted-fg"
+                  t.done ? "text-green-700" : "text-muted-fg"
                 }`}
               >
                 {t.done ? "Done" : "Pending"}

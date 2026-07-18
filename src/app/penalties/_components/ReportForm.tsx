@@ -177,7 +177,7 @@ export function ReportForm({ colleagues }: { colleagues: Colleague[] }) {
 
       {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
       {sent && (
-        <p className="mt-2 text-xs font-medium text-green-600">
+        <p className="mt-2 text-xs font-medium text-green-700">
           Report sent to the admins.
         </p>
       )}

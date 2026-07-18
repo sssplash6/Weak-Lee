@@ -123,7 +123,7 @@ export function StartNewWeekButton({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="w-full rounded-xl border border-accent bg-surface px-4 py-3 text-sm font-semibold text-accent transition hover:bg-accent-soft"
+        className="w-full rounded-xl border border-accent bg-surface px-4 py-3 text-sm font-semibold text-accent-ink transition hover:bg-accent-soft"
       >
         Start new week ({formatRangeLabel(defaultStart, defaultEnd)})
       </button>
@@ -196,7 +196,7 @@ export function StartNewWeekButton({
                   <span className="text-sm font-semibold text-ink">
                     {g.title}
                   </span>
-                  <span className="text-xs font-semibold tabular-nums text-accent">
+                  <span className="text-xs font-semibold tabular-nums text-accent-ink">
                     {g.percent}%
                   </span>
                 </label>
@@ -247,7 +247,7 @@ export function StartNewWeekButton({
                     <span className="min-w-0 flex-1 text-sm font-medium text-ink">
                       {g.title}
                     </span>
-                    <span className="shrink-0 text-xs font-semibold tabular-nums text-accent">
+                    <span className="shrink-0 text-xs font-semibold tabular-nums text-accent-ink">
                       {g.percent}%
                     </span>
                   </label>
@@ -293,7 +293,7 @@ export function StartNewWeekButton({
           type="button"
           disabled={isPending}
           onClick={submit}
-          className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white transition hover:bg-accent-dark disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-lg bg-accent-ink px-4 py-2 text-sm font-semibold text-white transition hover:bg-accent-ink-dark disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isPending
             ? "Starting…"

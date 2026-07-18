@@ -39,7 +39,7 @@ function BonusItem({ bonus: b }: { bonus: BonusRow }) {
       <span className="hidden shrink-0 text-xs text-muted-fg sm:block">
         {b.dateLabel}
       </span>
-      <span className="shrink-0 text-sm font-semibold tabular-nums text-green-600">
+      <span className="shrink-0 text-sm font-semibold tabular-nums text-green-700">
         +{formatMoney(b.amount)}
       </span>
       <button

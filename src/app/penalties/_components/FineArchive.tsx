@@ -73,7 +73,7 @@ export function FineArchive({
                   <span className="shrink-0 text-xs text-muted-fg">
                     {r.fines.length} paid
                   </span>
-                  <span className="shrink-0 text-sm font-bold tabular-nums text-green-600">
+                  <span className="shrink-0 text-sm font-bold tabular-nums text-green-700">
                     {formatMoney(r.paid)}
                   </span>
                   <span
@@ -131,7 +131,7 @@ function ArchivedFineLine({
       <span className="shrink-0 text-[11px] text-muted-fg">
         paid {f.paidLabel}
       </span>
-      <span className="shrink-0 text-xs font-semibold tabular-nums text-green-600">
+      <span className="shrink-0 text-xs font-semibold tabular-nums text-green-700">
         {formatMoney(f.amount)}
       </span>
       {viewerIsAdmin && (

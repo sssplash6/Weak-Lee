@@ -90,7 +90,7 @@ function WeekRow({
         <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">
           {week.label}
         </span>
-        <span className="shrink-0 text-xs font-semibold tabular-nums text-accent">
+        <span className="shrink-0 text-xs font-semibold tabular-nums text-accent-ink">
           {week.percent}%
         </span>
       </button>
@@ -139,7 +139,7 @@ function GoalSummary({ goal }: { goal: ArchivedGoal }) {
             ✓ Completed
           </span>
         )}
-        <span className="shrink-0 text-xs font-semibold tabular-nums text-accent">
+        <span className="shrink-0 text-xs font-semibold tabular-nums text-accent-ink">
           {goal.percent}%
         </span>
       </div>
@@ -157,7 +157,7 @@ function GoalSummary({ goal }: { goal: ArchivedGoal }) {
             <li key={s.id} className="flex items-start gap-1.5 text-xs">
               <span
                 className={`mt-px shrink-0 ${
-                  s.isDone ? "text-accent" : "text-muted-fg"
+                  s.isDone ? "text-accent-ink" : "text-muted-fg"
                 }`}
                 aria-hidden
               >
