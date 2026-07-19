@@ -40,9 +40,6 @@ export default async function TeamPage() {
     <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8">
       <header className="mb-8 flex items-start justify-between gap-4">
         <div>
-          <div className="text-xs font-semibold uppercase tracking-widest text-brand">
-            freshman.academy
-          </div>
           <h1 className="mt-1 text-2xl font-bold text-ink">The Team</h1>
           <p className="mt-1 text-sm text-muted-fg">
             {members.length} {members.length === 1 ? "member" : "members"}

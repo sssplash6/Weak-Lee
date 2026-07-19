@@ -34,9 +34,6 @@ export default async function ProfilePage() {
         <BackLink href="/dashboard" label="My dashboard" />
 
         <div className="mt-4 rounded-2xl border border-line bg-surface p-8 shadow-sm">
-          <div className="text-xs font-semibold uppercase tracking-widest text-brand">
-            freshman.academy
-          </div>
           <h1 className="mt-1 text-2xl font-bold text-ink">Your profile</h1>
           <p className="mt-2 text-sm text-muted-fg">
             Update your details. Socials appear on{" "}

@@ -518,7 +518,7 @@ export default async function AdminPage({
       <header className="mb-8 flex items-start justify-between gap-4">
         <div>
           <div className="text-xs font-semibold uppercase tracking-widest text-brand">
-            freshman.academy · Admin
+            Admin
           </div>
           <h1 className="mt-1 text-2xl font-bold text-ink">Team overview</h1>
           <p className="mt-1 text-sm text-muted-fg">{subtitle}</p>

@@ -108,7 +108,7 @@ export default async function AdminReviewPage() {
       <header className="mb-8 flex items-start justify-between gap-4">
         <div>
           <div className="text-xs font-semibold uppercase tracking-widest text-brand">
-            freshman.academy · Admin
+            Admin
           </div>
           <h1 className="mt-1 text-2xl font-bold text-ink">Week in review</h1>
           <p className="mt-1 text-sm text-muted-fg">
