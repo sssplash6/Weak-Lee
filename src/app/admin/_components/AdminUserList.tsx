@@ -489,7 +489,6 @@ function UserRow({
 }
 
 function PenaltyRow({ penalty: p }: { penalty: AdminPenalty }) {
-  const [isPending, startTransition] = useTransition();
   return (
     <li className="flex items-center gap-3 py-1.5 text-sm">
       <span className="h-2 w-2 shrink-0 rounded-full bg-red-500" />
@@ -501,17 +500,63 @@ function PenaltyRow({ penalty: p }: { penalty: AdminPenalty }) {
       <span className="shrink-0 text-xs font-semibold tabular-nums text-red-600">
         {formatMoney(p.amount)}
       </span>
-      <button
-        type="button"
-        disabled={isPending}
-        onClick={() => startTransition(async () => void (await deletePenalty(p.id)))}
-        className="shrink-0 text-muted-fg transition hover:text-red-500 disabled:opacity-50"
-        aria-label="Remove fine"
-        title="Remove fine"
-      >
-        <TrashIcon className="h-4 w-4" />
-      </button>
+      <ConfirmDeleteButton
+        label="Remove fine"
+        onConfirm={() => deletePenalty(p.id)}
+      />
     </li>
+  );
+}
+
+/**
+ * Trash icon that unfolds into an inline Remove/Cancel pair — money records
+ * (and anything else destructive) never disappear on a single misclick.
+ */
+function ConfirmDeleteButton({
+  label,
+  onConfirm,
+}: {
+  label: string;
+  onConfirm: () => Promise<void>;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const [isPending, startTransition] = useTransition();
+
+  if (confirming) {
+    return (
+      <span className="flex shrink-0 items-center gap-1 text-xs">
+        <button
+          type="button"
+          disabled={isPending}
+          onClick={() =>
+            startTransition(async () => void (await onConfirm()))
+          }
+          className="rounded bg-red-500 px-2 py-1 font-medium text-white transition hover:bg-red-600 disabled:opacity-50"
+        >
+          {isPending ? "Removing…" : "Remove"}
+        </button>
+        <button
+          type="button"
+          disabled={isPending}
+          onClick={() => setConfirming(false)}
+          className="rounded px-2 py-1 text-muted-fg transition hover:bg-canvas"
+        >
+          Cancel
+        </button>
+      </span>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => setConfirming(true)}
+      className="shrink-0 text-muted-fg transition hover:text-red-500"
+      aria-label={label}
+      title={label}
+    >
+      <TrashIcon className="h-4 w-4" />
+    </button>
   );
 }
 
@@ -597,7 +642,6 @@ function AddFineForm({
 }
 
 function BonusRow({ bonus: b }: { bonus: AdminBonus }) {
-  const [isPending, startTransition] = useTransition();
   return (
     <li className="flex items-center gap-3 py-1.5 text-sm">
       <span className="h-2 w-2 shrink-0 rounded-full bg-green-500" />
@@ -609,16 +653,10 @@ function BonusRow({ bonus: b }: { bonus: AdminBonus }) {
       <span className="shrink-0 text-xs font-semibold tabular-nums text-green-700">
         +{formatMoney(b.amount)}
       </span>
-      <button
-        type="button"
-        disabled={isPending}
-        onClick={() => startTransition(async () => void (await deleteBonus(b.id)))}
-        className="shrink-0 text-muted-fg transition hover:text-red-500 disabled:opacity-50"
-        aria-label="Remove bonus"
-        title="Remove bonus"
-      >
-        <TrashIcon className="h-4 w-4" />
-      </button>
+      <ConfirmDeleteButton
+        label="Remove bonus"
+        onConfirm={() => deleteBonus(b.id)}
+      />
     </li>
   );
 }

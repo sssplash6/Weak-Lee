@@ -688,17 +688,45 @@ function SubtaskRow({
         </span>
       )}
 
-      {!locked && (
+      {!locked && <DeleteSubtaskButton onDelete={() => onDelete(s.id)} />}
+    </li>
+  );
+}
+
+/** Subtask deletion, two-step like goal deletion — never on a single misclick. */
+function DeleteSubtaskButton({ onDelete }: { onDelete: () => void }) {
+  const [confirming, setConfirming] = useState(false);
+
+  if (confirming) {
+    return (
+      <span className="mt-0.5 flex shrink-0 items-center gap-1 text-xs">
         <button
           type="button"
-          onClick={() => onDelete(s.id)}
-          className="mt-0.5 text-red-500 transition hover:text-red-600"
-          aria-label="Delete subtask"
+          onClick={onDelete}
+          className="rounded bg-red-500 px-1.5 py-0.5 font-medium text-white transition hover:bg-red-600"
         >
-          <TrashIcon className="h-4 w-4" />
+          Delete
         </button>
-      )}
-    </li>
+        <button
+          type="button"
+          onClick={() => setConfirming(false)}
+          className="rounded px-1.5 py-0.5 text-muted-fg transition hover:bg-canvas"
+        >
+          Cancel
+        </button>
+      </span>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => setConfirming(true)}
+      className="mt-0.5 text-red-500 transition hover:text-red-600"
+      aria-label="Delete subtask"
+    >
+      <TrashIcon className="h-4 w-4" />
+    </button>
   );
 }
 
