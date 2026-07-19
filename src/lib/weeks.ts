@@ -69,12 +69,23 @@ const LAUNCH_START_NEXT_WEEK = false;
  * (or the upcoming week while LAUNCH_START_NEXT_WEEK is on).
  */
 export async function getOrCreateCurrentWeek(userId: string) {
-  const existing = await prisma.week.findFirst({
+  // Normally one current week, but a concurrency race (e.g. simultaneous loads
+  // during a redeploy) can leave duplicates. Pick the most meaningful one — the
+  // submitted week, else the one with the most goals, else the oldest — so the
+  // dashboard never lands on a stray empty duplicate.
+  const current = await prisma.week.findMany({
     where: { userId, isCurrent: true },
     include: weekInclude,
   });
 
-  if (existing) return existing;
+  if (current.length > 0) {
+    return current.sort(
+      (a, b) =>
+        Number(b.submittedAt != null) - Number(a.submittedAt != null) ||
+        b.goals.length - a.goals.length ||
+        a.createdAt.getTime() - b.createdAt.getTime(),
+    )[0];
+  }
 
   const { start, end } = LAUNCH_START_NEXT_WEEK
     ? nextWeekBounds(getWeekBounds().end)

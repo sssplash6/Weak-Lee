@@ -378,14 +378,29 @@ export default async function AdminPage({
   // "previous". Comparing against the deadline instant (not the Monday) keeps
   // this robust to how week bounds are stored.
   const cutoff = cycle.submissionDeadline.getTime();
-  const currentWeekOf = (weeks: (typeof rawUsers)[number]["weeks"]) =>
-    weeks
-      .filter((w) => w.startDate.getTime() >= cutoff)
-      .sort((a, b) => a.startDate.getTime() - b.startDate.getTime())[0] ?? null;
-  const previousWeekOf = (weeks: (typeof rawUsers)[number]["weeks"]) =>
-    weeks
-      .filter((w) => w.startDate.getTime() < cutoff)
-      .sort((a, b) => b.startDate.getTime() - a.startDate.getTime())[0] ?? null;
+  // A redeploy race can leave a stray duplicate week for a cycle. When choosing
+  // which one represents the person, a submitted week always beats an
+  // unsubmitted duplicate, so someone who actually reported never reads as "not
+  // submitted".
+  const currentWeekOf = (weeks: (typeof rawUsers)[number]["weeks"]) => {
+    const cur = weeks.filter((w) => w.startDate.getTime() >= cutoff);
+    if (cur.length === 0) return null;
+    const submitted = cur
+      .filter((w) => w.submittedAt != null)
+      .sort((a, b) => a.submittedAt!.getTime() - b.submittedAt!.getTime());
+    if (submitted.length > 0) return submitted[0];
+    return cur.sort((a, b) => a.startDate.getTime() - b.startDate.getTime())[0];
+  };
+  const previousWeekOf = (weeks: (typeof rawUsers)[number]["weeks"]) => {
+    const prev = weeks.filter((w) => w.startDate.getTime() < cutoff);
+    if (prev.length === 0) return null;
+    // Most recent previous week; a submitted duplicate wins a same-date tie.
+    return prev.sort(
+      (a, b) =>
+        b.startDate.getTime() - a.startDate.getTime() ||
+        Number(b.submittedAt != null) - Number(a.submittedAt != null),
+    )[0];
+  };
 
   // Current week = the week people must have goals in for this cycle.
   const usersCurrentWeek = rawUsers.map((u) => {

@@ -53,12 +53,11 @@ export async function reconcileSubmissionFines(opts?: {
     },
     select: {
       id: true,
-      // This cycle's week: the earliest week starting on/after the deadline
-      // (the coming Monday's). Absent = they never reported for it.
+      // Every week for this cycle (starting on/after the deadline). Usually one,
+      // but a redeploy race in getOrCreateCurrentWeek/startNewWeek can leave a
+      // stray duplicate — so we look at all of them, not just one.
       weeks: {
         where: { startDate: { gte: submissionDeadline } },
-        orderBy: { startDate: "asc" },
-        take: 1,
         select: { id: true, submittedAt: true },
       },
       // This cycle's late-submission fine, if one has been issued already.
@@ -74,14 +73,45 @@ export async function reconcileSubmissionFines(opts?: {
   });
 
   for (const u of users) {
-    const submittedAt = u.weeks[0]?.submittedAt ?? null;
-    const weekId = u.weeks[0]?.id ?? null;
+    // Count as submitted if ANY current-cycle week is, and tier by the earliest
+    // submission — so a stray unsubmitted duplicate can't wrongly flag someone
+    // who actually reported on time.
+    const submits = u.weeks
+      .map((w) => w.submittedAt)
+      .filter((d): d is Date => d != null)
+      .sort((a, b) => a.getTime() - b.getTime());
+    const earliestSubmit = submits[0] ?? null;
 
-    // What this person owes right now for the cycle.
-    const amount = dueAmount(submittedAt, phase, submissionDeadline, meetingDeadline);
-    if (amount === 0) continue;
-
+    const amount = dueAmount(
+      earliestSubmit,
+      phase,
+      submissionDeadline,
+      meetingDeadline,
+    );
     const existing = u.penalties[0];
+
+    if (amount === 0) {
+      // Submitted on time. If a fine exists and is still unpaid, it was created
+      // in error (the duplicate-week bug) — remove it and let the person know.
+      if (existing && existing.paidAt == null) {
+        await prisma.$transaction(async (tx) => {
+          await tx.penalty.delete({ where: { id: existing.id } });
+          await notify(
+            tx,
+            u.id,
+            "FINE",
+            `Your ${formatMoney(existing.amount)} late-submission fine was removed — your goals were submitted on time.`,
+          );
+        });
+      }
+      continue;
+    }
+
+    // Prefer linking the fine to the submitted week, else any current-cycle one.
+    const weekId =
+      u.weeks.find((w) => w.submittedAt != null)?.id ??
+      u.weeks[0]?.id ??
+      null;
     const missed = amount >= MISSED_SUBMISSION_PENALTY;
     const note = missed ? MISSED_NOTE : LATE_NOTE;
 
