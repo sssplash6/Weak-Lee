@@ -10,6 +10,7 @@ import { ensureAvatar } from "@/lib/assignAvatar";
 import {
   getArchivedWeeks,
   getOrCreateCurrentWeek,
+  getWeekBounds,
   nextWeekBounds,
   weekInclude,
 } from "@/lib/weeks";
@@ -221,7 +222,7 @@ export default async function DashboardPage({
   // block — once a fine is settled (cut from salary) it drops out, so the
   // figure reflects what they actually still owe. Settled fines are summed
   // separately as a "paid to date" note. This week's outstanding fines are
-  // broken out front-and-centre (week view only — fines are week-scoped).
+  // broken out front-and-centre, on both views.
   // A fine's "date" is the meeting it relates to (for skips) or when it was
   // recorded (late submissions / manual fines).
   const activePenalties = penalties.filter((p) => p.paidAt == null);
@@ -229,8 +230,15 @@ export default async function DashboardPage({
   const paidTotal = penalties
     .filter((p) => p.paidAt != null)
     .reduce((s, p) => s + p.amount, 0);
-  const periodStartMs = period.startDate.getTime();
-  const periodEndMs = period.endDate.getTime();
+  // "This week" for the fines breakdown: the viewed period's own bounds on the
+  // week view; the current calendar week on the month view (fines aren't
+  // month-scoped, so the week split must stay literal there).
+  const now = new Date();
+  const weekWindow = isMonth
+    ? getWeekBounds(now)
+    : { start: period.startDate, end: period.endDate };
+  const weekStartMs = weekWindow.start.getTime();
+  const weekEndMs = weekWindow.end.getTime();
   const penaltyDate = (p: (typeof penalties)[number]) =>
     p.meeting?.scheduledAt ?? p.createdAt;
   const toRow = (p: (typeof penalties)[number]) => ({
@@ -242,7 +250,7 @@ export default async function DashboardPage({
   });
   const inThisWeek = (p: (typeof penalties)[number]) => {
     const d = penaltyDate(p).getTime();
-    return d >= periodStartMs && d <= periodEndMs;
+    return d >= weekStartMs && d <= weekEndMs;
   };
   const weekPenalties = activePenalties.filter(inThisWeek).map(toRow);
   // Earlier outstanding fines are itemised too (not just summed) so the reason
@@ -323,7 +331,6 @@ export default async function DashboardPage({
     return { id: g.id, title: g.title, percent, done: percent === 100 };
   });
 
-  const now = new Date();
   const todayYmd = toYmd(now);
   const nowStamp = toStamp(now);
 
@@ -402,13 +409,14 @@ export default async function DashboardPage({
     })),
   }));
 
-  // The user's own money block — fines (week view only) and bonuses. Lives in
+  // The user's own money block — fines and bonuses, shown on both views (a
+  // fine isn't week-scoped, so it can't vanish on the month view). Lives in
   // the left sidebar on desktop; on smaller screens (no sidebar) it renders at
   // the top of the main column instead.
   const moneyNotices =
-    (!isMonth && outstandingTotal > 0) || bonusTotal > 0 ? (
+    outstandingTotal > 0 || bonusTotal > 0 ? (
       <>
-        {!isMonth && outstandingTotal > 0 && (
+        {outstandingTotal > 0 && (
           <PenaltyNotice
             weekPenalties={weekPenalties}
             earlierPenalties={earlierPenalties}
@@ -493,9 +501,7 @@ export default async function DashboardPage({
       {moneyNotices && (
         <div
           className={`mb-5 grid items-start gap-3 lg:hidden ${
-            !isMonth && outstandingTotal > 0 && bonusTotal > 0
-              ? "sm:grid-cols-2"
-              : ""
+            outstandingTotal > 0 && bonusTotal > 0 ? "sm:grid-cols-2" : ""
           }`}
         >
           {moneyNotices}
