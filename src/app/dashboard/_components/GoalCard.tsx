@@ -276,7 +276,12 @@ export function GoalCard({
               {subtasks.length} {subtasks.length === 1 ? "task" : "tasks"}
             </span>
           </button>
-          <PercentChip percent={percent} editable onCommit={onSetPercent} />
+          <PercentChip
+            percent={percent}
+            editable
+            manual={manualPercent != null}
+            onCommit={onSetPercent}
+          />
 
           {locked ? (
             <div className="flex shrink-0 items-center gap-2">
@@ -470,27 +475,48 @@ export function GoalCard({
   );
 }
 
+// Tooltip on a manually-set percent chip: names the otherwise-invisible rule
+// that subtask toggles discard a manual percent.
+const MANUAL_TITLE =
+  "Set manually — toggling a subtask recomputes progress from subtasks";
+
 /**
  * The goal's percent readout — click to type a manual value (0–100). Commits on
  * blur or Enter, cancels on Escape. Editable even once the goal is completed, so
- * a "done at 70%" rate can be adjusted after the fact.
+ * a "done at 70%" rate can be adjusted after the fact. A manually-set percent
+ * carries a marker dot: it overrides subtask progress, and toggling any subtask
+ * clears it back to the derived value — the tooltip says so, since neither rule
+ * is visible otherwise.
  */
 function PercentChip({
   percent,
   editable,
+  manual = false,
   onCommit,
 }: {
   percent: number;
   editable: boolean;
+  // True when the percent was typed in by hand rather than derived from subtasks.
+  manual?: boolean;
   onCommit: (next: number) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState("");
 
+  const manualDot = manual ? (
+    <span
+      className="h-1 w-1 shrink-0 rounded-full bg-current"
+      aria-hidden="true"
+    />
+  ) : null;
+
   if (!editable) {
     return (
-      <span className={`${CONTROL_PILL} shrink-0 tabular-nums text-accent-ink`}>
-        {percent}%
+      <span
+        className={`${CONTROL_PILL} shrink-0 tabular-nums text-accent-ink`}
+        title={manual ? MANUAL_TITLE : undefined}
+      >
+        {percent}%{manualDot}
       </span>
     );
   }
@@ -503,11 +529,15 @@ function PercentChip({
           setText(String(percent));
           setEditing(true);
         }}
-        title="Click to set the percent yourself"
-        aria-label="Edit goal progress percent"
+        title={manual ? MANUAL_TITLE : "Click to set the percent yourself"}
+        aria-label={
+          manual
+            ? "Goal progress percent, set manually — click to edit"
+            : "Edit goal progress percent"
+        }
         className={`${CONTROL_PILL} shrink-0 tabular-nums text-accent-ink hover:bg-accent-soft`}
       >
-        {percent}%
+        {percent}%{manualDot}
       </button>
     );
   }
