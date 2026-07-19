@@ -13,7 +13,6 @@ import {
   needsCompletionReason,
 } from "@/lib/progress";
 import { isPriority, type Priority } from "@/lib/priority";
-import { MAX_GOALS } from "@/lib/goals";
 import {
   formatMoney,
   LATE_SUBMISSION_PENALTY,
@@ -202,11 +201,6 @@ export async function addGoal(input: {
       : await getOrCreateCurrentWeek(userId);
   if (period.goalsLocked) {
     throw new Error("Goals are locked. Click Edit to make changes.");
-  }
-  if (period.goals.length >= MAX_GOALS) {
-    throw new Error(
-      `This ${input.scope === "month" ? "month" : "week"} already has ${MAX_GOALS} goals — that's the maximum.`,
-    );
   }
   const position = period.goals.length + 1;
   await prisma.goal.create({

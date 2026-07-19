@@ -3,7 +3,6 @@
 import { useState, useTransition } from "react";
 import type { Priority } from "@/lib/priority";
 import { PRIORITY_LABEL } from "@/lib/priority";
-import { MAX_GOALS } from "@/lib/goals";
 import { addGoal, type GoalScope } from "../actions";
 import { DeadlinePicker } from "./DeadlinePicker";
 import { PriorityPicker } from "./PriorityPicker";
@@ -17,14 +16,10 @@ export function AddGoalCard({
   nextIndex,
   todayYmd,
   scope = "week",
-  atCap = false,
 }: {
   nextIndex: number;
   todayYmd: string;
   scope?: GoalScope;
-  // True when the period already holds the maximum number of goals — the
-  // server action rejects adds past the cap too, so this is just the hint.
-  atCap?: boolean;
 }) {
   const [title, setTitle] = useState("");
   const [priority, setPriority] = useState<Priority | null>(null);
@@ -61,15 +56,6 @@ export function AddGoalCard({
       setDeadline(null);
       setNudge(0);
     });
-  }
-
-  if (atCap) {
-    return (
-      <p className="rounded-2xl border border-dashed border-line bg-surface/50 p-5 text-sm text-muted-fg">
-        {MAX_GOALS} goals is the maximum for this {scope}. Delete one to make
-        room for another.
-      </p>
-    );
   }
 
   return (
