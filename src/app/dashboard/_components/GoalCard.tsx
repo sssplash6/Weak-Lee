@@ -10,6 +10,7 @@ import {
 } from "react";
 import { clampPercent, subtaskPercent } from "@/lib/progress";
 import { formatStamp } from "@/lib/dates";
+import { useDismissible } from "@/lib/useDismissible";
 import {
   addSubtask,
   deleteGoal,
@@ -221,6 +222,22 @@ export function GoalCard({
     });
   }
 
+  // Close the completion prompt on Escape and lock body scroll while it's
+  // open — same behaviour as the app's other modals.
+  useEffect(() => {
+    if (!confirmComplete) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setConfirmComplete(false);
+    }
+    document.addEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [confirmComplete]);
+
   // Overdue only matters while the goal is still open.
   const overdue = !completed && deadline != null && deadline < nowStamp;
   const [curYear] = todayYmd.split("-").map(Number);
@@ -393,6 +410,7 @@ export function GoalCard({
           onClick={() => setConfirmComplete(false)}
           role="dialog"
           aria-modal="true"
+          aria-label={`Mark "${goal.title}" complete?`}
         >
           <div
             className="modal-in w-full max-w-sm rounded-2xl border border-line bg-surface p-6 text-center shadow-xl"
@@ -596,6 +614,11 @@ function SubtaskRow({
         type="checkbox"
         checked={s.isDone}
         onChange={(e) => onToggle(s.id, e.target.checked)}
+        aria-label={
+          s.isDone
+            ? `Mark "${s.title}" as not done`
+            : `Mark "${s.title}" as done`
+        }
         className="mt-1 h-4 w-4 shrink-0 cursor-pointer rounded border-line accent-brand focus:ring-brand"
       />
       <div className="min-w-0 flex-1">
@@ -675,16 +698,7 @@ function SharePicker({
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function onClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
-  }, []);
+  useDismissible(open, () => setOpen(false), ref);
 
   function share(toUserId: string) {
     startTransition(async () => {
@@ -704,6 +718,7 @@ function SharePicker({
             : "text-brand transition hover:text-brand-dark"
         }
         aria-label={ariaLabel}
+        aria-expanded={open}
         title="Delegate to a teammate"
       >
         <ShareIcon className={iconClassName} />

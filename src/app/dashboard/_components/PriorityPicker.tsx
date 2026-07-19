@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import {
   PRIORITIES,
   PRIORITY_BG,
@@ -10,6 +10,7 @@ import {
 } from "@/lib/priority";
 import { FlagIcon } from "./icons";
 import { CONTROL_PILL } from "./controlPill";
+import { useDismissible } from "@/lib/useDismissible";
 
 /**
  * A goal's priority flag: a flag icon (tinted by the current priority, or muted
@@ -31,16 +32,7 @@ export function PriorityPicker({
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function onClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
-  }, []);
+  useDismissible(open, () => setOpen(false), ref);
 
   function pick(next: Priority | null) {
     onChange(next);
@@ -54,6 +46,7 @@ export function PriorityPicker({
         onClick={() => setOpen((v) => !v)}
         title={value ? `Priority: ${PRIORITY_LABEL[value]}` : "Set priority"}
         aria-label="Set priority"
+        aria-expanded={open}
         className={`${CONTROL_PILL} ${
           value ? PRIORITY_TEXT[value] : "text-muted-fg hover:bg-canvas hover:text-ink"
         } ${invalid ? "ring-1 ring-red-400" : ""}`}

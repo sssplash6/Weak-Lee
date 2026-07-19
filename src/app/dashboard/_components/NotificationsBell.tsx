@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import {
   NOTIFICATION_DOT,
   type NotificationType,
 } from "@/lib/notificationTypes";
 import { markAllNotificationsRead } from "@/app/notifications/actions";
+import { useDismissible } from "@/lib/useDismissible";
 
 export type UpdateView = {
   id: string;
@@ -35,23 +36,13 @@ export function NotificationsBell({
   const [open, setOpen] = useState(false);
   const [marking, startMarking] = useTransition();
   const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function onClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
-  }, []);
+  useDismissible(open, () => setOpen(false), ref);
 
   return (
     <div className="relative" ref={ref}>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        aria-haspopup="menu"
         aria-expanded={open}
         aria-label={
           unreadCount > 0 ? `Updates (${unreadCount} unread)` : "Updates"
@@ -82,10 +73,7 @@ export function NotificationsBell({
       </button>
 
       {open && (
-        <div
-          role="menu"
-          className="pop-in absolute right-0 z-10 mt-2 w-80 rounded-xl border border-line bg-surface shadow-lg"
-        >
+        <div className="pop-in absolute right-0 z-10 mt-2 w-80 rounded-xl border border-line bg-surface shadow-lg">
           <div className="flex items-center justify-between gap-3 px-4 pb-1 pt-3">
             <p className="text-sm font-semibold text-ink">Updates</p>
             <span className="rounded-full bg-canvas px-2 py-0.5 text-[11px] font-medium text-muted-fg">
@@ -122,7 +110,6 @@ export function NotificationsBell({
             {unreadCount > 0 && (
               <button
                 type="button"
-                role="menuitem"
                 disabled={marking}
                 onClick={() => startMarking(() => markAllNotificationsRead())}
                 className="flex-1 rounded-lg px-3 py-2 text-center text-sm font-semibold text-muted-fg transition hover:bg-canvas hover:text-ink disabled:opacity-50"
@@ -132,7 +119,6 @@ export function NotificationsBell({
             )}
             <Link
               href="/notifications"
-              role="menuitem"
               onClick={() => setOpen(false)}
               className="flex-1 rounded-lg px-3 py-2 text-center text-sm font-semibold text-brand transition hover:bg-canvas"
             >

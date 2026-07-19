@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { reportColleagues } from "../actions";
+import { useDismissible } from "@/lib/useDismissible";
 
 export type Colleague = {
   id: string;
@@ -23,16 +24,7 @@ export function ReportForm({ colleagues }: { colleagues: Colleague[] }) {
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function onClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
-  }, []);
+  useDismissible(open, () => setOpen(false), ref);
 
   function toggle(id: string) {
     setSent(false);

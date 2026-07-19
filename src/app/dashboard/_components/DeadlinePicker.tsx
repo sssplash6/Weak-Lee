@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { END_OF_DAY, formatStamp } from "@/lib/dates";
 import { CalendarIcon } from "./icons";
 import { CONTROL_PILL } from "./controlPill";
+import { useDismissible } from "@/lib/useDismissible";
 
 const WEEKDAYS = ["M", "T", "W", "T", "F", "S", "S"];
 const MONTHS = [
@@ -44,6 +45,7 @@ export function DeadlinePicker({
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  useDismissible(open, () => setOpen(false), ref);
 
   const [datePart, timePart] = value ? value.split("T") : [null, null];
   const anchor = datePart ?? todayYmd;
@@ -51,16 +53,6 @@ export function DeadlinePicker({
     const [y, m] = anchor.split("-").map(Number);
     return { y, m: m - 1 };
   });
-
-  useEffect(() => {
-    function onClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
-  }, []);
 
   function openPicker() {
     const [y, m] = anchor.split("-").map(Number);
@@ -83,6 +75,7 @@ export function DeadlinePicker({
         type="button"
         onClick={openPicker}
         title={value ? "Change deadline" : "Set a deadline"}
+        aria-expanded={open}
         className={`${CONTROL_PILL} tabular-nums ${
           value
             ? overdue

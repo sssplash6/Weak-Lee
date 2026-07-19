@@ -74,14 +74,22 @@ export function PenaltyMatrix({
             return (
               <Fragment key={r.id}>
                 <tr
-                  onClick={() => canExpand && setOpenId(open ? null : r.id)}
-                  aria-expanded={canExpand ? open : undefined}
                   className={`border-b border-line transition last:border-b-0 ${
-                    canExpand ? "cursor-pointer hover:bg-canvas/60" : ""
+                    canExpand ? "hover:bg-canvas/60" : ""
                   } ${open ? "bg-canvas/60" : ""}`}
                 >
                   <td className="px-4 py-2.5">
-                    <span className="flex items-center gap-2.5">
+                    {/* The expand toggle is a real button so keyboard users can
+                        reach the fine details (was: a clickable <tr>). */}
+                    <button
+                      type="button"
+                      onClick={() => canExpand && setOpenId(open ? null : r.id)}
+                      aria-expanded={canExpand ? open : undefined}
+                      disabled={!canExpand}
+                      className={`group flex w-full items-center gap-2.5 rounded-lg text-left ${
+                        canExpand ? "" : "cursor-default"
+                      }`}
+                    >
                       <span
                         className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm ${r.bg}`}
                         aria-hidden="true"
@@ -100,7 +108,7 @@ export function PenaltyMatrix({
                       </span>
                       {canExpand && (
                         <span
-                          className={`shrink-0 text-muted-fg transition ${
+                          className={`shrink-0 text-muted-fg transition group-hover:text-ink ${
                             open ? "rotate-90" : ""
                           }`}
                           aria-hidden="true"
@@ -108,7 +116,7 @@ export function PenaltyMatrix({
                           ›
                         </span>
                       )}
-                    </span>
+                    </button>
                   </td>
                   {r.cells.map((amount, i) => (
                     <td key={REASONS[i].type} className="px-3 py-2.5">
@@ -188,10 +196,7 @@ function FineLine({
   const [isPending, startTransition] = useTransition();
 
   return (
-    <li
-      className="flex items-center gap-3 border-t border-line py-2 first:border-t-0"
-      onClick={(e) => e.stopPropagation()}
-    >
+    <li className="flex items-center gap-3 border-t border-line py-2 first:border-t-0">
       <span
         className={`h-2 w-2 shrink-0 rounded-full ${reason.dot}`}
         aria-hidden="true"
@@ -244,10 +249,7 @@ function SettleCell({
   }
 
   return (
-    <div
-      className="flex items-center"
-      onClick={(e) => e.stopPropagation()}
-    >
+    <div className="flex items-center">
       <button
         type="button"
         disabled={isPending}

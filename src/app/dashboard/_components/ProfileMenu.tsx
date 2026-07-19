@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { signOut } from "next-auth/react";
 import { AVATARS, resolveAvatar } from "@/lib/avatar";
 import { setAvatar } from "../actions";
+import { useDismissible } from "@/lib/useDismissible";
 
 type Props = {
   name?: string | null;
@@ -26,16 +27,7 @@ export function ProfileMenu({
   const [error, setError] = useState(false);
   const [isPending, startTransition] = useTransition();
   const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function onClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
-  }, []);
+  useDismissible(open, () => setOpen(false), ref);
 
   const avatar = resolveAvatar(current, email ?? name);
 
@@ -64,7 +56,6 @@ export function ProfileMenu({
         type="button"
         onClick={() => setOpen((v) => !v)}
         className={`flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-line text-lg transition hover:ring-2 hover:ring-brand-soft ${avatar.bg}`}
-        aria-haspopup="menu"
         aria-expanded={open}
         aria-label="Account menu"
       >
@@ -72,10 +63,7 @@ export function ProfileMenu({
       </button>
 
       {open && (
-        <div
-          role="menu"
-          className="pop-in absolute right-0 z-10 mt-2 w-64 rounded-xl border border-line bg-surface p-1 shadow-lg"
-        >
+        <div className="pop-in absolute right-0 z-10 mt-2 w-64 rounded-xl border border-line bg-surface p-1 shadow-lg">
           <div className="px-3 py-2">
             <p className="truncate text-sm font-medium text-ink">
               {name ?? "Student"}
@@ -130,7 +118,7 @@ export function ProfileMenu({
 
           <Link
             href="/profile"
-            role="menuitem"
+
             onClick={() => setOpen(false)}
             className="block rounded-lg px-3 py-2 text-left text-sm font-medium text-ink transition hover:bg-canvas"
           >
@@ -138,7 +126,7 @@ export function ProfileMenu({
           </Link>
           <Link
             href="/team"
-            role="menuitem"
+
             onClick={() => setOpen(false)}
             className="block rounded-lg px-3 py-2 text-left text-sm font-medium text-ink transition hover:bg-canvas"
           >
@@ -146,7 +134,7 @@ export function ProfileMenu({
           </Link>
           <Link
             href="/penalties"
-            role="menuitem"
+
             onClick={() => setOpen(false)}
             className="block rounded-lg px-3 py-2 text-left text-sm font-medium text-ink transition hover:bg-canvas"
           >
@@ -158,7 +146,7 @@ export function ProfileMenu({
           {isAdmin && (
             <Link
               href="/admin"
-              role="menuitem"
+
               onClick={() => setOpen(false)}
               className="block rounded-lg px-3 py-2 text-left text-sm font-medium text-brand transition hover:bg-canvas"
             >
@@ -167,7 +155,7 @@ export function ProfileMenu({
           )}
           <button
             type="button"
-            role="menuitem"
+
             onClick={() => signOut({ redirectTo: "/signin" })}
             className="w-full rounded-lg px-3 py-2 text-left text-sm text-ink transition hover:bg-canvas"
           >
