@@ -13,11 +13,6 @@ import {
   needsCompletionReason,
 } from "@/lib/progress";
 import { isPriority, type Priority } from "@/lib/priority";
-import {
-  formatMoney,
-  LATE_SUBMISSION_PENALTY,
-  MISSED_SUBMISSION_PENALTY,
-} from "@/lib/penalties";
 import { notify } from "@/lib/notifications";
 import { formatYmd, toYmd } from "@/lib/dates";
 import { AVATAR_EMOJIS } from "@/lib/avatar";
@@ -770,34 +765,12 @@ export async function startNewWeek(
         submittedLate,
       },
     });
-    // A late submission is fined automatically and recorded in the penalty
-    // ledger alongside meeting fines. Submitting after the Monday 11:00 meeting
-    // (when they were flagged not submitted) costs more than merely missing the
-    // Sunday deadline.
-    if (submittedLate) {
-      const missed = timing === "missed";
-      const amount = missed
-        ? MISSED_SUBMISSION_PENALTY
-        : LATE_SUBMISSION_PENALTY;
-      const note = missed
-        ? "Goals submitted after the Monday 11:00 meeting — flagged not submitted"
-        : "Goals submitted after the Sunday 12:00 deadline";
-      await tx.penalty.create({
-        data: {
-          userId,
-          type: "LATE_SUBMISSION",
-          amount,
-          note,
-          weekId: newWeek.id,
-        },
-      });
-      await notify(
-        tx,
-        userId,
-        "FINE",
-        `You were fined ${formatMoney(amount)} — ${note.toLowerCase()}.`,
-      );
-    }
+    // Late submissions are no longer fined here at close time. The weekly
+    // deadline is enforced proactively instead (see lib/submissionFines.ts):
+    // everyone who hasn't submitted by Sunday 12:00 is fined $20, escalating to
+    // $40 if still unsubmitted at the Monday 11:00 meeting — so no-shows are
+    // caught too, not just people who eventually close late. `submittedLate`
+    // above is still recorded for the admin "Late" badge.
 
     // Copy carried goals into the new week — title, priority, the fresh deadline,
     // and their subtasks (done-state preserved so progress continues).

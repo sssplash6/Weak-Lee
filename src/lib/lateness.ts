@@ -60,3 +60,58 @@ export function isTashkentSunday(at: Date): boolean {
   const shifted = new Date(at.getTime() + TASHKENT_UTC_OFFSET_HOURS * 3_600_000);
   return shifted.getUTCDay() === 0;
 }
+
+// The weekly submission cycle in focus right now. The cut between one cycle and
+// the next is the Sunday 12:00 deadline: from then on, "the week" people must
+// have goals in for is the one starting the coming Monday. Used both to
+// proactively fine missed submissions and to split the admin view into the
+// previous vs current week.
+export type SubmissionPhase = "before" | "late" | "missed";
+export type SubmissionCycle = {
+  // The target week's Monday, at UTC midnight (matches how week.startDate is
+  // stored in production). Compare weeks against `submissionDeadline`, not this,
+  // to stay robust to dev/prod timezone differences in stored week bounds.
+  weekStart: Date;
+  submissionDeadline: Date; // Sunday 12:00 Tashkent, as a UTC instant
+  meetingDeadline: Date; // Monday 11:00 Tashkent, as a UTC instant
+  // before  — the deadline hasn't passed yet (nothing due)
+  // late    — past Sunday 12:00, not yet the Monday 11:00 meeting ($20 tier)
+  // missed  — past the Monday 11:00 meeting ($40 tier)
+  phase: SubmissionPhase;
+};
+
+/**
+ * The submission cycle governing `now`: the week whose Sunday-12:00 deadline
+ * most recently passed, plus which fine tier applies. Before the current
+ * week's Sunday deadline it stays on that week (phase "before"); once the
+ * deadline passes it advances to the coming Monday's week.
+ */
+export function currentSubmissionCycle(now = new Date()): SubmissionCycle {
+  // Read the Tashkent wall clock via UTC getters on a shifted instant.
+  const tash = new Date(now.getTime() + TASHKENT_UTC_OFFSET_HOURS * 3_600_000);
+  const y = tash.getUTCFullYear();
+  const mo = tash.getUTCMonth();
+  const d = tash.getUTCDate();
+  const sinceMonday = (tash.getUTCDay() + 6) % 7; // days since Monday
+  const thisMonday = new Date(Date.UTC(y, mo, d - sinceMonday));
+  const nextMonday = new Date(Date.UTC(y, mo, d - sinceMonday + 7));
+
+  // We move into the coming Monday's cycle once its Sunday-12:00 deadline (this
+  // Sunday) has passed; until then we're still in the current week's cycle.
+  const weekStart =
+    now.getTime() >= weekSubmissionDeadline(nextMonday).getTime()
+      ? nextMonday
+      : thisMonday;
+
+  const submissionDeadline = weekSubmissionDeadline(weekStart);
+  const meetingDeadline = weekMeetingDeadline(weekStart);
+  const t = now.getTime();
+  const phase: SubmissionPhase =
+    t < submissionDeadline.getTime()
+      ? "before"
+      : t < meetingDeadline.getTime()
+        ? "late"
+        : "missed";
+
+  return { weekStart, submissionDeadline, meetingDeadline, phase };
+}

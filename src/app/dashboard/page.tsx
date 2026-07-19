@@ -25,6 +25,7 @@ import {
   weekPercent,
 } from "@/lib/progress";
 import { formatDateTimeTz, formatYmd, toStamp, toYmd } from "@/lib/dates";
+import { reconcileSubmissionFines } from "@/lib/submissionFines";
 import type { Priority } from "@/lib/priority";
 import { GoalCard } from "./_components/GoalCard";
 import { AddGoalCard } from "./_components/AddGoalCard";
@@ -89,6 +90,12 @@ export default async function DashboardPage({
     },
   });
   if (!profile || !isProfileComplete(profile)) redirect("/onboarding");
+
+  // Enforce the weekly submission deadline for this person: if they've missed
+  // Sunday 12:00 (or the Monday 11:00 escalation) without submitting, this
+  // issues/updates their fine so it shows on this very load. Idempotent and
+  // best-effort — never block the dashboard on it.
+  await reconcileSubmissionFines({ userId }).catch(() => {});
 
   // Backfill a unique avatar for users created before avatars existed.
   const avatar =

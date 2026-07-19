@@ -9,6 +9,8 @@ import { isAdmin } from "@/lib/admin";
 import { goalPercent, isGoalComplete, weekPercent } from "@/lib/progress";
 import { getWeekBounds } from "@/lib/weeks";
 import { currentMeetingSlot } from "@/lib/meetings";
+import { currentSubmissionCycle } from "@/lib/lateness";
+import { reconcileSubmissionFines } from "@/lib/submissionFines";
 import {
   formatDateTimeTz,
   formatStamp,
@@ -74,17 +76,23 @@ export default async function AdminPage({
   if (!session?.user?.id) redirect("/signin");
   if (!isAdmin(session.user.email)) redirect("/dashboard");
 
+  // Sweep the team's weekly submission fines up to date before rendering, so the
+  // admin view (and everyone's fines) reflect the deadline the moment it's
+  // opened. Idempotent and best-effort.
+  await reconcileSubmissionFines().catch(() => {});
+
   const tabParam = (await searchParams).tab;
   const tab: AdminTab =
-    tabParam === "next"
-      ? "next"
+    tabParam === "previous"
+      ? "previous"
       : tabParam === "month"
         ? "month"
         : tabParam === "perf"
           ? "perf"
-          : "this";
+          : "current";
 
   const now = new Date();
+  const cycle = currentSubmissionCycle(now);
 
   const [
     rawUsers,
@@ -106,12 +114,11 @@ export default async function AdminPage({
         email: true,
         department: true,
         avatar: true,
-        // The three most recent weeks, newest first — enough to pick out the
-        // week we're in now (latest that has started) and any future "next"
-        // week the person opened by reporting early.
+        // The most recent weeks, newest first — enough to pick out the current
+        // and previous cycle weeks even when someone has reported ahead.
         weeks: {
           orderBy: { startDate: "desc" },
-          take: 3,
+          take: 4,
           select: {
             startDate: true,
             endDate: true,
@@ -309,6 +316,7 @@ export default async function AdminPage({
       late: boolean;
       submittedAt: Date | null;
       misdated: boolean;
+      notClosed?: boolean;
       goals: PeriodGoal[];
     },
   ): AdminUser {
@@ -320,6 +328,7 @@ export default async function AdminPage({
       avatar: u.avatar,
       weekLabel: fields.label,
       misdated: fields.misdated,
+      notClosed: fields.notClosed ?? false,
       late: fields.late,
       submittedAtLabel: fields.submittedAt
         ? formatDateTimeTz(fields.submittedAt)
@@ -364,10 +373,23 @@ export default async function AdminPage({
     };
   }
 
-  // This week = the latest week that has already started (NOT the isCurrent
-  // flag: someone who reported early has a future-dated week marked current).
-  const usersThisWeek = rawUsers.map((u) => {
-    const wk = u.weeks.find((w) => w.startDate.getTime() <= now.getTime());
+  // The week split is anchored to the Sunday 12:00 deadline (see the cycle
+  // computed above): weeks starting on/after it are "current"; earlier ones are
+  // "previous". Comparing against the deadline instant (not the Monday) keeps
+  // this robust to how week bounds are stored.
+  const cutoff = cycle.submissionDeadline.getTime();
+  const currentWeekOf = (weeks: (typeof rawUsers)[number]["weeks"]) =>
+    weeks
+      .filter((w) => w.startDate.getTime() >= cutoff)
+      .sort((a, b) => a.startDate.getTime() - b.startDate.getTime())[0] ?? null;
+  const previousWeekOf = (weeks: (typeof rawUsers)[number]["weeks"]) =>
+    weeks
+      .filter((w) => w.startDate.getTime() < cutoff)
+      .sort((a, b) => b.startDate.getTime() - a.startDate.getTime())[0] ?? null;
+
+  // Current week = the week people must have goals in for this cycle.
+  const usersCurrentWeek = rawUsers.map((u) => {
+    const wk = currentWeekOf(u.weeks);
     return baseUser(u, {
       label: wk ? fmtRange(wk.startDate, wk.endDate) : null,
       late: wk?.submittedLate ?? false,
@@ -377,19 +399,18 @@ export default async function AdminPage({
     });
   });
 
-  // Next week = the future-dated week someone opened by reporting early (if
-  // any). Having one — reflected as "Reported" — is the whole point of this tab.
-  const usersNextWeek = rawUsers.map((u) => {
-    const future = u.weeks
-      .filter((w) => w.startDate.getTime() > now.getTime())
-      .sort((a, b) => a.startDate.getTime() - b.startDate.getTime())[0];
+  // Previous week = the week that just wrapped. "Didn't close" = they never
+  // started the next week (no current-cycle week), so they're stuck on it.
+  const usersPreviousWeek = rawUsers.map((u) => {
+    const wk = previousWeekOf(u.weeks);
+    const closed = currentWeekOf(u.weeks) != null;
     return baseUser(u, {
-      label: future ? fmtRange(future.startDate, future.endDate) : null,
-      late: future?.submittedLate ?? false,
-      submittedAt: future?.submittedAt ?? null,
-      // Surfaces the "move back to current week" fix for early reporters.
-      misdated: future != null,
-      goals: future?.goals ?? [],
+      label: wk ? fmtRange(wk.startDate, wk.endDate) : null,
+      late: wk?.submittedLate ?? false,
+      submittedAt: wk?.submittedAt ?? null,
+      misdated: false,
+      notClosed: wk != null && !closed,
+      goals: wk?.goals ?? [],
     });
   });
 
@@ -463,7 +484,8 @@ export default async function AdminPage({
     };
   }
 
-  const reportedCount = usersNextWeek.filter((u) => u.misdated).length;
+  // How many people are still stuck on the previous week (never closed it).
+  const notClosedCount = usersPreviousWeek.filter((u) => u.notClosed).length;
 
   // Assigned-goal tracking rows for the monitoring list.
   const assignedTaskRows = assignedTasks.map((t) => ({
@@ -483,8 +505,8 @@ export default async function AdminPage({
   const monthRange = monthLabel(now);
 
   const subtitle =
-    tab === "next"
-      ? "Who has closed and reported their week, and what they planned next."
+    tab === "previous"
+      ? "Last week's goals and who closed out their week."
       : tab === "month"
         ? `${monthRange} · monthly goals across everyone.`
         : tab === "perf"
@@ -532,18 +554,18 @@ export default async function AdminPage({
 
       <AdminTabs tab={tab} />
 
-      {tab === "this" && (
+      {tab === "current" && (
         <>
           <StatStrip
             stats={[
               { label: "Users", value: rawUsers.length },
-              { label: "Active this week", value: statsOf(usersThisWeek).activeCount },
-              { label: "Goals set", value: statsOf(usersThisWeek).totalGoals },
+              { label: "Active this week", value: statsOf(usersCurrentWeek).activeCount },
+              { label: "Goals set", value: statsOf(usersCurrentWeek).totalGoals },
               {
                 label: "Goals completed",
-                value: statsOf(usersThisWeek).totalCompleted,
+                value: statsOf(usersCurrentWeek).totalCompleted,
               },
-              { label: "Avg completion", value: `${statsOf(usersThisWeek).avg}%` },
+              { label: "Avg completion", value: `${statsOf(usersCurrentWeek).avg}%` },
               { label: "Outstanding", value: formatMoney(finesTotal) },
             ]}
           />
@@ -567,7 +589,7 @@ export default async function AdminPage({
               People ({rawUsers.length})
             </h2>
             <AdminUserList
-              users={usersThisWeek}
+              users={usersCurrentWeek}
               currentUserId={session.user.id}
               variant="week"
             />
@@ -691,27 +713,35 @@ export default async function AdminPage({
         </>
       )}
 
-      {tab === "next" && (
+      {tab === "previous" && (
         <>
           <StatStrip
             stats={[
-              { label: "Reported", value: `${reportedCount}/${rawUsers.length}` },
-              { label: "Goals planned", value: statsOf(usersNextWeek).totalGoals },
-              { label: "Avg planned", value: `${statsOf(usersNextWeek).avg}%` },
+              { label: "Users", value: rawUsers.length },
+              {
+                label: "Didn't close",
+                value: `${notClosedCount}/${rawUsers.length}`,
+              },
+              { label: "Goals set", value: statsOf(usersPreviousWeek).totalGoals },
+              {
+                label: "Goals completed",
+                value: statsOf(usersPreviousWeek).totalCompleted,
+              },
+              { label: "Avg completion", value: `${statsOf(usersPreviousWeek).avg}%` },
             ]}
           />
           <section className="mt-8">
             <h2 className="mb-1 px-1 text-sm font-semibold text-ink">
-              Reports ({rawUsers.length})
+              People ({rawUsers.length})
             </h2>
             <p className="mb-3 px-1 text-xs text-muted-fg">
-              Reporting closes the week and plans the next one — everyone
-              who&rsquo;s done that shows as reported, with their next-week goals.
+              Last week&rsquo;s goals and how they landed. Anyone who never
+              closed the week out is flagged &ldquo;Didn&rsquo;t close.&rdquo;
             </p>
             <AdminUserList
-              users={usersNextWeek}
+              users={usersPreviousWeek}
               currentUserId={session.user.id}
-              variant="next-week"
+              variant="previous-week"
             />
           </section>
         </>

@@ -1,16 +1,17 @@
 import Link from "next/link";
 
-export type AdminTab = "this" | "next" | "month" | "perf";
+export type AdminTab = "current" | "previous" | "month" | "perf";
 
 /**
  * Top-level admin tabs. Plain links; the active tab rides in the `tab` search
- * param so it survives reloads and is shareable. "Goals" = the current week's
- * submitted goals; "Reports" = who has closed/reported their week.
+ * param so it survives reloads and is shareable. "Current week" = the goals
+ * everyone owes for the week in progress; "Previous week" = last week's goals
+ * and who closed out. The split flips at the Sunday 12:00 deadline.
  */
 export function AdminTabs({ tab }: { tab: AdminTab }) {
   const TABS: { key: AdminTab; label: string; href: string }[] = [
-    { key: "this", label: "Goals", href: "/admin" },
-    { key: "next", label: "Reports", href: "/admin?tab=next" },
+    { key: "current", label: "Current week", href: "/admin" },
+    { key: "previous", label: "Previous week", href: "/admin?tab=previous" },
     { key: "month", label: "This month", href: "/admin?tab=month" },
     { key: "perf", label: "Performance", href: "/admin?tab=perf" },
   ];

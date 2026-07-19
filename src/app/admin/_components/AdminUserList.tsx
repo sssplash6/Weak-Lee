@@ -60,6 +60,8 @@ export type AdminUser = {
   avatar: string | null;
   weekLabel: string | null;
   misdated: boolean;
+  // Previous-week only: they never closed the week out (still stuck on it).
+  notClosed: boolean;
   late: boolean;
   submittedAtLabel: string | null;
   percent: number;
@@ -77,17 +79,17 @@ type SubmitFilter = "all" | "submitted" | "not-submitted";
 
 // Per-tab wording. "next-week" relabels the submitted signal as "Reported"
 // (reporting auto-submits the new week) and points the copy at next week.
-export type AdminListVariant = "week" | "next-week" | "month";
+export type AdminListVariant = "week" | "previous-week" | "month";
 const VARIANT_LABELS: Record<
   AdminListVariant,
   { done: string; notDone: string; noun: string; goalsWord: string }
 > = {
   week: { done: "Submitted", notDone: "Not submitted", noun: "week", goalsWord: "Goals" },
-  "next-week": {
-    done: "Reported",
-    notDone: "Not reported",
+  "previous-week": {
+    done: "Submitted",
+    notDone: "Not submitted",
     noun: "week",
-    goalsWord: "Next week's goals",
+    goalsWord: "Goals",
   },
   month: { done: "Submitted", notDone: "Not submitted", noun: "month", goalsWord: "Goals" },
 };
@@ -208,6 +210,11 @@ function UserRow({
             {u.late && (
               <span className="shrink-0 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-600">
                 Late
+              </span>
+            )}
+            {u.notClosed && (
+              <span className="shrink-0 rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-orange-700">
+                Didn&rsquo;t close
               </span>
             )}
             {u.goalCount === 0 && (
