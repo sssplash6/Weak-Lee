@@ -457,11 +457,6 @@ export default async function DashboardPage({
               <AssignedByMe items={assignedByMeViews} />
             </div>
           )}
-          {isAdmin(session!.user.email) && (
-            <div className="mt-72">
-              <AssignGoalButton people={team} />
-            </div>
-          )}
         </div>
       </aside>
 
@@ -511,12 +506,6 @@ export default async function DashboardPage({
       {assignedByMeViews.length > 0 && (
         <div className="mb-5 lg:hidden">
           <AssignedByMe items={assignedByMeViews} />
-        </div>
-      )}
-
-      {isAdmin(session!.user.email) && (
-        <div className="mb-5 lg:hidden">
-          <AssignGoalButton people={team} />
         </div>
       )}
 
@@ -629,6 +618,7 @@ export default async function DashboardPage({
         </div>
       </aside>
 
+      {isAdmin(session!.user.email) && <AssignGoalButton people={team} />}
       <FeedbackButton />
       </div>
     </>

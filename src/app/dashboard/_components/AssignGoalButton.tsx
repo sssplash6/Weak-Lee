@@ -7,11 +7,11 @@ import { assignTask } from "../../admin/actions";
 type Scope = "WEEKLY" | "MONTHLY";
 
 /**
- * Admin-only button in the left sidebar (beneath the fines / "Assigned by you")
- * that opens a modal for assigning a goal to a teammate — weekly or monthly. The
- * assigned goal shows in the matching view of the assignee's dashboard, and the
- * assigner can track it in the "Assigned by you" list. The action re-checks
- * admin server-side.
+ * Admin-only floating action (bottom-left, mirroring the feedback button on
+ * the right) that travels with the page scroll and opens a modal for assigning
+ * a goal to a teammate — weekly or monthly. The assigned goal shows in the
+ * matching view of the assignee's dashboard, and the assigner can track it in
+ * the "Assigned by you" list. The action re-checks admin server-side.
  */
 export function AssignGoalButton({
   people,
@@ -83,7 +83,7 @@ export function AssignGoalButton({
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Assign a goal"
-        className="group inline-flex items-center rounded-full bg-brand px-2.5 py-2 text-sm font-medium text-white shadow-md transition hover:bg-brand-dark"
+        className="group fixed bottom-6 left-6 z-40 inline-flex items-center rounded-full bg-brand px-2.5 py-2 text-sm font-medium text-white shadow-md transition hover:bg-brand-dark"
       >
         <PlusIcon className="h-4 w-4 shrink-0" />
         <span className="ml-0 max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-300 ease-out group-hover:ml-2 group-hover:max-w-[8rem] group-hover:opacity-100">
