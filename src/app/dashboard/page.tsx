@@ -11,6 +11,7 @@ import {
   getArchivedWeeks,
   getOrCreateCurrentWeek,
   nextWeekBounds,
+  weekInclude,
 } from "@/lib/weeks";
 import {
   getArchivedMonths,
@@ -116,6 +117,7 @@ export default async function DashboardPage({
     period,
     members,
     archivedPeriods,
+    editableArchivedWeek,
     penalties,
     bonuses,
     assignedTasks,
@@ -131,6 +133,15 @@ export default async function DashboardPage({
         orderBy: [{ name: "asc" }, { email: "asc" }],
       }),
       isMonth ? getArchivedMonths(userId) : getArchivedWeeks(userId),
+      // The most recent archived week, loaded with full goal/subtask/share
+      // detail — it's the one past week the archive lets the user edit.
+      isMonth
+        ? Promise.resolve(null)
+        : prisma.week.findFirst({
+            where: { userId, isCurrent: false },
+            orderBy: { startDate: "desc" },
+            include: weekInclude,
+          }),
       prisma.penalty.findMany({
         where: { userId },
         orderBy: { createdAt: "desc" },
@@ -333,8 +344,9 @@ export default async function DashboardPage({
     }
   }
 
-  // Flatten to a serializable shape for the client components.
-  const goals = period.goals.map((goal) => ({
+  // Flatten to a serializable shape for the client components. Shared by the
+  // current period and the editable archived week (same include payload).
+  const toGoalView = (goal: (typeof period.goals)[number]) => ({
     id: goal.id,
     title: goal.title,
     completed: isGoalComplete(goal),
@@ -350,7 +362,13 @@ export default async function DashboardPage({
       sharedTo: s.sharesOut.map((sh) => displayName(sh.toUser)),
       receivedFrom: s.shareIn ? displayName(s.shareIn.fromUser) : null,
     })),
-  }));
+  });
+  const goals = period.goals.map(toGoalView);
+
+  // The editable archived week's goals, in position order (no completed-first
+  // re-sort — reordering while editing would be jarring).
+  const editableArchiveGoals =
+    editableArchivedWeek?.goals.map(toGoalView) ?? null;
 
   // Completed goals sink to the bottom automatically. Array.sort is stable, so
   // position order is preserved within the open and completed groups. This is
@@ -411,7 +429,18 @@ export default async function DashboardPage({
       <div className="mx-auto flex w-full max-w-6xl flex-1 gap-6 px-4 py-8">
       <aside className="hidden w-64 shrink-0 lg:block">
         <div className="sticky top-8">
-          <WeekArchive weeks={archive} periodNoun={view} />
+          <WeekArchive
+            weeks={archive}
+            periodNoun={view}
+            editableWeek={
+              editableArchivedWeek && editableArchiveGoals
+                ? { id: editableArchivedWeek.id, goals: editableArchiveGoals }
+                : null
+            }
+            team={team}
+            todayYmd={todayYmd}
+            nowStamp={nowStamp}
+          />
           {moneyNotices && (
             <div className="mt-6 flex flex-col gap-3">{moneyNotices}</div>
           )}
@@ -553,7 +582,18 @@ export default async function DashboardPage({
       {/* Both sidebars are hidden on narrow screens (archive below lg, calendar
           below xl); surface their content inline so nothing is lost on mobile. */}
       <div className="mt-8 lg:hidden">
-        <WeekArchive weeks={archive} periodNoun={view} />
+        <WeekArchive
+          weeks={archive}
+          periodNoun={view}
+          editableWeek={
+            editableArchivedWeek && editableArchiveGoals
+              ? { id: editableArchivedWeek.id, goals: editableArchiveGoals }
+              : null
+          }
+          team={team}
+          todayYmd={todayYmd}
+          nowStamp={nowStamp}
+        />
       </div>
       <div className="mt-8 xl:hidden">
         <WeekCalendar deadlines={deadlineDots} />

@@ -28,7 +28,8 @@ export function nextWeekBounds(prevEnd: Date): { start: Date; end: Date } {
 
 // Loads a week with its goals, subtasks, and delegation info. Inlined at both
 // call sites so Prisma infers the full relation payload type.
-const weekInclude = {
+// Exported for the dashboard's editable-archive query (same payload shape).
+export const weekInclude = {
   goals: {
     orderBy: { position: "asc" },
     include: {

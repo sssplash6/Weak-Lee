@@ -43,21 +43,45 @@ async function assertGoalOwned(goalId: string, userId: string) {
  * Like `assertGoalOwned`, but also rejects edits while the goal's week or month
  * is submitted. Used for actions that change a goal's *definition* (title,
  * priority, deadline, subtasks) — progress actions (toggling, completing) stay
- * allowed when locked.
+ * allowed when locked. Exception: goals in the user's most recent archived
+ * week stay editable (that week is the one the dashboard lets them revisit).
  */
 async function assertGoalEditable(goalId: string, userId: string) {
   const goal = await prisma.goal.findFirst({
     where: { id: goalId, ...goalOwnedWhere(userId) },
     include: {
-      week: { select: { goalsLocked: true } },
-      month: { select: { goalsLocked: true } },
+      week: { select: { id: true, goalsLocked: true, isCurrent: true } },
+      month: { select: { goalsLocked: true, isCurrent: true } },
     },
   });
   if (!goal) throw new Error("Goal not found");
-  if (goal.week?.goalsLocked || goal.month?.goalsLocked) {
+  if (goal.month?.goalsLocked) {
+    throw new Error("Goals are locked. Click Edit to make changes.");
+  }
+  if (
+    goal.week?.goalsLocked &&
+    !(await isLatestArchivedWeek(userId, goal.week))
+  ) {
     throw new Error("Goals are locked. Click Edit to make changes.");
   }
   return goal;
+}
+
+/**
+ * Whether the given week is the user's most recent archived (non-current) one —
+ * the single past week the dashboard offers for editing, submitted or not.
+ */
+async function isLatestArchivedWeek(
+  userId: string,
+  week: { id: string; isCurrent: boolean },
+): Promise<boolean> {
+  if (week.isCurrent) return false;
+  const latest = await prisma.week.findFirst({
+    where: { userId, isCurrent: false },
+    orderBy: { startDate: "desc" },
+    select: { id: true },
+  });
+  return latest?.id === week.id;
 }
 
 /** Confirm a subtask belongs to the signed-in user; returns it or throws. */
@@ -69,21 +93,28 @@ async function assertSubtaskOwned(subtaskId: string, userId: string) {
   return subtask;
 }
 
-/** Like `assertSubtaskOwned`, but rejects edits while the period is submitted. */
+/** Like `assertSubtaskOwned`, but rejects edits while the period is submitted —
+ * except in the user's most recent archived week (see assertGoalEditable). */
 async function assertSubtaskEditable(subtaskId: string, userId: string) {
   const subtask = await prisma.subtask.findFirst({
     where: { id: subtaskId, goal: goalOwnedWhere(userId) },
     include: {
       goal: {
         select: {
-          week: { select: { goalsLocked: true } },
+          week: { select: { id: true, goalsLocked: true, isCurrent: true } },
           month: { select: { goalsLocked: true } },
         },
       },
     },
   });
   if (!subtask) throw new Error("Subtask not found");
-  if (subtask.goal.week?.goalsLocked || subtask.goal.month?.goalsLocked) {
+  if (subtask.goal.month?.goalsLocked) {
+    throw new Error("Goals are locked. Click Edit to make changes.");
+  }
+  if (
+    subtask.goal.week?.goalsLocked &&
+    !(await isLatestArchivedWeek(userId, subtask.goal.week))
+  ) {
     throw new Error("Goals are locked. Click Edit to make changes.");
   }
   return subtask;
@@ -440,8 +471,9 @@ export async function deleteGoal(goalId: string) {
   // A period with no goals can never be in a submitted state. If this was the
   // last goal, reset its week/month to a clean draft so it isn't a stale
   // "submitted" empty period (it can only become locked again by submitting
-  // with at least one goal).
-  if (goal.weekId) {
+  // with at least one goal). Only applies to the current period — an archived
+  // week's submission record is history and stays untouched.
+  if (goal.weekId && goal.week?.isCurrent) {
     const remaining = await prisma.goal.count({ where: { weekId: goal.weekId } });
     if (remaining === 0) {
       await prisma.week.update({
@@ -449,7 +481,7 @@ export async function deleteGoal(goalId: string) {
         data: { submittedAt: null, goalsLocked: false },
       });
     }
-  } else if (goal.monthId) {
+  } else if (goal.monthId && goal.month?.isCurrent) {
     const remaining = await prisma.goal.count({ where: { monthId: goal.monthId } });
     if (remaining === 0) {
       await prisma.month.update({

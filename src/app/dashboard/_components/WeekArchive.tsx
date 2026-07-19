@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { PenIcon } from "./icons";
+import { EditArchivedWeekModal } from "./EditArchivedWeekModal";
+import type { GoalView, TeamMember } from "./GoalCard";
 
 type ArchivedSubtask = { id: string; title: string; isDone: boolean };
 
@@ -23,12 +26,28 @@ export type ArchivedWeekView = {
 export function WeekArchive({
   weeks,
   periodNoun = "week",
+  editableWeek = null,
+  team = [],
+  todayYmd = "",
+  nowStamp = "",
 }: {
   weeks: ArchivedWeekView[];
   // "week" or "month" — only changes the copy, the rows render the same.
   periodNoun?: string;
+  // The most recent archived week (week view only): its row gets a pen button
+  // that opens the edit window. Null = nothing editable (no archive, or the
+  // month view, where past periods stay read-only).
+  editableWeek?: { id: string; goals: GoalView[] } | null;
+  team?: TeamMember[];
+  todayYmd?: string;
+  nowStamp?: string;
 }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [editing, setEditing] = useState(false);
+
+  const editableLabel = editableWeek
+    ? (weeks.find((w) => w.id === editableWeek.id)?.label ?? "")
+    : "";
 
   function toggle(id: string) {
     setExpanded((prev) => {
@@ -58,10 +77,23 @@ export function WeekArchive({
                 periodNoun={periodNoun}
                 open={expanded.has(week.id)}
                 onToggle={() => toggle(week.id)}
+                editable={editableWeek?.id === week.id}
+                onEdit={() => setEditing(true)}
               />
             </li>
           ))}
         </ul>
+      )}
+
+      {editing && editableWeek && (
+        <EditArchivedWeekModal
+          label={editableLabel}
+          goals={editableWeek.goals}
+          team={team}
+          todayYmd={todayYmd}
+          nowStamp={nowStamp}
+          onClose={() => setEditing(false)}
+        />
       )}
     </div>
   );
@@ -72,28 +104,47 @@ function WeekRow({
   periodNoun,
   open,
   onToggle,
+  editable,
+  onEdit,
 }: {
   week: ArchivedWeekView;
   periodNoun: string;
   open: boolean;
   onToggle: () => void;
+  editable: boolean;
+  onEdit: () => void;
 }) {
   return (
     <div className="rounded-xl border border-line bg-surface">
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={open}
-        className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left transition hover:bg-canvas"
-      >
-        <Chevron open={open} />
-        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">
-          {week.label}
-        </span>
-        <span className="shrink-0 text-xs font-semibold tabular-nums text-accent-ink">
-          {week.percent}%
-        </span>
-      </button>
+      <div className="flex items-center">
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={open}
+          className={`flex min-w-0 flex-1 items-center gap-2 px-3 py-2.5 text-left transition hover:bg-canvas ${
+            editable ? "rounded-l-xl" : "rounded-xl"
+          }`}
+        >
+          <Chevron open={open} />
+          <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">
+            {week.label}
+          </span>
+          <span className="shrink-0 text-xs font-semibold tabular-nums text-accent-ink">
+            {week.percent}%
+          </span>
+        </button>
+        {editable && (
+          <button
+            type="button"
+            onClick={onEdit}
+            aria-label={`Edit week ${week.label}`}
+            title="Edit this week"
+            className="mr-1.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-fg transition hover:bg-brand-soft hover:text-brand"
+          >
+            <PenIcon className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
 
       {open && (
         <div className="rise-in border-t border-line px-3 py-3">

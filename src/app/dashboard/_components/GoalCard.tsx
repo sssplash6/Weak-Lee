@@ -41,7 +41,7 @@ import { DeadlinePicker } from "./DeadlinePicker";
 import { PriorityPicker } from "./PriorityPicker";
 import { CONTROL_PILL } from "./controlPill";
 
-type SubtaskView = {
+export type SubtaskView = {
   id: string;
   title: string;
   isDone: boolean;
@@ -49,7 +49,8 @@ type SubtaskView = {
   receivedFrom: string | null;
 };
 
-type GoalView = {
+// Exported so the archive's edit-week modal can render the same cards.
+export type GoalView = {
   id: string;
   title: string;
   completed: boolean;
@@ -61,7 +62,7 @@ type GoalView = {
   subtasks: SubtaskView[];
 };
 
-type TeamMember = { id: string; name: string };
+export type TeamMember = { id: string; name: string };
 
 type OptAction =
   | { type: "toggle"; id: string; isDone: boolean }
