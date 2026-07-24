@@ -33,6 +33,37 @@
   --default-transition-timing-function: var(--ease-out-strong);
 }
 
+/* Dark theme — override the semantic tokens only. Every component reads these
+   custom properties (bg-surface, text-ink, border-line, …), so overriding them
+   on <html data-theme="dark"> cascades through the whole app; no component
+   needs `dark:` variants. Toggled by the pre-paint inline script in the root
+   layout. `:root[data-theme]` outranks the @theme :root defaults on specificity. */
+:root {
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --color-canvas: #0d1219; /* page background */
+  --color-surface: #161d26; /* cards, dropdowns */
+  --color-line: #29323d; /* borders / tracks */
+
+  /* Brightened so white button labels stay legible on `bg-brand` and `text-brand`
+     links stay legible on the dark surface — one token serving both, as in light. */
+  --color-brand: #3d84c9;
+  --color-brand-dark: #5197d6; /* hover — lighter than brand in dark */
+  --color-brand-soft: #17293d; /* deep-blue tint background */
+
+  --color-accent: #f79a2e; /* progress bars / ring */
+  --color-accent-dark: #ffb057; /* hover — lighter than accent in dark */
+  --color-accent-soft: #33240f; /* deep-warm tint background */
+  --color-accent-ink: #e0912f; /* orange text, readable on dark */
+  --color-accent-ink-dark: #f0a44e; /* hover for accent-ink */
+
+  --color-ink: #e7ebf0; /* primary text */
+  --color-muted-fg: #98a2b0; /* secondary text */
+}
+
 body {
   background: var(--color-canvas);
   color: var(--color-ink);

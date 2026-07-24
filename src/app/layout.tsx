@@ -22,6 +22,11 @@ export const metadata: Metadata = {
   description: "Track up to 5 weekly goals and their subtasks.",
 };
 
+// Runs synchronously during HTML parsing, before first paint: apply the saved
+// theme (or the OS preference when none is saved) so there's no light-mode
+// flash. `suppressHydrationWarning` on <html> lets this win over the SSR default.
+const themeScript = `(function(){try{var t=localStorage.getItem("theme");if(t!=="light"&&t!=="dark"){t=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"}document.documentElement.setAttribute("data-theme",t)}catch(e){}})()`;
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -30,8 +35,13 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      data-theme="light"
+      suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+      </head>
       <body className="min-h-full flex flex-col">
         <SiteNav />
         {children}

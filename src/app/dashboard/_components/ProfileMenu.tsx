@@ -6,6 +6,7 @@ import { signOut } from "next-auth/react";
 import { AVATARS, resolveAvatar } from "@/lib/avatar";
 import { setAvatar } from "../actions";
 import { useDismissible } from "@/lib/useDismissible";
+import { ThemeToggle } from "@/app/_components/ThemeToggle";
 
 type Props = {
   name?: string | null;
@@ -112,6 +113,16 @@ export function ProfileMenu({
                 That one was just taken — pick another.
               </p>
             )}
+          </div>
+
+          <div className="my-1 border-t border-line" />
+
+          {/* Appearance */}
+          <div className="px-3 py-2">
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-fg">
+              Appearance
+            </p>
+            <ThemeToggle />
           </div>
 
           <div className="my-1 border-t border-line" />
