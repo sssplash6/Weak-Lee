@@ -2,6 +2,8 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { PRIORITY_BG, type Priority } from "@/lib/priority";
+import type { DayTaskCount } from "@/lib/dayTasks";
+import { DayTasksModal } from "./DayTasksModal";
 
 const WEEKDAYS = ["M", "T", "W", "T", "F", "S", "S"];
 const MONTHS = [
@@ -43,14 +45,18 @@ const useIsoLayoutEffect =
 
 export function WeekCalendar({
   deadlines,
+  dayTasks,
 }: {
   deadlines: Record<string, (Priority | null)[]>;
+  dayTasks: Record<string, DayTaskCount>;
 }) {
   // Resolve "today" on the client so it matches the viewer's timezone. Render a
   // skeleton until mounted to avoid a server/client hydration mismatch.
   const [today, setToday] = useState<Date | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [index, setIndex] = useState(MONTHS_BEFORE);
+  // The day whose focus list is open, as "YYYY-MM-DD" (null = modal closed).
+  const [openDay, setOpenDay] = useState<string | null>(null);
 
   useEffect(() => {
     // Read the wall clock once after mount (an external system, per the rule).
@@ -81,6 +87,9 @@ export function WeekCalendar({
   }
 
   const heading = months[index];
+  const todayYmd = today
+    ? ymd(today.getFullYear(), today.getMonth(), today.getDate())
+    : null;
 
   return (
     <div>
@@ -119,14 +128,72 @@ export function WeekCalendar({
                 month={mo}
                 today={today}
                 deadlines={deadlines}
+                dayTasks={dayTasks}
+                onPickDay={setOpenDay}
               />
             ))}
           </div>
         ) : (
           <Skeleton />
         )}
+
+        {todayYmd && (
+          <TodayFocus
+            count={dayTasks[todayYmd]}
+            onOpen={() => setOpenDay(todayYmd)}
+          />
+        )}
       </div>
+
+      {openDay && (
+        <DayTasksModal
+          // Keyed by the day so switching dates remounts with a fresh load.
+          key={openDay}
+          ymd={openDay}
+          isToday={openDay === todayYmd}
+          onClose={() => setOpenDay(null)}
+        />
+      )}
     </div>
+  );
+}
+
+/**
+ * A one-line read-out under the grid so the day's focus is visible without
+ * opening anything — and a way in for a day that has none yet.
+ */
+function TodayFocus({
+  count,
+  onOpen,
+}: {
+  count: DayTaskCount | undefined;
+  onOpen: () => void;
+}) {
+  const total = count?.total ?? 0;
+  const open = count?.open ?? 0;
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="mt-2 flex w-full items-center justify-between gap-2 rounded-lg border border-line px-2.5 py-2 text-left transition hover:border-brand hover:bg-brand-soft"
+    >
+      <span className="min-w-0">
+        <span className="block text-[11px] font-semibold uppercase tracking-wide text-muted-fg">
+          Today
+        </span>
+        <span className="block truncate text-xs font-medium text-ink">
+          {total === 0
+            ? "Set your focus"
+            : open === 0
+              ? `All ${total} done`
+              : `${open} of ${total} to do`}
+        </span>
+      </span>
+      <span className="shrink-0 text-lg leading-none text-muted-fg">
+        {total === 0 ? "+" : "›"}
+      </span>
+    </button>
   );
 }
 
@@ -134,10 +201,14 @@ function MonthGrid({
   month,
   today,
   deadlines,
+  dayTasks,
+  onPickDay,
 }: {
   month: Month;
   today: Date;
   deadlines: Record<string, (Priority | null)[]>;
+  dayTasks: Record<string, DayTaskCount>;
+  onPickDay: (ymd: string) => void;
 }) {
   const todayYmd = ymd(today.getFullYear(), today.getMonth(), today.getDate());
 
@@ -154,6 +225,8 @@ function MonthGrid({
               cell={ymd(month.y, month.m, day)}
               todayYmd={todayYmd}
               priorities={deadlines[ymd(month.y, month.m, day)] ?? []}
+              tasks={dayTasks[ymd(month.y, month.m, day)]}
+              onPick={onPickDay}
             />
           ),
         )}
@@ -162,26 +235,73 @@ function MonthGrid({
   );
 }
 
+/**
+ * How a day number is painted. Two signals stack on the same element and are
+ * kept orthogonal so neither hides the other: the *fill* says whether the day
+ * has focus tasks (tinted = still open, grey = all done), and the *ring* says
+ * it's today. The dots below the number are a third, separate signal — goal
+ * deadlines, colored by goal priority.
+ */
+function dayNumberStyle({
+  hasTasks,
+  allDone,
+  isToday,
+}: {
+  hasTasks: boolean;
+  allDone: boolean;
+  isToday: boolean;
+}): string {
+  // Each CSS property is decided exactly once — no two competing utilities of
+  // the same kind in the string, whose winner would depend on stylesheet order.
+  const background = !hasTasks ? "" : allDone ? "bg-line" : "bg-brand-soft";
+  const text =
+    isToday || (hasTasks && !allDone)
+      ? "font-bold text-brand"
+      : hasTasks
+        ? "font-medium text-muted-fg"
+        : "font-medium text-ink";
+  const ring = isToday ? "ring-1 ring-brand" : "";
+  return [background, text, ring].filter(Boolean).join(" ");
+}
+
+/** One day. Clicking it opens that day's focus list. */
 function DayCell({
   day,
   cell,
   todayYmd,
   priorities,
+  tasks,
+  onPick,
 }: {
   day: number;
   cell: string;
   todayYmd: string;
   priorities: (Priority | null)[];
+  tasks: DayTaskCount | undefined;
+  onPick: (ymd: string) => void;
 }) {
   const isToday = cell === todayYmd;
   const dots = sortByPriority(priorities).slice(0, MAX_DOTS);
+  const total = tasks?.total ?? 0;
+  const allDone = total > 0 && tasks!.open === 0;
+
+  const label =
+    total === 0
+      ? `Add tasks for ${cell}`
+      : `${total} ${total === 1 ? "task" : "tasks"} on ${cell}`;
 
   return (
-    <div className="flex h-9 flex-col items-center justify-start pt-1">
+    <button
+      type="button"
+      onClick={() => onPick(cell)}
+      aria-label={label}
+      title={label}
+      className="flex h-9 flex-col items-center justify-start rounded pt-1 transition hover:bg-canvas"
+    >
       <span
-        className={`flex h-6 w-6 items-center justify-center text-sm tabular-nums ${
-          isToday ? "font-bold text-brand" : "font-medium text-ink"
-        }`}
+        className={`flex h-6 w-6 items-center justify-center rounded-full text-sm tabular-nums ${dayNumberStyle(
+          { hasTasks: total > 0, allDone, isToday },
+        )}`}
       >
         {day}
       </span>
@@ -193,7 +313,7 @@ function DayCell({
           />
         ))}
       </span>
-    </div>
+    </button>
   );
 }
 

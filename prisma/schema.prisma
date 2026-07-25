@@ -45,6 +45,8 @@ model User {
   goalSharesReceived GoalShare[] @relation("GoalSharesTo")
   feedback       Feedback[]
 
+  dayTasks         DayTask[]
+
   penalties        Penalty[] @relation("PenaltiesReceived")
   penaltiesIssued  Penalty[] @relation("PenaltiesIssued")
   penaltiesSettled Penalty[] @relation("PenaltiesSettled")
@@ -350,6 +352,29 @@ model Subtask {
   shareIn   SubtaskShare?  @relation("ShareCopy")
 
   @@index([goalId])
+}
+
+// A single day's focus task — "today I'm attending to the tech department".
+// Deliberately standalone: a DayTask is NOT a Goal. It belongs to no week or
+// month, carries no priority flag or subtasks, and never counts toward a week /
+// month completion percent. It exists only to answer "what am I doing today?".
+//
+// `position` IS the priority: 1 is the day's main focus, 2 the second, and so
+// on. The list is reordered by hand, so there's no separate priority field.
+// `date` is stored at UTC midnight and read as a plain calendar day, matching
+// Goal.deadline and User.birthday (see lib/dates.ts).
+model DayTask {
+  id        String   @id @default(cuid())
+  userId    String
+  date      DateTime
+  title     String
+  position  Int
+  isDone    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, date])
 }
 
 // A delegation of a subtask from one user to another. The original stays on the

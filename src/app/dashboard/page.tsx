@@ -29,6 +29,7 @@ import {
 import { formatDateTimeTz, formatYmd, toStamp, toYmd } from "@/lib/dates";
 import { reconcileSubmissionFines } from "@/lib/submissionFines";
 import type { Priority } from "@/lib/priority";
+import type { DayTaskCount } from "@/lib/dayTasks";
 import { GoalCard } from "./_components/GoalCard";
 import { AddGoalCard } from "./_components/AddGoalCard";
 import { ProfileMenu } from "./_components/ProfileMenu";
@@ -114,6 +115,19 @@ export default async function DashboardPage({
   // The updates zone shows everything from the last 48 hours.
   const updatesSince = new Date(Date.now() - 48 * 60 * 60 * 1000);
 
+  const now = new Date();
+
+  // Window of day-task markers to load for the calendar. It renders one month
+  // back to thirteen forward (see WeekCalendar); this is deliberately wider so
+  // the edges stay marked even when the viewer's timezone puts them on a
+  // different calendar day than the server.
+  const markerStart = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 2, 1),
+  );
+  const markerEnd = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 15, 1),
+  );
+
   const [
     period,
     members,
@@ -126,6 +140,7 @@ export default async function DashboardPage({
     recentNotifications,
     olderUnreadNotifications,
     unreadCount,
+    dayTaskRows,
   ] = await Promise.all([
       isMonth ? getOrCreateCurrentMonth(userId) : getOrCreateCurrentWeek(userId),
       prisma.user.findMany({
@@ -216,6 +231,12 @@ export default async function DashboardPage({
       // Unread notifications of any age — the bell badge counts these, so an
       // unread fine older than 48 hours doesn't silently drop off the badge.
       prisma.notification.count({ where: { userId, readAt: null } }),
+      // Just enough of each day task to mark its day in the calendar; the full
+      // list for one day is fetched when that day is opened.
+      prisma.dayTask.findMany({
+        where: { userId, date: { gte: markerStart, lt: markerEnd } },
+        select: { date: true, isDone: true },
+      }),
     ]);
 
   // The user's own fines. Only *outstanding* (unpaid) fines drive the money
@@ -233,7 +254,6 @@ export default async function DashboardPage({
   // "This week" for the fines breakdown: the viewed period's own bounds on the
   // week view; the current calendar week on the month view (fines aren't
   // month-scoped, so the week split must stay literal there).
-  const now = new Date();
   const weekWindow = isMonth
     ? getWeekBounds(now)
     : { start: period.startDate, end: period.endDate };
@@ -349,6 +369,17 @@ export default async function DashboardPage({
       const key = toYmd(g.deadline);
       (deadlineDots[key] ??= []).push(g.priority ?? null);
     }
+  }
+
+  // How many day tasks each day holds, and how many are still open — the
+  // calendar tints a day by this. Separate from the deadline dots above:
+  // those are goals, these are the day's own focus list.
+  const dayTaskCounts: Record<string, DayTaskCount> = {};
+  for (const t of dayTaskRows) {
+    const key = toYmd(t.date);
+    const entry = (dayTaskCounts[key] ??= { total: 0, open: 0 });
+    entry.total++;
+    if (!t.isDone) entry.open++;
   }
 
   // Flatten to a serializable shape for the client components. Shared by the
@@ -591,7 +622,7 @@ export default async function DashboardPage({
         />
       </div>
       <div className="mt-8 xl:hidden">
-        <WeekCalendar deadlines={deadlineDots} />
+        <WeekCalendar deadlines={deadlineDots} dayTasks={dayTaskCounts} />
       </div>
 
         <footer className="mt-10 border-t border-line pt-6">
@@ -614,7 +645,7 @@ export default async function DashboardPage({
 
       <aside className="hidden w-64 shrink-0 xl:block">
         <div className="sticky top-8">
-          <WeekCalendar deadlines={deadlineDots} />
+          <WeekCalendar deadlines={deadlineDots} dayTasks={dayTaskCounts} />
         </div>
       </aside>
 

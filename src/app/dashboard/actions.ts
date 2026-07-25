@@ -13,8 +13,13 @@ import {
   needsCompletionReason,
 } from "@/lib/progress";
 import { isPriority, type Priority } from "@/lib/priority";
+import {
+  MAX_DAY_TASKS,
+  MAX_DAY_TASK_TITLE,
+  type DayTaskView,
+} from "@/lib/dayTasks";
 import { notify } from "@/lib/notifications";
-import { formatYmd, toYmd } from "@/lib/dates";
+import { formatYmd, fromYmd, toYmd } from "@/lib/dates";
 import { AVATAR_EMOJIS } from "@/lib/avatar";
 
 async function requireUserId(): Promise<string> {
@@ -917,4 +922,157 @@ export async function startNewMonth(
     });
   });
   revalidatePath("/dashboard");
+}
+
+// ----- Day tasks (the calendar's per-day focus list) -----
+
+/** "YYYY-MM-DD" → UTC midnight, rejecting anything malformed. */
+function parseDay(ymd: string): Date {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) throw new Error("Invalid date");
+  const date = fromYmd(ymd);
+  if (Number.isNaN(date.getTime())) throw new Error("Invalid date");
+  return date;
+}
+
+/**
+ * The signed-in user's tasks for one day, in priority order. Every day-task
+ * mutation returns this so the modal can re-render from the server's truth
+ * rather than patching its own copy.
+ */
+async function dayTasksFor(userId: string, date: Date): Promise<DayTaskView[]> {
+  return prisma.dayTask.findMany({
+    where: { userId, date },
+    orderBy: [{ position: "asc" }, { createdAt: "asc" }],
+    select: { id: true, title: true, isDone: true },
+  });
+}
+
+/** Confirm a day-task belongs to the signed-in user; returns it or throws. */
+async function assertDayTaskOwned(taskId: string, userId: string) {
+  const task = await prisma.dayTask.findFirst({ where: { id: taskId, userId } });
+  if (!task) throw new Error("Task not found");
+  return task;
+}
+
+/** Read one day's focus list — called when the calendar opens a day. */
+export async function getDayTasks(ymd: string): Promise<DayTaskView[]> {
+  const userId = await requireUserId();
+  return dayTasksFor(userId, parseDay(ymd));
+}
+
+/**
+ * Append a focus task to a day. New tasks land at the bottom of the list, so
+ * the first one added is the day's main focus until it's reordered.
+ */
+export async function addDayTask(
+  ymd: string,
+  title: string,
+): Promise<DayTaskView[]> {
+  const userId = await requireUserId();
+  const date = parseDay(ymd);
+  const trimmed = title.trim();
+  if (!trimmed) throw new Error("A task needs a title.");
+
+  const count = await prisma.dayTask.count({ where: { userId, date } });
+  if (count >= MAX_DAY_TASKS) {
+    throw new Error(`A day holds at most ${MAX_DAY_TASKS} tasks.`);
+  }
+
+  await prisma.dayTask.create({
+    data: {
+      userId,
+      date,
+      title: trimmed.slice(0, MAX_DAY_TASK_TITLE),
+      // Position past the current tail, so a gap left by a delete never collides.
+      position: count + 1,
+    },
+  });
+  revalidatePath("/dashboard");
+  return dayTasksFor(userId, date);
+}
+
+/** Check a day-task off (or back on). */
+export async function toggleDayTask(
+  taskId: string,
+  isDone: boolean,
+): Promise<DayTaskView[]> {
+  const userId = await requireUserId();
+  const task = await assertDayTaskOwned(taskId, userId);
+  await prisma.dayTask.update({ where: { id: taskId }, data: { isDone } });
+  revalidatePath("/dashboard");
+  return dayTasksFor(userId, task.date);
+}
+
+/** Rewrite a day-task's title. An empty title is ignored, not a delete. */
+export async function renameDayTask(
+  taskId: string,
+  title: string,
+): Promise<DayTaskView[]> {
+  const userId = await requireUserId();
+  const task = await assertDayTaskOwned(taskId, userId);
+  const trimmed = title.trim();
+  if (trimmed) {
+    await prisma.dayTask.update({
+      where: { id: taskId },
+      data: { title: trimmed.slice(0, MAX_DAY_TASK_TITLE) },
+    });
+    revalidatePath("/dashboard");
+  }
+  return dayTasksFor(userId, task.date);
+}
+
+/** Remove a day-task. Remaining tasks close the gap, keeping positions 1..n. */
+export async function deleteDayTask(taskId: string): Promise<DayTaskView[]> {
+  const userId = await requireUserId();
+  const task = await assertDayTaskOwned(taskId, userId);
+  await prisma.$transaction(async (tx) => {
+    await tx.dayTask.delete({ where: { id: taskId } });
+    const rest = await tx.dayTask.findMany({
+      where: { userId, date: task.date },
+      orderBy: [{ position: "asc" }, { createdAt: "asc" }],
+      select: { id: true },
+    });
+    await Promise.all(
+      rest.map((t, i) =>
+        tx.dayTask.update({ where: { id: t.id }, data: { position: i + 1 } }),
+      ),
+    );
+  });
+  revalidatePath("/dashboard");
+  return dayTasksFor(userId, task.date);
+}
+
+/**
+ * Move a task one slot up or down its day — this is how the day's priority
+ * order is set (position 1 is the main focus). Positions are rewritten to
+ * 1..n on every move, so they never drift.
+ */
+export async function moveDayTask(
+  taskId: string,
+  direction: "up" | "down",
+): Promise<DayTaskView[]> {
+  const userId = await requireUserId();
+  const task = await assertDayTaskOwned(taskId, userId);
+
+  await prisma.$transaction(async (tx) => {
+    const ordered = await tx.dayTask.findMany({
+      where: { userId, date: task.date },
+      orderBy: [{ position: "asc" }, { createdAt: "asc" }],
+      select: { id: true },
+    });
+    const from = ordered.findIndex((t) => t.id === taskId);
+    const to = direction === "up" ? from - 1 : from + 1;
+    // Already at the end it's being moved toward — nothing to do.
+    if (from === -1 || to < 0 || to >= ordered.length) return;
+
+    const [moved] = ordered.splice(from, 1);
+    ordered.splice(to, 0, moved);
+    await Promise.all(
+      ordered.map((t, i) =>
+        tx.dayTask.update({ where: { id: t.id }, data: { position: i + 1 } }),
+      ),
+    );
+  });
+  revalidatePath("/dashboard");
+  return dayTasksFor(userId, task.date);
 }
