@@ -1,9 +1,17 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import { PRIORITY_BG, type Priority } from "@/lib/priority";
-import type { DayTaskCount } from "@/lib/dayTasks";
+import type { DayTaskCount, DayTaskView } from "@/lib/dayTasks";
+import { getDayTasks, toggleDayTask } from "../actions";
 import { DayTasksModal } from "./DayTasksModal";
+import { CheckCircleIcon } from "./icons";
 
 const WEEKDAYS = ["M", "T", "W", "T", "F", "S", "S"];
 const MONTHS = [
@@ -57,6 +65,10 @@ export function WeekCalendar({
   const [index, setIndex] = useState(MONTHS_BEFORE);
   // The day whose focus list is open, as "YYYY-MM-DD" (null = modal closed).
   const [openDay, setOpenDay] = useState<string | null>(null);
+  // Today's tasks, listed in full under the grid. Fetched on the client because
+  // "today" is the viewer's calendar day, which only exists after mount; null
+  // until that first load lands.
+  const [todayTasks, setTodayTasks] = useState<DayTaskView[] | null>(null);
 
   useEffect(() => {
     // Read the wall clock once after mount (an external system, per the rule).
@@ -90,6 +102,19 @@ export function WeekCalendar({
   const todayYmd = today
     ? ymd(today.getFullYear(), today.getMonth(), today.getDate())
     : null;
+
+  useEffect(() => {
+    if (!todayYmd) return;
+    let active = true;
+    getDayTasks(todayYmd)
+      .then((list) => {
+        if (active) setTodayTasks(list);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [todayYmd]);
 
   return (
     <div>
@@ -140,6 +165,8 @@ export function WeekCalendar({
         {todayYmd && (
           <TodayFocus
             count={dayTasks[todayYmd]}
+            tasks={todayTasks}
+            onTasks={setTodayTasks}
             onOpen={() => setOpenDay(todayYmd)}
           />
         )}
@@ -151,6 +178,8 @@ export function WeekCalendar({
           key={openDay}
           ymd={openDay}
           isToday={openDay === todayYmd}
+          // Editing today in the modal keeps the block below the grid in step.
+          onTasksChange={openDay === todayYmd ? setTodayTasks : undefined}
           onClose={() => setOpenDay(null)}
         />
       )}
@@ -159,41 +188,109 @@ export function WeekCalendar({
 }
 
 /**
- * A one-line read-out under the grid so the day's focus is visible without
- * opening anything — and a way in for a day that has none yet.
+ * Today's focus, listed in full under the grid so the day's priorities are
+ * readable — and tickable — without opening anything. The header opens the
+ * modal for everything else (add, rename, reorder, delete).
+ *
+ * `count` comes from the server and is available on first paint; `tasks`
+ * arrives once the client knows what "today" is. Whichever is present wins,
+ * so the summary never flashes a stale number.
  */
 function TodayFocus({
   count,
+  tasks,
+  onTasks,
   onOpen,
 }: {
   count: DayTaskCount | undefined;
+  tasks: DayTaskView[] | null;
+  onTasks: (tasks: DayTaskView[]) => void;
   onOpen: () => void;
 }) {
-  const total = count?.total ?? 0;
-  const open = count?.open ?? 0;
+  const [isPending, startTransition] = useTransition();
+
+  const total = tasks ? tasks.length : (count?.total ?? 0);
+  const open = tasks
+    ? tasks.filter((t) => !t.isDone).length
+    : (count?.open ?? 0);
+
+  function toggle(task: DayTaskView) {
+    startTransition(async () => {
+      try {
+        onTasks(await toggleDayTask(task.id, !task.isDone));
+      } catch {
+        // The list stays as it was; the modal surfaces errors in detail.
+      }
+    });
+  }
 
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="mt-2 flex w-full items-center justify-between gap-2 rounded-lg border border-line px-2.5 py-2 text-left transition hover:border-brand hover:bg-brand-soft"
-    >
-      <span className="min-w-0">
-        <span className="block text-[11px] font-semibold uppercase tracking-wide text-muted-fg">
-          Today
+    <div className="mt-2 overflow-hidden rounded-lg border border-line">
+      <button
+        type="button"
+        onClick={onOpen}
+        title="Open today's tasks"
+        className="flex w-full items-center justify-between gap-2 px-2.5 py-2 text-left transition hover:bg-brand-soft"
+      >
+        <span className="min-w-0">
+          <span className="block text-[11px] font-semibold uppercase tracking-wide text-muted-fg">
+            Today
+          </span>
+          <span className="block truncate text-xs font-medium text-ink">
+            {total === 0
+              ? "Set your focus"
+              : open === 0
+                ? `All ${total} done`
+                : `${open} of ${total} to do`}
+          </span>
         </span>
-        <span className="block truncate text-xs font-medium text-ink">
-          {total === 0
-            ? "Set your focus"
-            : open === 0
-              ? `All ${total} done`
-              : `${open} of ${total} to do`}
+        <span className="shrink-0 text-lg leading-none text-muted-fg">
+          {total === 0 ? "+" : "›"}
         </span>
-      </span>
-      <span className="shrink-0 text-lg leading-none text-muted-fg">
-        {total === 0 ? "+" : "›"}
-      </span>
-    </button>
+      </button>
+
+      {tasks && tasks.length > 0 && (
+        <ol className="max-h-56 overflow-y-auto border-t border-line px-2 py-1.5">
+          {tasks.map((task, i) => (
+            <li key={task.id} className="flex items-start gap-1.5 py-1">
+              <button
+                type="button"
+                onClick={() => toggle(task)}
+                disabled={isPending}
+                aria-label={task.isDone ? "Mark not done" : "Mark done"}
+                title={task.isDone ? "Mark not done" : "Mark done"}
+                className={`mt-px flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition ${
+                  task.isDone
+                    ? "border-brand bg-brand text-white"
+                    : "border-line text-transparent hover:border-brand hover:bg-brand-soft"
+                }`}
+              >
+                <CheckCircleIcon className="h-3 w-3" />
+              </button>
+              {/* Rank is the priority — #1 is the day's main focus. */}
+              <span
+                className={`w-2.5 shrink-0 text-right text-[11px] font-bold tabular-nums ${
+                  task.isDone
+                    ? "text-muted-fg/60"
+                    : i === 0
+                      ? "text-brand"
+                      : "text-muted-fg"
+                }`}
+              >
+                {i + 1}
+              </span>
+              <span
+                className={`min-w-0 flex-1 break-words text-xs leading-snug transition-colors ${
+                  task.isDone ? "text-muted-fg line-through" : "text-ink"
+                }`}
+              >
+                {task.title}
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
   );
 }
 

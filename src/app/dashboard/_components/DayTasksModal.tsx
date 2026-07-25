@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import {
   addDayTask,
@@ -45,10 +45,14 @@ function formatDayHeading(ymd: string): string {
 export function DayTasksModal({
   ymd,
   isToday,
+  onTasksChange,
   onClose,
 }: {
   ymd: string;
   isToday: boolean;
+  /** Called with the day's list on load and after every edit, so a caller
+   *  showing the same day elsewhere (the Today block) stays in step. */
+  onTasksChange?: (tasks: DayTaskView[]) => void;
   onClose: () => void;
 }) {
   const [tasks, setTasks] = useState<DayTaskView[] | null>(null);
@@ -57,13 +61,22 @@ export function DayTasksModal({
   const [isPending, startTransition] = useTransition();
   const inputRef = useRef<HTMLInputElement>(null);
 
+  /** Adopt a list from the server and mirror it to the caller. */
+  const applyTasks = useCallback(
+    (list: DayTaskView[]) => {
+      setTasks(list);
+      onTasksChange?.(list);
+    },
+    [onTasksChange],
+  );
+
   // Load the day's list on open. The caller keys this component by `ymd`, so a
   // different day remounts it — no need to reset state when the prop changes.
   useEffect(() => {
     let active = true;
     getDayTasks(ymd)
       .then((list) => {
-        if (active) setTasks(list);
+        if (active) applyTasks(list);
       })
       .catch(() => {
         if (active) setError("Couldn't load this day.");
@@ -71,7 +84,7 @@ export function DayTasksModal({
     return () => {
       active = false;
     };
-  }, [ymd]);
+  }, [ymd, applyTasks]);
 
   // Close on Escape and lock body scroll while open (matches AssignGoalButton).
   useEffect(() => {
@@ -92,7 +105,7 @@ export function DayTasksModal({
     setError(null);
     startTransition(async () => {
       try {
-        setTasks(await mutate());
+        applyTasks(await mutate());
       } catch (e) {
         setError(e instanceof Error ? e.message : failure);
       }
