@@ -236,11 +236,11 @@ function MonthGrid({
 }
 
 /**
- * How a day number is painted. Two signals stack on the same element and are
- * kept orthogonal so neither hides the other: the *fill* says whether the day
- * has focus tasks (tinted = still open, grey = all done), and the *ring* says
- * it's today. The dots below the number are a third, separate signal — goal
- * deadlines, colored by goal priority.
+ * How a day number is painted. Two signals stack on the same element: the
+ * *fill* says the day has focus tasks (tinted = still open, grey = all done),
+ * and bold navy type says it's today — no ring, the colour carries it. The
+ * dots below the number are a third, separate signal: goal deadlines, colored
+ * by goal priority.
  */
 function dayNumberStyle({
   hasTasks,
@@ -260,8 +260,7 @@ function dayNumberStyle({
       : hasTasks
         ? "font-medium text-muted-fg"
         : "font-medium text-ink";
-  const ring = isToday ? "ring-1 ring-brand" : "";
-  return [background, text, ring].filter(Boolean).join(" ");
+  return background ? `${background} ${text}` : text;
 }
 
 /** One day. Clicking it opens that day's focus list. */
