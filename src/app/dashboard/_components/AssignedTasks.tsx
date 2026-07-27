@@ -16,11 +16,16 @@ export type AssignedTaskView = {
  * The signed-in user's admin-assigned tasks — a standalone list, separate from
  * their own weekly goals and NOT counted in their week percent. Golden-bordered
  * to set it apart. Each task can be checked off by the assignee.
+ *
+ * Deliberately a light "sticky note" in both themes (like SubmitReminder), so
+ * the tint is opaque rather than alpha-blended — over the dark canvas a
+ * translucent cream turns muddy khaki. Text inside therefore uses fixed dark
+ * tones, not `text-ink`, which flips to near-white in the dark theme.
  */
 export function AssignedTasks({ tasks }: { tasks: AssignedTaskView[] }) {
   if (tasks.length === 0) return null;
   return (
-    <div className="mb-5 rounded-xl border border-amber-300 bg-amber-50/60 px-4 py-3">
+    <div className="mb-5 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3">
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm font-semibold text-amber-700">Assigned to you</p>
         <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-700">
@@ -69,7 +74,7 @@ function AssignedRow({ task }: { task: AssignedTaskView }) {
       <span className="min-w-0 flex-1">
         <span
           className={`break-words transition-colors ${
-            done ? "text-amber-700/60 line-through" : "text-ink"
+            done ? "text-amber-700/60 line-through" : "text-amber-950"
           }`}
         >
           {task.title}

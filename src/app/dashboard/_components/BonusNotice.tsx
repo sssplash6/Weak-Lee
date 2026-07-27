@@ -11,6 +11,8 @@ type BonusRow = {
  * The signed-in user's own bonuses, shown on their dashboard next to fines.
  * Green-tinted (the positive counterpart of PenaltyNotice); lists each bonus
  * with its note and amount plus a running total. Tracked separately from fines.
+ * Opaque tint, for the same reason as PenaltyNotice: a translucent one muddies
+ * against the dark canvas.
  */
 export function BonusNotice({
   bonuses,
@@ -20,7 +22,7 @@ export function BonusNotice({
   total: number;
 }) {
   return (
-    <div className="rounded-xl border border-green-200 bg-green-50/60 px-4 py-3">
+    <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3">
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm font-semibold text-green-700">Bonuses</p>
         <p className="text-sm font-bold tabular-nums text-green-700">

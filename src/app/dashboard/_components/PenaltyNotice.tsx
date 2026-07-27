@@ -14,7 +14,9 @@ type WeekPenalty = {
  * breaks it down into this week's fines and earlier ones. Once a fine is
  * settled (cut from salary) it drops out of these lists; the whole block hides
  * when nothing is outstanding, with a quiet "paid to date" note while it shows.
- * Red-tinted, since fines are a negative, but calm rather than alarming.
+ * Red-tinted, since fines are a negative, but calm rather than alarming. The
+ * tint is opaque so it stays a clean near-white card in the dark theme too —
+ * alpha-blended over the dark canvas it went muddy mauve.
  */
 export function PenaltyNotice({
   weekPenalties,
@@ -33,7 +35,7 @@ export function PenaltyNotice({
   const hasEarlier = earlierPenalties.length > 0;
 
   return (
-    <div className="rounded-xl border border-red-200 bg-red-50/60 p-4">
+    <div className="rounded-xl border border-red-200 bg-red-50 p-4">
       <p className="text-[11px] font-semibold uppercase tracking-wide text-red-700/70">
         Fines
       </p>
