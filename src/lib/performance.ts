@@ -1,18 +1,32 @@
-// Pure helpers that turn each user's full history into the per-employee
-// metrics shown on the admin Performance tab. No server-only imports — just
-// math over rows the page already fetched.
+// Pure helpers that turn each person's full history into the metrics shown on
+// the admin Performance tab. No server-only imports — just math over rows the
+// page already fetched (see the perf query in admin/page.tsx).
 //
-// Averages deliberately cover *closed* weeks/months only: a half-done current
-// week would drag everyone's numbers down mid-period and make the tab read
-// differently on Tuesday than on Sunday.
+// Everything is computed for three ranges at once — previous week, current week,
+// all time — so the tab's toggle is instant client-side state rather than three
+// round trips. The window for a week range comes from the submission cycle, the
+// same Sunday-12:00 anchor the rest of the admin views split on.
 
-import { isGoalComplete, weekPercent } from "@/lib/progress";
-import type { AttendanceStatus } from "@/lib/penalties";
+import { goalPercent, isGoalComplete, weekPercent } from "@/lib/progress";
+import {
+  currentSubmissionCycle,
+  weekSubmissionDeadline,
+  submissionTiming,
+} from "@/lib/lateness";
+import type { AttendanceStatus, PenaltyType } from "@/lib/penalties";
+
+// ---------------------------------------------------------------- input shapes
 
 type GoalLite = {
+  title?: string;
   completedAt: Date | null;
   manualPercent: number | null;
+  deadline?: Date | null;
+  priority?: "LOW" | "MEDIUM" | "HIGH" | null;
+  incompleteReason?: string | null;
   subtasks: { isDone: boolean }[];
+  sharesOut?: { id: string }[];
+  shareIn?: { id: string } | null;
 };
 
 /** The per-user rows the performance query loads (see admin/page.tsx). */
@@ -22,6 +36,7 @@ export type PerformanceSource = {
   email: string | null;
   department: string | null;
   avatar: string | null;
+  createdAt: Date;
   weeks: {
     startDate: Date;
     endDate: Date;
@@ -29,33 +44,84 @@ export type PerformanceSource = {
     submittedAt: Date | null;
     goals: GoalLite[];
   }[];
-  months: { startDate: Date; endDate: Date; goals: GoalLite[] }[];
-  attendances: { status: AttendanceStatus }[];
-  penalties: { amount: number }[];
-  bonuses: { amount: number }[];
-  assignedTasks: { completedAt: Date | null }[];
+  months: {
+    startDate: Date;
+    endDate: Date;
+    submittedAt: Date | null;
+    goals: GoalLite[];
+  }[];
+  attendances: { status: AttendanceStatus; meeting: { scheduledAt: Date } }[];
+  penalties: {
+    type: PenaltyType;
+    amount: number;
+    createdAt: Date;
+    paidAt: Date | null;
+  }[];
+  bonuses: { amount: number; createdAt: Date }[];
+  assignedTasks: {
+    deadline: Date | null;
+    completedAt: Date | null;
+    createdAt: Date;
+  }[];
+  dayTasks: { date: Date; isDone: boolean }[];
+};
+
+// --------------------------------------------------------------- output shapes
+
+export type RangeKey = "previous" | "current" | "all";
+
+export type PriorityKey = "HIGH" | "MEDIUM" | "LOW" | "NONE";
+
+/** One week in the completion trend chart. */
+export type TrendPoint = {
+  label: string; // "20 Jul"
+  percent: number;
+  goals: number;
+  submitted: boolean;
+  late: boolean;
 };
 
 export type EmployeePerformance = {
   id: string;
-  name: string | null;
+  name: string;
   email: string | null;
   department: string | null;
   avatar: string | null;
-  /** Composite 0–100 (see SCORE_WEIGHTS); null until there's any history. */
+  /** Weeks since the account was created — a fairness note next to thin data. */
+  tenureWeeks: number;
+  joinedAt: Date;
+  /** Composite 0–100 (see SCORE_WEIGHTS); null until there's history to score. */
   score: number | null;
-  weekly: {
-    /** Closed weeks that had at least one goal. */
-    tracked: number;
+  /** The three parts behind the score, each 0–100 or null when not applicable. */
+  parts: { completion: number | null; attendance: number | null; onTime: number | null };
+  rank: number | null; // overall, 1 = best; null when unscored
+  deptRank: number | null; // within their department
+  goals: {
+    weeksTracked: number;
     avgPercent: number | null;
-    goalsSet: number;
-    goalsDone: number;
+    /** True when avgPercent leans on a week that hasn't ended yet. */
+    live: boolean;
+    set: number;
+    done: number;
+    subtasksDone: number;
+    subtasksTotal: number;
+    byPriority: Record<PriorityKey, { set: number; done: number }>;
+    withDeadline: number;
+    metDeadline: number;
+    missedDeadline: number;
+    reflected: number; // sub-100% goals that carry a reflection reason
+    needsReflection: number;
+    best: TrendPoint | null;
+    worst: TrendPoint | null;
   };
-  monthly: {
-    tracked: number;
-    avgPercent: number | null;
-    goalsSet: number;
-    goalsDone: number;
+  months: { tracked: number; avgPercent: number | null; set: number; done: number };
+  reporting: {
+    rate: number | null; // on-time share of submitted weeks
+    submitted: number;
+    onTime: number;
+    late: number;
+    /** Mean hours between submitting and the Sunday deadline (+ = early). */
+    avgLeadHours: number | null;
   };
   meetings: {
     rate: number | null; // (attended + late) / (attended + late + skipped)
@@ -63,53 +129,106 @@ export type EmployeePerformance = {
     late: number;
     skipped: number;
     excused: number;
+    /** Most recent meetings first — letter strip in the report card. */
+    recent: { label: string; status: AttendanceStatus }[];
   };
-  reporting: {
-    rate: number | null; // on-time share of submitted weeks
-    onTime: number;
-    submitted: number;
+  tasks: {
+    total: number;
+    done: number;
+    open: number;
+    overdue: number;
+    onTime: number; // finished on or before the deadline
+    rate: number | null;
   };
-  tasks: { done: number; total: number };
+  dayTasks: { total: number; done: number; rate: number | null; days: number };
+  delegation: { sharedOut: number; received: number };
   money: {
     bonusTotal: number;
     bonusCount: number;
     fineTotal: number;
     fineCount: number;
+    outstanding: number;
+    paid: number;
     net: number;
+    byType: Record<PenaltyType, number>;
   };
+  trend: TrendPoint[];
 };
 
-export type TeamPerformance = {
+export type DepartmentPerformance = {
+  name: string;
+  headcount: number;
   avgScore: number | null;
   avgCompletion: number | null;
   attendanceRate: number | null;
   onTimeRate: number | null;
+  goalsSet: number;
+  goalsDone: number;
+  fineTotal: number;
+  bonusTotal: number;
+};
+
+export type TeamPerformance = {
+  headcount: number;
+  scored: number;
+  avgScore: number | null;
+  avgCompletion: number | null;
+  attendanceRate: number | null;
+  onTimeRate: number | null;
+  goalsSet: number;
+  goalsDone: number;
+  tasksDone: number;
+  tasksTotal: number;
   bonusTotal: number;
   fineTotal: number;
+  outstanding: number;
 };
+
+export type RangeReport = {
+  key: RangeKey;
+  label: string; // "Current week"
+  window: string; // "20 – 26 Jul 2026" / "Everything to date"
+  employees: EmployeePerformance[];
+  team: TeamPerformance;
+  departments: DepartmentPerformance[];
+  /** Team-average completion per week, oldest first — the overview trend. */
+  trend: { label: string; percent: number }[];
+};
+
+export type PerformanceReport = Record<RangeKey, RangeReport>;
+
+// ------------------------------------------------------------------- internals
 
 // How the composite score is mixed. Goal completion is the backbone: without
-// closed-week history there is no score at all — otherwise one attended
-// meeting would renormalize to a perfect 100 and outrank people with real,
-// slightly-imperfect records. The two smaller components are still skipped
-// (and their weight folded back) when genuinely absent.
-const SCORE_WEIGHTS: [keyof ScoreParts, number][] = [
-  ["completion", 0.5],
-  ["attendance", 0.25],
-  ["onTime", 0.25],
-];
+// completion history there is no score at all — otherwise one attended meeting
+// would renormalize to a perfect 100 and outrank people with real, slightly
+// imperfect records. The two smaller components are still skipped (and their
+// weight folded back) when genuinely absent.
+export const SCORE_WEIGHTS: { key: "completion" | "attendance" | "onTime"; label: string; weight: number }[] =
+  [
+    { key: "completion", label: "Goal completion", weight: 0.5 },
+    { key: "attendance", label: "Meeting attendance", weight: 0.25 },
+    { key: "onTime", label: "On-time reporting", weight: 0.25 },
+  ];
 
-type ScoreParts = {
-  completion: number | null;
-  attendance: number | null;
-  onTime: number | null;
-};
+const DAY_MS = 86_400_000;
+const WEEK_MS = 7 * DAY_MS;
 
-function compositeScore(parts: ScoreParts): number | null {
+function pct(part: number, whole: number): number | null {
+  return whole > 0 ? Math.round((part / whole) * 100) : null;
+}
+
+function avg(values: number[]): number | null {
+  return values.length
+    ? Math.round(values.reduce((s, v) => s + v, 0) / values.length)
+    : null;
+}
+
+function compositeScore(parts: EmployeePerformance["parts"]): number | null {
   if (parts.completion == null) return null;
   let sum = 0;
   let weight = 0;
-  for (const [key, w] of SCORE_WEIGHTS) {
+  for (const { key, weight: w } of SCORE_WEIGHTS) {
     const value = parts[key];
     if (value == null) continue;
     sum += value * w;
@@ -118,112 +237,298 @@ function compositeScore(parts: ScoreParts): number | null {
   return weight > 0 ? Math.round(sum / weight) : null;
 }
 
-function pct(part: number, whole: number): number | null {
-  return whole > 0 ? Math.round((part / whole) * 100) : null;
+/** "20 Jul" — UTC-based, matching how period bounds are stored. */
+function dayLabel(d: Date): string {
+  return `${d.getUTCDate()} ${d.toLocaleString("en-US", { month: "short", timeZone: "UTC" })}`;
 }
 
-function computeOne(u: PerformanceSource, now: Date): EmployeePerformance {
-  // Weekly history: only weeks that have fully ended count toward averages.
-  const closedWeeks = u.weeks.filter((w) => w.endDate.getTime() < now.getTime());
-  const trackedWeeks = closedWeeks.filter((w) => w.goals.length > 0);
-  const weekGoals = trackedWeeks.flatMap((w) => w.goals);
-  const avgWeekPercent = trackedWeeks.length
-    ? Math.round(
-        trackedWeeks.reduce((s, w) => s + weekPercent(w.goals), 0) /
-          trackedWeeks.length,
-      )
-    : null;
+function rangeWindowLabel(from: Date, to: Date): string {
+  const end = new Date(to.getTime() - DAY_MS); // inclusive last day
+  return `${dayLabel(from)} – ${dayLabel(end)} ${end.getUTCFullYear()}`;
+}
 
-  const closedMonths = u.months.filter(
-    (m) => m.endDate.getTime() < now.getTime(),
+type Window = { from: number; to: number };
+
+const ALL: Window = { from: -Infinity, to: Infinity };
+
+function inWindow(d: Date | null | undefined, w: Window): boolean {
+  if (d == null) return false;
+  const t = d.getTime();
+  return t >= w.from && t < w.to;
+}
+
+/** The priority bucket a goal falls in (null priority is its own bucket). */
+function priorityOf(g: GoalLite): PriorityKey {
+  return g.priority ?? "NONE";
+}
+
+function emptyByPriority(): Record<PriorityKey, { set: number; done: number }> {
+  return {
+    HIGH: { set: 0, done: 0 },
+    MEDIUM: { set: 0, done: 0 },
+    LOW: { set: 0, done: 0 },
+    NONE: { set: 0, done: 0 },
+  };
+}
+
+function emptyByType(): Record<PenaltyType, number> {
+  return { MEETING_SKIPPED: 0, MEETING_LATE: 0, LATE_SUBMISSION: 0, OTHER: 0 };
+}
+
+/**
+ * Whether a goal beat its deadline. Deadlines are stored at UTC midnight and
+ * read as whole days, so a goal completed any time on the due day counts.
+ */
+function metDeadline(g: GoalLite): boolean {
+  if (!g.deadline || !g.completedAt) return false;
+  return g.completedAt.getTime() < g.deadline.getTime() + DAY_MS;
+}
+
+function computeOne(
+  u: PerformanceSource,
+  win: Window,
+  now: Date,
+  trendWeeks: number,
+): EmployeePerformance {
+  const nowMs = now.getTime();
+
+  // ---- weekly goals
+  // A week belongs to the range by its start date; "all" takes everything.
+  const weeks = u.weeks
+    .filter((w) => win === ALL || inWindow(w.startDate, win))
+    .sort((a, b) => a.startDate.getTime() - b.startDate.getTime());
+  const withGoals = weeks.filter((w) => w.goals.length > 0);
+  const closed = withGoals.filter((w) => w.endDate.getTime() < nowMs);
+  // Averages prefer closed weeks so a half-done week can't drag the number
+  // down; when the range only holds a live week we use it and flag it.
+  const basis = closed.length > 0 ? closed : withGoals;
+  const live = closed.length === 0 && withGoals.length > 0;
+  const avgPercent = avg(basis.map((w) => weekPercent(w.goals)));
+
+  const goals = withGoals.flatMap((w) => w.goals);
+  const subtasks = goals.flatMap((g) => g.subtasks);
+  const byPriority = emptyByPriority();
+  for (const g of goals) {
+    const slot = byPriority[priorityOf(g)];
+    slot.set++;
+    if (isGoalComplete(g)) slot.done++;
+  }
+  const withDeadline = goals.filter((g) => g.deadline != null);
+  const partial = goals.filter((g) => goalPercent(g) < 100);
+
+  const points: TrendPoint[] = withGoals.map((w) => ({
+    label: dayLabel(w.startDate),
+    percent: weekPercent(w.goals),
+    goals: w.goals.length,
+    submitted: w.submittedAt != null,
+    late: w.submittedLate,
+  }));
+  const ranked = [...points].sort((a, b) => b.percent - a.percent);
+
+  // ---- monthly goals
+  const months = u.months
+    .filter((m) => win === ALL || inWindow(m.startDate, win) || overlaps(m, win))
+    .filter((m) => m.goals.length > 0);
+  const closedMonths = months.filter((m) => m.endDate.getTime() < nowMs);
+  const monthBasis = closedMonths.length > 0 ? closedMonths : months;
+  const monthGoals = months.flatMap((m) => m.goals);
+
+  // ---- reporting: lateness is known the moment a week is submitted, so every
+  // submitted week counts, including the one in progress.
+  const submitted = weeks.filter((w) => w.submittedAt != null);
+  const onTimeWeeks = submitted.filter(
+    (w) => submissionTiming(w.submittedAt!, w.startDate) === "on-time",
   );
-  const trackedMonths = closedMonths.filter((m) => m.goals.length > 0);
-  const monthGoals = trackedMonths.flatMap((m) => m.goals);
-  const avgMonthPercent = trackedMonths.length
-    ? Math.round(
-        trackedMonths.reduce((s, m) => s + weekPercent(m.goals), 0) /
-          trackedMonths.length,
-      )
+  const leads = submitted.map(
+    (w) =>
+      (weekSubmissionDeadline(w.startDate).getTime() - w.submittedAt!.getTime()) /
+      3_600_000,
+  );
+  const avgLeadHours = leads.length
+    ? Math.round(leads.reduce((s, v) => s + v, 0) / leads.length)
     : null;
 
-  // On-time reporting: lateness is known the moment a week is submitted, so
-  // every submitted week counts (including the current one).
-  const submitted = u.weeks.filter((w) => w.submittedAt != null);
-  const onTime = submitted.filter((w) => !w.submittedLate).length;
-
-  // Meetings: EXCUSED absences don't count against (or for) the rate; LATE
-  // still counts as present, matching how fines treat it.
+  // ---- meetings
+  const attendances = u.attendances
+    .filter((a) => win === ALL || inWindow(a.meeting.scheduledAt, win))
+    .sort(
+      (a, b) => b.meeting.scheduledAt.getTime() - a.meeting.scheduledAt.getTime(),
+    );
   const att = { attended: 0, late: 0, skipped: 0, excused: 0 };
-  for (const a of u.attendances) {
+  for (const a of attendances) {
     if (a.status === "ATTENDED") att.attended++;
     else if (a.status === "LATE") att.late++;
     else if (a.status === "SKIPPED") att.skipped++;
     else att.excused++;
   }
-  const meetingsRate = pct(
-    att.attended + att.late,
-    att.attended + att.late + att.skipped,
+
+  // ---- assigned tasks: an open task belongs to the range by its deadline (or
+  // when it was assigned); a finished one by when it was ticked off.
+  const tasks = u.assignedTasks.filter((t) =>
+    win === ALL
+      ? true
+      : t.completedAt != null
+        ? inWindow(t.completedAt, win)
+        : inWindow(t.deadline ?? t.createdAt, win),
+  );
+  const tasksDone = tasks.filter((t) => t.completedAt != null);
+  const tasksOnTime = tasksDone.filter(
+    (t) =>
+      t.deadline == null ||
+      t.completedAt!.getTime() < t.deadline.getTime() + DAY_MS,
+  );
+  const overdue = tasks.filter(
+    (t) =>
+      t.completedAt == null && t.deadline != null && t.deadline.getTime() < nowMs,
   );
 
-  const tasksDone = u.assignedTasks.filter((t) => t.completedAt != null).length;
+  // ---- daily focus list
+  const dayTasks = u.dayTasks.filter((t) => win === ALL || inWindow(t.date, win));
+  const dayDone = dayTasks.filter((t) => t.isDone).length;
+  const days = new Set(dayTasks.map((t) => t.date.getTime())).size;
 
-  const bonusTotal = u.bonuses.reduce((s, b) => s + b.amount, 0);
-  const fineTotal = u.penalties.reduce((s, p) => s + p.amount, 0);
+  // ---- delegation (goal-level shares live on the goals of the range's weeks)
+  const sharedOut = goals.reduce((s, g) => s + (g.sharesOut?.length ?? 0), 0);
+  const received = goals.filter((g) => g.shareIn != null).length;
+
+  // ---- money
+  const bonuses = u.bonuses.filter((b) => win === ALL || inWindow(b.createdAt, win));
+  const penalties = u.penalties.filter(
+    (p) => win === ALL || inWindow(p.createdAt, win),
+  );
+  const byType = emptyByType();
+  for (const p of penalties) byType[p.type] += p.amount;
+  const bonusTotal = bonuses.reduce((s, b) => s + b.amount, 0);
+  const fineTotal = penalties.reduce((s, p) => s + p.amount, 0);
+
+  const parts = {
+    completion: avgPercent,
+    attendance: pct(att.attended + att.late, att.attended + att.late + att.skipped),
+    onTime: pct(onTimeWeeks.length, submitted.length),
+  };
 
   return {
     id: u.id,
-    name: u.name,
+    name: u.name ?? u.email ?? "—",
     email: u.email,
     department: u.department,
     avatar: u.avatar,
-    score: compositeScore({
-      completion: avgWeekPercent,
-      attendance: meetingsRate,
-      onTime: pct(onTime, submitted.length),
-    }),
-    weekly: {
-      tracked: trackedWeeks.length,
-      avgPercent: avgWeekPercent,
-      goalsSet: weekGoals.length,
-      goalsDone: weekGoals.filter(isGoalComplete).length,
+    tenureWeeks: Math.max(
+      0,
+      Math.floor((nowMs - u.createdAt.getTime()) / WEEK_MS),
+    ),
+    joinedAt: u.createdAt,
+    score: compositeScore(parts),
+    parts,
+    rank: null, // filled in by buildRange once everyone is scored
+    deptRank: null,
+    goals: {
+      weeksTracked: basis.length,
+      avgPercent,
+      live,
+      set: goals.length,
+      done: goals.filter(isGoalComplete).length,
+      subtasksDone: subtasks.filter((s) => s.isDone).length,
+      subtasksTotal: subtasks.length,
+      byPriority,
+      withDeadline: withDeadline.length,
+      metDeadline: withDeadline.filter(metDeadline).length,
+      missedDeadline: withDeadline.filter((g) => !metDeadline(g)).length,
+      reflected: partial.filter((g) => (g.incompleteReason ?? "").trim() !== "")
+        .length,
+      needsReflection: partial.length,
+      best: ranked[0] ?? null,
+      worst: ranked.length > 1 ? ranked[ranked.length - 1] : null,
     },
-    monthly: {
-      tracked: trackedMonths.length,
-      avgPercent: avgMonthPercent,
-      goalsSet: monthGoals.length,
-      goalsDone: monthGoals.filter(isGoalComplete).length,
+    months: {
+      tracked: monthBasis.length,
+      avgPercent: avg(monthBasis.map((m) => weekPercent(m.goals))),
+      set: monthGoals.length,
+      done: monthGoals.filter(isGoalComplete).length,
     },
-    meetings: { rate: meetingsRate, ...att },
     reporting: {
-      rate: pct(onTime, submitted.length),
-      onTime,
+      rate: parts.onTime,
       submitted: submitted.length,
+      onTime: onTimeWeeks.length,
+      late: submitted.length - onTimeWeeks.length,
+      avgLeadHours,
     },
-    tasks: { done: tasksDone, total: u.assignedTasks.length },
+    meetings: {
+      rate: parts.attendance,
+      ...att,
+      recent: attendances.slice(0, 8).map((a) => ({
+        label: dayLabel(a.meeting.scheduledAt),
+        status: a.status,
+      })),
+    },
+    tasks: {
+      total: tasks.length,
+      done: tasksDone.length,
+      open: tasks.length - tasksDone.length,
+      overdue: overdue.length,
+      onTime: tasksOnTime.length,
+      rate: pct(tasksDone.length, tasks.length),
+    },
+    dayTasks: {
+      total: dayTasks.length,
+      done: dayDone,
+      rate: pct(dayDone, dayTasks.length),
+      days,
+    },
+    delegation: { sharedOut, received },
     money: {
       bonusTotal,
-      bonusCount: u.bonuses.length,
+      bonusCount: bonuses.length,
       fineTotal,
-      fineCount: u.penalties.length,
+      fineCount: penalties.length,
+      outstanding: penalties
+        .filter((p) => p.paidAt == null)
+        .reduce((s, p) => s + p.amount, 0),
+      paid: penalties
+        .filter((p) => p.paidAt != null)
+        .reduce((s, p) => s + p.amount, 0),
       net: bonusTotal - fineTotal,
+      byType,
     },
+    trend: points.slice(-trendWeeks),
   };
 }
 
-/**
- * All employees' performance, ranked best-first (people with no history yet
- * sink to the bottom), plus team-wide aggregates for the stat strip.
- */
-export function buildPerformance(
+/** Whether a month overlaps the window at all (months are longer than a week). */
+function overlaps(m: { startDate: Date; endDate: Date }, w: Window): boolean {
+  return m.startDate.getTime() < w.to && m.endDate.getTime() >= w.from;
+}
+
+function buildRange(
   users: PerformanceSource[],
+  win: Window,
   now: Date,
-): { employees: EmployeePerformance[]; team: TeamPerformance } {
+  meta: { key: RangeKey; label: string; window: string; trendWeeks: number },
+): RangeReport {
   const employees = users
-    .map((u) => computeOne(u, now))
-    .sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
+    .map((u) => computeOne(u, win, now, meta.trendWeeks))
+    .sort(
+      (a, b) =>
+        (b.score ?? -1) - (a.score ?? -1) || a.name.localeCompare(b.name),
+    );
+
+  // Ranks: overall and within the department. Unscored people keep null so the
+  // UI can say "not scored yet" instead of implying a last place.
+  let seen = 0;
+  const perDept = new Map<string, number>();
+  for (const e of employees) {
+    if (e.score == null) continue;
+    e.rank = ++seen;
+    const dept = e.department ?? "—";
+    const next = (perDept.get(dept) ?? 0) + 1;
+    perDept.set(dept, next);
+    e.deptRank = next;
+  }
 
   const scored = employees.filter((e) => e.score != null);
-  const withAvg = employees.filter((e) => e.weekly.avgPercent != null);
+  const completions = employees
+    .map((e) => e.goals.avgPercent)
+    .filter((v): v is number => v != null);
   const attended = employees.reduce(
     (s, e) => s + e.meetings.attended + e.meetings.late,
     0,
@@ -235,22 +540,138 @@ export function buildPerformance(
   const onTime = employees.reduce((s, e) => s + e.reporting.onTime, 0);
   const submitted = employees.reduce((s, e) => s + e.reporting.submitted, 0);
 
+  // Department rollups, biggest first. People with no department are grouped
+  // under "Unassigned" so nobody silently drops out of the comparison.
+  const groups = new Map<string, EmployeePerformance[]>();
+  for (const e of employees) {
+    const key = e.department?.trim() || "Unassigned";
+    groups.set(key, [...(groups.get(key) ?? []), e]);
+  }
+  const departments: DepartmentPerformance[] = [...groups.entries()]
+    .map(([name, list]) => ({
+      name,
+      headcount: list.length,
+      avgScore: avg(
+        list.map((e) => e.score).filter((v): v is number => v != null),
+      ),
+      avgCompletion: avg(
+        list.map((e) => e.goals.avgPercent).filter((v): v is number => v != null),
+      ),
+      attendanceRate: pct(
+        list.reduce((s, e) => s + e.meetings.attended + e.meetings.late, 0),
+        list.reduce(
+          (s, e) =>
+            s + e.meetings.attended + e.meetings.late + e.meetings.skipped,
+          0,
+        ),
+      ),
+      onTimeRate: pct(
+        list.reduce((s, e) => s + e.reporting.onTime, 0),
+        list.reduce((s, e) => s + e.reporting.submitted, 0),
+      ),
+      goalsSet: list.reduce((s, e) => s + e.goals.set, 0),
+      goalsDone: list.reduce((s, e) => s + e.goals.done, 0),
+      fineTotal: list.reduce((s, e) => s + e.money.fineTotal, 0),
+      bonusTotal: list.reduce((s, e) => s + e.money.bonusTotal, 0),
+    }))
+    .sort(
+      (a, b) => (b.avgScore ?? -1) - (a.avgScore ?? -1) || b.headcount - a.headcount,
+    );
+
+  // Team trend: the average of everyone's completion for each week label that
+  // appears in anyone's series, oldest first.
+  const byLabel = new Map<string, { sum: number; n: number; at: number }>();
+  for (const e of employees) {
+    for (const p of e.trend) {
+      const slot = byLabel.get(p.label) ?? { sum: 0, n: 0, at: 0 };
+      slot.sum += p.percent;
+      slot.n++;
+      byLabel.set(p.label, slot);
+    }
+  }
+  const order = new Map<string, number>();
+  for (const u of users) {
+    for (const w of u.weeks) {
+      const label = dayLabel(w.startDate);
+      const at = w.startDate.getTime();
+      if (!order.has(label) || at < order.get(label)!) order.set(label, at);
+    }
+  }
+  const trend = [...byLabel.entries()]
+    .map(([label, { sum, n }]) => ({
+      label,
+      percent: Math.round(sum / n),
+      at: order.get(label) ?? 0,
+    }))
+    .sort((a, b) => a.at - b.at)
+    .map(({ label, percent }) => ({ label, percent }));
+
   return {
+    ...meta,
     employees,
     team: {
-      avgScore: scored.length
-        ? Math.round(scored.reduce((s, e) => s + (e.score ?? 0), 0) / scored.length)
-        : null,
-      avgCompletion: withAvg.length
-        ? Math.round(
-            withAvg.reduce((s, e) => s + (e.weekly.avgPercent ?? 0), 0) /
-              withAvg.length,
-          )
-        : null,
+      headcount: employees.length,
+      scored: scored.length,
+      avgScore: avg(scored.map((e) => e.score as number)),
+      avgCompletion: avg(completions),
       attendanceRate: pct(attended, attendanceDenom),
       onTimeRate: pct(onTime, submitted),
+      goalsSet: employees.reduce((s, e) => s + e.goals.set, 0),
+      goalsDone: employees.reduce((s, e) => s + e.goals.done, 0),
+      tasksDone: employees.reduce((s, e) => s + e.tasks.done, 0),
+      tasksTotal: employees.reduce((s, e) => s + e.tasks.total, 0),
       bonusTotal: employees.reduce((s, e) => s + e.money.bonusTotal, 0),
       fineTotal: employees.reduce((s, e) => s + e.money.fineTotal, 0),
+      outstanding: employees.reduce((s, e) => s + e.money.outstanding, 0),
     },
+    departments,
+    trend,
   };
+}
+
+/**
+ * Every employee's performance for all three ranges, each ranked best-first
+ * (people with no history sink to the bottom), plus department and team
+ * rollups. The week windows come from the current submission cycle, so
+ * "current week" means the week people owe goals for right now.
+ */
+export function buildPerformance(
+  users: PerformanceSource[],
+  now = new Date(),
+): PerformanceReport {
+  const cycle = currentSubmissionCycle(now);
+  const curFrom = cycle.weekStart.getTime();
+  const current: Window = { from: curFrom, to: curFrom + WEEK_MS };
+  const previous: Window = { from: curFrom - WEEK_MS, to: curFrom };
+
+  return {
+    previous: buildRange(users, previous, now, {
+      key: "previous",
+      label: "Previous week",
+      window: rangeWindowLabel(new Date(previous.from), new Date(previous.to)),
+      trendWeeks: 1,
+    }),
+    current: buildRange(users, current, now, {
+      key: "current",
+      label: "Current week",
+      window: rangeWindowLabel(new Date(current.from), new Date(current.to)),
+      trendWeeks: 1,
+    }),
+    all: buildRange(users, ALL, now, {
+      key: "all",
+      label: "All time",
+      window: "Everything to date",
+      trendWeeks: 12,
+    }),
+  };
+}
+
+/** Score band — coarse on purpose; the number carries the detail. */
+export function scoreBand(score: number): {
+  label: string;
+  tone: "good" | "warn" | "bad";
+} {
+  if (score >= 80) return { label: "Strong", tone: "good" };
+  if (score >= 55) return { label: "Steady", tone: "warn" };
+  return { label: "Behind", tone: "bad" };
 }

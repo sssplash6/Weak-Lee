@@ -244,9 +244,11 @@ export default async function AdminPage({
       where: { paidAt: null },
       select: { amount: true },
     }),
-    // Full per-user history for the Performance tab — every week and month
-    // with goals, plus attendance/fines/bonuses/tasks. Heavy, so only loaded
-    // when that tab is actually open.
+    // Full per-user history for the Performance tab — every week and month with
+    // goals, plus attendance, fines, bonuses, assigned tasks and the daily focus
+    // list. Heavy, so only loaded when that tab is actually open; the three
+    // ranges (previous week / current week / all time) are then derived from it
+    // in one pass so the tab's toggle needs no further queries.
     tab === "perf"
       ? prisma.user.findMany({
           orderBy: [{ name: "asc" }, { email: "asc" }],
@@ -256,6 +258,7 @@ export default async function AdminPage({
             email: true,
             department: true,
             avatar: true,
+            createdAt: true,
             weeks: {
               select: {
                 startDate: true,
@@ -266,7 +269,14 @@ export default async function AdminPage({
                   select: {
                     completedAt: true,
                     manualPercent: true,
+                    deadline: true,
+                    priority: true,
+                    incompleteReason: true,
                     subtasks: { select: { isDone: true } },
+                    // Delegation counts: goals handed to someone else, and goals
+                    // that arrived from a teammate.
+                    sharesOut: { select: { id: true } },
+                    shareIn: { select: { id: true } },
                   },
                 },
               },
@@ -275,6 +285,7 @@ export default async function AdminPage({
               select: {
                 startDate: true,
                 endDate: true,
+                submittedAt: true,
                 goals: {
                   select: {
                     completedAt: true,
@@ -284,10 +295,17 @@ export default async function AdminPage({
                 },
               },
             },
-            attendances: { select: { status: true } },
-            penalties: { select: { amount: true } },
-            bonuses: { select: { amount: true } },
-            assignedTasks: { select: { completedAt: true } },
+            attendances: {
+              select: { status: true, meeting: { select: { scheduledAt: true } } },
+            },
+            penalties: {
+              select: { type: true, amount: true, createdAt: true, paidAt: true },
+            },
+            bonuses: { select: { amount: true, createdAt: true } },
+            assignedTasks: {
+              select: { deadline: true, completedAt: true, createdAt: true },
+            },
+            dayTasks: { select: { date: true, isDone: true } },
           },
         })
       : null,
@@ -525,7 +543,7 @@ export default async function AdminPage({
       : tab === "month"
         ? `${monthRange} · monthly goals across everyone.`
         : tab === "perf"
-          ? "All-time performance per person — goals, meetings, reliability."
+          ? "Per-person performance by department — goals, meetings, reliability, money."
           : `${weekRange} · this week's submitted goals and progress across everyone.`;
 
   return (
@@ -539,12 +557,6 @@ export default async function AdminPage({
           <p className="mt-1 text-sm text-muted-fg">{subtitle}</p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <Link
-            href="/admin/review"
-            className="inline-flex shrink-0 items-center rounded-lg border border-line bg-surface px-4 py-2 text-sm font-medium text-ink transition hover:border-brand/40 hover:bg-canvas hover:text-brand"
-          >
-            Week in review
-          </Link>
           <Link
             href="/dashboard"
             className="group inline-flex shrink-0 items-center gap-2 rounded-lg border border-line bg-surface px-4 py-2 text-sm font-medium text-ink transition hover:border-brand/40 hover:bg-canvas hover:text-brand"
@@ -763,52 +775,16 @@ export default async function AdminPage({
       )}
 
       {tab === "perf" && perf && (
-        <>
-          <StatStrip
-            stats={[
-              {
-                label: "Team score",
-                value: perf.team.avgScore != null ? perf.team.avgScore : "—",
-              },
-              {
-                label: "Avg completion",
-                value:
-                  perf.team.avgCompletion != null
-                    ? `${perf.team.avgCompletion}%`
-                    : "—",
-              },
-              {
-                label: "Attendance",
-                value:
-                  perf.team.attendanceRate != null
-                    ? `${perf.team.attendanceRate}%`
-                    : "—",
-              },
-              {
-                label: "On-time reports",
-                value:
-                  perf.team.onTimeRate != null
-                    ? `${perf.team.onTimeRate}%`
-                    : "—",
-              },
-              { label: "Bonuses", value: formatMoney(perf.team.bonusTotal) },
-              { label: "Fines", value: formatMoney(perf.team.fineTotal) },
-            ]}
-          />
-          <section className="mt-8">
-            <h2 className="mb-1 px-1 text-sm font-semibold text-ink">
-              People ({perf.employees.length})
-            </h2>
-            <p className="mb-3 px-1 text-xs text-muted-fg">
-              Ranked by composite score — 50% goal completion, 25% meeting
-              attendance, 25% on-time reporting. Completion averages cover
-              closed weeks and months only, so the current period doesn&rsquo;t
-              drag anyone down mid-week. People with no closed weeks yet
-              aren&rsquo;t scored and rank last until they close one.
-            </p>
-            <PerformancePanel employees={perf.employees} />
-          </section>
-        </>
+        <section>
+          <p className="mb-4 px-1 text-xs text-muted-fg">
+            Score = 50% goal completion, 25% meeting attendance, 25% on-time
+            reporting. Completion prefers weeks that have ended, so a week in
+            progress doesn&rsquo;t drag anyone down; when a range holds only the
+            open week it&rsquo;s marked &ldquo;so far.&rdquo; People with no
+            completion history in the range aren&rsquo;t scored.
+          </p>
+          <PerformancePanel report={perf} />
+        </section>
       )}
 
       {tab === "month" && (

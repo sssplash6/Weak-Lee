@@ -22,6 +22,17 @@
   --color-ink: #1a2733; /* primary text */
   --color-muted-fg: #6b7480; /* secondary text */
 
+  /* Chart status marks — good / warning / bad, plus a de-emphasis grey for
+     "doesn't count" slots (excused, no data). Deliberately NOT the brand or
+     accent hues: those mean "action" and "progress", these mean state. The
+     triad is validated for colour-vision separation (adjacent ΔE ≥ 8 in OKLab,
+     inside the light lightness band, ≥ 3:1 on the surface) — re-validate before
+     changing a value, and keep the dark steps below in step. */
+  --color-chart-good: #047857; /* emerald 700 */
+  --color-chart-warn: #d97706; /* amber 600 */
+  --color-chart-bad: #b91c1c; /* red 700 */
+  --color-chart-mute: #94a3b8; /* slate 400 — the one intentionally grey slot */
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 
@@ -62,6 +73,13 @@
 
   --color-ink: #e7ebf0; /* primary text */
   --color-muted-fg: #98a2b0; /* secondary text */
+
+  /* Dark chart marks: re-stepped for the dark surface rather than flipped —
+     same validation (separation, dark lightness band, contrast on #161d26). */
+  --color-chart-good: #0d9488; /* teal 600 */
+  --color-chart-warn: #d97706; /* amber 600 */
+  --color-chart-bad: #e11d48; /* rose 600 */
+  --color-chart-mute: #8595a8;
 }
 
 body {
