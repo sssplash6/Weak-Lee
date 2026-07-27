@@ -5,7 +5,9 @@
 //   • after Monday 11:00           — escalate an unpaid $20 to $40
 // It's idempotent (at most one late-submission fine per person per cycle) so it
 // can safely run on any page load or a cron ping. People who submitted on time
-// are never fined; people who submitted late keep the $20 they earned.
+// are never fined; people who submitted late keep the $20 they earned. Accounts
+// on the submission-exempt list (see lib/submissionExempt.ts) are skipped
+// entirely — they may still set goals, they're just never fined for not doing it.
 
 import { prisma } from "@/lib/prisma";
 import { notify } from "@/lib/notifications";
@@ -15,6 +17,10 @@ import {
   MISSED_SUBMISSION_PENALTY,
 } from "@/lib/penalties";
 import { currentSubmissionCycle } from "@/lib/lateness";
+import {
+  isSubmissionExempt,
+  submissionExemptEmails,
+} from "@/lib/submissionExempt";
 
 // Don't retroactively fine for weekly cycles whose deadline fell before this
 // feature went live — its first governed cycle is the one due 2026-07-19 12:00
@@ -35,6 +41,11 @@ export async function reconcileSubmissionFines(opts?: {
   const now = new Date();
   const cycle = currentSubmissionCycle(now);
 
+  // Clear anything an exempt account is still carrying first — this runs on
+  // every phase, so adding an exemption takes effect on the next page load
+  // rather than waiting for a deadline to come round.
+  await releaseExemptSubmissionFines(opts?.userId);
+
   // Nothing due yet, or a cycle from before the feature existed.
   if (cycle.phase === "before") return;
   if (cycle.submissionDeadline.getTime() < SUBMISSION_FINES_EPOCH.getTime()) {
@@ -53,6 +64,7 @@ export async function reconcileSubmissionFines(opts?: {
     },
     select: {
       id: true,
+      email: true,
       // Every week for this cycle (starting on/after the deadline). Usually one,
       // but a redeploy race in getOrCreateCurrentWeek/startNewWeek can leave a
       // stray duplicate — so we look at all of them, not just one.
@@ -73,6 +85,10 @@ export async function reconcileSubmissionFines(opts?: {
   });
 
   for (const u of users) {
+    // Accounts not expected to report weekly (e.g. alumni) are never fined for
+    // it — releaseExemptSubmissionFines above has already cleaned up after them.
+    if (isSubmissionExempt(u.email)) continue;
+
     // Count as submitted if ANY current-cycle week is, and tier by the earliest
     // submission — so a stray unsubmitted duplicate can't wrongly flag someone
     // who actually reported on time.
@@ -156,6 +172,48 @@ export async function reconcileSubmissionFines(opts?: {
         );
       });
     }
+  }
+}
+
+/**
+ * Drop any unpaid late-submission fine held by an exempt account — whether it
+ * predates the exemption or slipped through some other path. Settled fines are
+ * left alone (money already moved; an admin can reopen one if it was wrong).
+ * Pass a `userId` to limit this to one person, matching the sweep above.
+ */
+async function releaseExemptSubmissionFines(userId?: string): Promise<void> {
+  const exempt = await prisma.user.findMany({
+    where: {
+      email: { in: submissionExemptEmails(), mode: "insensitive" },
+      ...(userId ? { id: userId } : {}),
+    },
+    select: {
+      id: true,
+      penalties: {
+        where: { type: "LATE_SUBMISSION", paidAt: null },
+        select: { id: true, amount: true },
+      },
+    },
+  });
+
+  for (const u of exempt) {
+    if (u.penalties.length === 0) continue;
+    const total = u.penalties.reduce((sum, p) => sum + p.amount, 0);
+    const label =
+      u.penalties.length > 1
+        ? `late-submission fines totalling ${formatMoney(total)}`
+        : `${formatMoney(total)} late-submission fine`;
+    await prisma.$transaction(async (tx) => {
+      await tx.penalty.deleteMany({
+        where: { id: { in: u.penalties.map((p) => p.id) } },
+      });
+      await notify(
+        tx,
+        u.id,
+        "FINE",
+        `Your ${label} was removed — this account isn't expected to submit weekly goals.`,
+      );
+    });
   }
 }
 
