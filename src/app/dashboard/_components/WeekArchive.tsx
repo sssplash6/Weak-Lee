@@ -16,11 +16,19 @@ type ArchivedGoal = {
   subtasks: ArchivedSubtask[];
 };
 
+/** An admin-assigned task that was finished in this period (see page.tsx). */
+export type ArchivedAssignedTask = {
+  id: string;
+  title: string;
+  deadlineLabel: string | null;
+};
+
 export type ArchivedWeekView = {
   id: string;
   label: string;
   percent: number;
   goals: ArchivedGoal[];
+  assignedTasks?: ArchivedAssignedTask[];
 };
 
 export function WeekArchive({
@@ -114,6 +122,7 @@ function WeekRow({
   editable: boolean;
   onEdit: () => void;
 }) {
+  const assigned = week.assignedTasks ?? [];
   return (
     <div className="rounded-xl border border-line bg-surface">
       <div className="flex items-center">
@@ -148,17 +157,61 @@ function WeekRow({
 
       {open && (
         <div className="rise-in border-t border-line px-3 py-3">
-          {week.goals.length === 0 ? (
+          {week.goals.length === 0 && assigned.length === 0 ? (
             <p className="text-sm text-muted-fg">No goals this {periodNoun}.</p>
           ) : (
-            <ul className="flex flex-col gap-3">
-              {week.goals.map((goal) => (
-                <GoalSummary key={goal.id} goal={goal} />
-              ))}
-            </ul>
+            week.goals.length > 0 && (
+              <ul className="flex flex-col gap-3">
+                {week.goals.map((goal) => (
+                  <GoalSummary key={goal.id} goal={goal} />
+                ))}
+              </ul>
+            )
+          )}
+
+          {assigned.length > 0 && (
+            <AssignedSummary tasks={assigned} spaced={week.goals.length > 0} />
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Admin-assigned tasks that were finished in this period. Listed below the
+ * goals, quieter and without a percent — they're a separate stream of work and
+ * never counted toward the period's score.
+ */
+function AssignedSummary({
+  tasks,
+  spaced,
+}: {
+  tasks: ArchivedAssignedTask[];
+  spaced: boolean;
+}) {
+  return (
+    <div className={spaced ? "mt-3 border-t border-line pt-3" : ""}>
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-fg">
+        Assigned by admin
+      </p>
+      <ul className="mt-1.5 flex flex-col gap-1">
+        {tasks.map((t) => (
+          <li key={t.id} className="flex items-start gap-1.5 text-xs">
+            <span className="mt-px shrink-0 text-accent-ink" aria-hidden>
+              ✓
+            </span>
+            <span className="min-w-0 flex-1 break-words text-muted-fg">
+              <span className="line-through">{t.title}</span>
+              {t.deadlineLabel && (
+                <span className="whitespace-nowrap text-[11px]">
+                  {` · due ${t.deadlineLabel}`}
+                </span>
+              )}
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

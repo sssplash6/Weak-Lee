@@ -37,7 +37,10 @@ import { WeekProgress } from "./_components/WeekProgress";
 import { StartNewWeekButton } from "./_components/StartNewWeekButton";
 import { StartNewMonthButton } from "./_components/StartNewMonthButton";
 import { FeedbackButton } from "./_components/FeedbackButton";
-import { WeekArchive } from "./_components/WeekArchive";
+import {
+  WeekArchive,
+  type ArchivedAssignedTask,
+} from "./_components/WeekArchive";
 import { WeekCalendar } from "./_components/WeekCalendar";
 import { WeekSubmit } from "./_components/WeekSubmit";
 import { PenaltyNotice } from "./_components/PenaltyNotice";
@@ -310,8 +313,40 @@ export default async function DashboardPage({
 
   // Admin-assigned tasks — shown as a standalone list, not part of week %.
   // Weekly-scoped ones surface on the week view, monthly ones on the month view.
-  const assignedTaskViews = assignedTasks
-    .filter((t) => (t.scope === "MONTHLY") === isMonth)
+  const scopedAssigned = assignedTasks.filter(
+    (t) => (t.scope === "MONTHLY") === isMonth,
+  );
+
+  // A finished assigned task belongs to the period its deadline falls in (or,
+  // with no deadline, the period it was ticked off in). Once that period is
+  // archived the task is filed there instead of sitting in the Inbox for ever.
+  // Compared as calendar days, so a UTC-midnight deadline can't fall outside a
+  // period whose bounds were stored in a different timezone. Unfinished tasks are
+  // never filed, however old — outstanding work has to stay in front of people.
+  const assignedArchive = new Map<string, ArchivedAssignedTask[]>();
+  const filedAssignedIds = new Set<string>();
+  for (const p of archivedPeriods) {
+    const from = toYmd(p.startDate);
+    const to = toYmd(p.endDate);
+    const filed = scopedAssigned.filter((t) => {
+      if (t.completedAt == null) return false;
+      const day = toYmd(t.deadline ?? t.completedAt);
+      return day >= from && day <= to;
+    });
+    if (filed.length === 0) continue;
+    for (const t of filed) filedAssignedIds.add(t.id);
+    assignedArchive.set(
+      p.id,
+      filed.map((t) => ({
+        id: t.id,
+        title: t.title,
+        deadlineLabel: t.deadline ? formatYmd(toYmd(t.deadline)) : null,
+      })),
+    );
+  }
+
+  const assignedTaskViews = scopedAssigned
+    .filter((t) => !filedAssignedIds.has(t.id))
     .map((t) => ({
       id: t.id,
       title: t.title,
@@ -438,6 +473,8 @@ export default async function DashboardPage({
         isDone: s.isDone,
       })),
     })),
+    // Assigned tasks finished in this period, filed here rather than the Inbox.
+    assignedTasks: assignedArchive.get(p.id) ?? [],
   }));
 
   // The user's own money block — fines and bonuses, shown on both views (a
