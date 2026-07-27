@@ -149,6 +149,7 @@ export function TrendColumns({
   if (points.length === 0) return null;
   const max = 100;
   const peak = Math.max(...points.map((p) => p.percent));
+  const peakAt = points.findIndex((p) => p.percent === peak);
   const plot = height - 18; // room for the x labels under the baseline
 
   return (
@@ -168,7 +169,9 @@ export function TrendColumns({
           aria-hidden="true"
         />
         {points.map((p, i) => {
-          const isPeak = p.percent === peak;
+          // Label the peak once (its first occurrence) and the latest column;
+          // a number on every bar reads as noise.
+          const isPeak = p.percent === peak && peakAt === i;
           const isLast = i === points.length - 1;
           return (
             <div

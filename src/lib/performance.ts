@@ -10,8 +10,9 @@
 import { goalPercent, isGoalComplete, weekPercent } from "@/lib/progress";
 import {
   currentSubmissionCycle,
+  submissionDeadlineApplies,
+  SUBMISSION_DEADLINE_EPOCH,
   weekSubmissionDeadline,
-  submissionTiming,
 } from "@/lib/lateness";
 import type { AttendanceStatus, PenaltyType } from "@/lib/penalties";
 
@@ -38,6 +39,7 @@ export type PerformanceSource = {
   avatar: string | null;
   createdAt: Date;
   weeks: {
+    id: string;
     startDate: Date;
     endDate: Date;
     submittedLate: boolean;
@@ -54,6 +56,7 @@ export type PerformanceSource = {
   penalties: {
     type: PenaltyType;
     amount: number;
+    weekId: string | null;
     createdAt: Date;
     paidAt: Date | null;
   }[];
@@ -116,10 +119,13 @@ export type EmployeePerformance = {
   };
   months: { tracked: number; avgPercent: number | null; set: number; done: number };
   reporting: {
-    rate: number | null; // on-time share of submitted weeks
-    submitted: number;
+    /** On-time share of every cycle they owed a report for — misses included. */
+    rate: number | null;
+    expected: number; // cycles judged (governed, deadline passed, after joining)
     onTime: number;
     late: number;
+    missed: number; // owed a report, never submitted one
+    submitted: number; // weeks with goals submitted, for context
     /** Mean hours between submitting and the Sunday deadline (+ = early). */
     avgLeadHours: number | null;
   };
@@ -155,17 +161,44 @@ export type EmployeePerformance = {
   trend: TrendPoint[];
 };
 
+/**
+ * A department's own numbers — the sum of its people, not a copy of one of
+ * them. Rates are computed from the pooled counts (so a department of five
+ * isn't the average of five averages where the underlying weeks differ), and
+ * the people list rides along for the department card's ranking.
+ */
 export type DepartmentPerformance = {
   name: string;
   headcount: number;
+  scored: number;
   avgScore: number | null;
   avgCompletion: number | null;
   attendanceRate: number | null;
   onTimeRate: number | null;
   goalsSet: number;
   goalsDone: number;
-  fineTotal: number;
-  bonusTotal: number;
+  subtasksDone: number;
+  subtasksTotal: number;
+  meetings: { attended: number; late: number; skipped: number; excused: number };
+  reporting: { expected: number; onTime: number; late: number; missed: number };
+  tasks: { total: number; done: number; overdue: number };
+  dayTasks: { total: number; done: number };
+  money: {
+    bonusTotal: number;
+    fineTotal: number;
+    outstanding: number;
+    net: number;
+  };
+  /** Department-average completion per week, oldest first. */
+  trend: { label: string; percent: number }[];
+  people: {
+    id: string;
+    name: string;
+    avatar: string | null;
+    email: string | null;
+    score: number | null;
+    completion: number | null;
+  }[];
 };
 
 export type TeamPerformance = {
@@ -289,6 +322,7 @@ function computeOne(
   win: Window,
   now: Date,
   trendWeeks: number,
+  cycles: JudgedCycle[],
 ): EmployeePerformance {
   const nowMs = now.getTime();
 
@@ -316,12 +350,15 @@ function computeOne(
   const withDeadline = goals.filter((g) => g.deadline != null);
   const partial = goals.filter((g) => goalPercent(g) < 100);
 
+  // Lateness in the trend reads from the fine ledger too, so a forgiven week
+  // stops being marked late here as well as in the reporting block.
+  const lateFines = u.penalties.filter((p) => p.type === "LATE_SUBMISSION");
   const points: TrendPoint[] = withGoals.map((w) => ({
     label: dayLabel(w.startDate),
     percent: weekPercent(w.goals),
     goals: w.goals.length,
     submitted: w.submittedAt != null,
-    late: w.submittedLate,
+    late: hasLateFine(w, lateFines),
   }));
   const ranked = [...points].sort((a, b) => b.percent - a.percent);
 
@@ -333,17 +370,44 @@ function computeOne(
   const monthBasis = closedMonths.length > 0 ? closedMonths : months;
   const monthGoals = months.flatMap((m) => m.goals);
 
-  // ---- reporting: lateness is known the moment a week is submitted, so every
-  // submitted week counts, including the one in progress.
+  // ---- reporting. Judged per *cycle owed*, not per report filed, so somebody
+  // who never submitted counts as a miss instead of vanishing from the maths.
+  // Within a cycle:
+  //   • no week, or a week with nothing submitted → missed
+  //   • carries a late-submission fine            → late
+  //   • otherwise                                 → on time
+  // The fine ledger IS the app's record of a missed deadline, so an admin
+  // deleting one — forgiving it, or clearing a fine issued in error — clears
+  // the person's late mark with it. Cycles before the deadline was enforced
+  // aren't judged at all rather than being scored retroactively.
   const submitted = weeks.filter((w) => w.submittedAt != null);
-  const onTimeWeeks = submitted.filter(
-    (w) => submissionTiming(w.submittedAt!, w.startDate) === "on-time",
+  const owed = cycles.filter(
+    (c) => u.createdAt.getTime() <= c.deadline.getTime(),
   );
-  const leads = submitted.map(
-    (w) =>
-      (weekSubmissionDeadline(w.startDate).getTime() - w.submittedAt!.getTime()) /
-      3_600_000,
-  );
+  let onTimeCount = 0;
+  let lateCount = 0;
+  let missedCount = 0;
+  for (const c of owed) {
+    const row = u.weeks.find(
+      (w) =>
+        w.startDate.getTime() >= c.start.getTime() &&
+        w.startDate.getTime() < c.start.getTime() + WEEK_MS,
+    );
+    if (!row || row.submittedAt == null) missedCount++;
+    else if (hasLateFine(row, lateFines)) lateCount++;
+    else onTimeCount++;
+  }
+
+  // How early they file, over the weeks the deadline actually governed — an
+  // older week predating the rule has no meaningful lead time to average in.
+  const leads = submitted
+    .filter((w) => submissionDeadlineApplies(w.startDate))
+    .map(
+      (w) =>
+        (weekSubmissionDeadline(w.startDate).getTime() -
+          w.submittedAt!.getTime()) /
+        3_600_000,
+    );
   const avgLeadHours = leads.length
     ? Math.round(leads.reduce((s, v) => s + v, 0) / leads.length)
     : null;
@@ -404,7 +468,7 @@ function computeOne(
   const parts = {
     completion: avgPercent,
     attendance: pct(att.attended + att.late, att.attended + att.late + att.skipped),
-    onTime: pct(onTimeWeeks.length, submitted.length),
+    onTime: pct(onTimeCount, owed.length),
   };
 
   return {
@@ -448,9 +512,11 @@ function computeOne(
     },
     reporting: {
       rate: parts.onTime,
+      expected: owed.length,
+      onTime: onTimeCount,
+      late: lateCount,
+      missed: missedCount,
       submitted: submitted.length,
-      onTime: onTimeWeeks.length,
-      late: submitted.length - onTimeWeeks.length,
       avgLeadHours,
     },
     meetings: {
@@ -494,6 +560,51 @@ function computeOne(
   };
 }
 
+export type JudgedCycle = { start: Date; deadline: Date };
+
+/**
+ * The weekly cycles a range holds people to: every governed cycle whose Sunday
+ * deadline has already passed. This is the reporting denominator — counting
+ * cycles rather than filed reports is what makes a week nobody submitted show
+ * up as a miss instead of quietly leaving the average alone.
+ */
+function judgedCycles(win: Window, now: Date): JudgedCycle[] {
+  // The first governed cycle is the week whose deadline IS the epoch (the epoch
+  // is that Sunday 12:00 Tashkent, so its Monday is the next day).
+  const first = new Date(SUBMISSION_DEADLINE_EPOCH);
+  first.setUTCHours(0, 0, 0, 0);
+  first.setUTCDate(first.getUTCDate() + 1);
+
+  const out: JudgedCycle[] = [];
+  for (let t = first.getTime(); ; t += WEEK_MS) {
+    const start = new Date(t);
+    const deadline = weekSubmissionDeadline(start);
+    if (deadline.getTime() > now.getTime()) break; // not owed yet
+    if (t >= win.from && t < win.to) out.push({ start, deadline });
+    if (out.length > 520) break; // ten years of cycles — a runaway guard
+  }
+  return out;
+}
+
+/**
+ * Whether a late-submission fine belongs to this week. The sweep links a fine
+ * to the week it was issued for, but a fine raised when the person had no week
+ * row yet carries no link — those are matched by cycle instead, i.e. the fine
+ * landed between this week's deadline and the next one's.
+ */
+function hasLateFine(
+  week: { id: string; startDate: Date },
+  fines: { weekId: string | null; createdAt: Date }[],
+): boolean {
+  const from = weekSubmissionDeadline(week.startDate).getTime();
+  const to = from + WEEK_MS;
+  return fines.some((f) =>
+    f.weekId != null
+      ? f.weekId === week.id
+      : f.createdAt.getTime() >= from && f.createdAt.getTime() < to,
+  );
+}
+
 /** Whether a month overlaps the window at all (months are longer than a week). */
 function overlaps(m: { startDate: Date; endDate: Date }, w: Window): boolean {
   return m.startDate.getTime() < w.to && m.endDate.getTime() >= w.from;
@@ -505,8 +616,9 @@ function buildRange(
   now: Date,
   meta: { key: RangeKey; label: string; window: string; trendWeeks: number },
 ): RangeReport {
+  const cycles = judgedCycles(win, now);
   const employees = users
-    .map((u) => computeOne(u, win, now, meta.trendWeeks))
+    .map((u) => computeOne(u, win, now, meta.trendWeeks, cycles))
     .sort(
       (a, b) =>
         (b.score ?? -1) - (a.score ?? -1) || a.name.localeCompare(b.name),
@@ -537,8 +649,40 @@ function buildRange(
     (s, e) => s + e.meetings.attended + e.meetings.late + e.meetings.skipped,
     0,
   );
+  // Pooled from cycles owed, not reports filed, so misses count here too.
   const onTime = employees.reduce((s, e) => s + e.reporting.onTime, 0);
-  const submitted = employees.reduce((s, e) => s + e.reporting.submitted, 0);
+  const owedTotal = employees.reduce((s, e) => s + e.reporting.expected, 0);
+
+  // Week labels in chronological order, so any merged trend can be sorted
+  // without carrying dates through the view types.
+  const labelAt = new Map<string, number>();
+  for (const u of users) {
+    for (const w of u.weeks) {
+      const label = dayLabel(w.startDate);
+      const at = w.startDate.getTime();
+      if (!labelAt.has(label) || at < labelAt.get(label)!) labelAt.set(label, at);
+    }
+  }
+  /** Average completion per week across a group of people, oldest week first. */
+  function mergeTrends(list: EmployeePerformance[]) {
+    const byLabel = new Map<string, { sum: number; n: number }>();
+    for (const e of list) {
+      for (const p of e.trend) {
+        const slot = byLabel.get(p.label) ?? { sum: 0, n: 0 };
+        slot.sum += p.percent;
+        slot.n++;
+        byLabel.set(p.label, slot);
+      }
+    }
+    return [...byLabel.entries()]
+      .map(([label, { sum, n }]) => ({
+        label,
+        percent: Math.round(sum / n),
+        at: labelAt.get(label) ?? 0,
+      }))
+      .sort((a, b) => a.at - b.at)
+      .map(({ label, percent }) => ({ label, percent }));
+  }
 
   // Department rollups, biggest first. People with no department are grouped
   // under "Unassigned" so nobody silently drops out of the comparison.
@@ -547,10 +691,14 @@ function buildRange(
     const key = e.department?.trim() || "Unassigned";
     groups.set(key, [...(groups.get(key) ?? []), e]);
   }
+  const sum = (list: EmployeePerformance[], f: (e: EmployeePerformance) => number) =>
+    list.reduce((s, e) => s + f(e), 0);
+
   const departments: DepartmentPerformance[] = [...groups.entries()]
     .map(([name, list]) => ({
       name,
       headcount: list.length,
+      scored: list.filter((e) => e.score != null).length,
       avgScore: avg(
         list.map((e) => e.score).filter((v): v is number => v != null),
       ),
@@ -558,53 +706,64 @@ function buildRange(
         list.map((e) => e.goals.avgPercent).filter((v): v is number => v != null),
       ),
       attendanceRate: pct(
-        list.reduce((s, e) => s + e.meetings.attended + e.meetings.late, 0),
-        list.reduce(
-          (s, e) =>
-            s + e.meetings.attended + e.meetings.late + e.meetings.skipped,
-          0,
+        sum(list, (e) => e.meetings.attended + e.meetings.late),
+        sum(
+          list,
+          (e) => e.meetings.attended + e.meetings.late + e.meetings.skipped,
         ),
       ),
       onTimeRate: pct(
-        list.reduce((s, e) => s + e.reporting.onTime, 0),
-        list.reduce((s, e) => s + e.reporting.submitted, 0),
+        sum(list, (e) => e.reporting.onTime),
+        sum(list, (e) => e.reporting.expected),
       ),
-      goalsSet: list.reduce((s, e) => s + e.goals.set, 0),
-      goalsDone: list.reduce((s, e) => s + e.goals.done, 0),
-      fineTotal: list.reduce((s, e) => s + e.money.fineTotal, 0),
-      bonusTotal: list.reduce((s, e) => s + e.money.bonusTotal, 0),
+      goalsSet: sum(list, (e) => e.goals.set),
+      goalsDone: sum(list, (e) => e.goals.done),
+      subtasksDone: sum(list, (e) => e.goals.subtasksDone),
+      subtasksTotal: sum(list, (e) => e.goals.subtasksTotal),
+      meetings: {
+        attended: sum(list, (e) => e.meetings.attended),
+        late: sum(list, (e) => e.meetings.late),
+        skipped: sum(list, (e) => e.meetings.skipped),
+        excused: sum(list, (e) => e.meetings.excused),
+      },
+      reporting: {
+        expected: sum(list, (e) => e.reporting.expected),
+        onTime: sum(list, (e) => e.reporting.onTime),
+        late: sum(list, (e) => e.reporting.late),
+        missed: sum(list, (e) => e.reporting.missed),
+      },
+      tasks: {
+        total: sum(list, (e) => e.tasks.total),
+        done: sum(list, (e) => e.tasks.done),
+        overdue: sum(list, (e) => e.tasks.overdue),
+      },
+      dayTasks: {
+        total: sum(list, (e) => e.dayTasks.total),
+        done: sum(list, (e) => e.dayTasks.done),
+      },
+      money: {
+        bonusTotal: sum(list, (e) => e.money.bonusTotal),
+        fineTotal: sum(list, (e) => e.money.fineTotal),
+        outstanding: sum(list, (e) => e.money.outstanding),
+        net: sum(list, (e) => e.money.net),
+      },
+      // The department's week-by-week average: each week label averaged across
+      // whoever had goals that week.
+      trend: mergeTrends(list),
+      people: list.map((e) => ({
+        id: e.id,
+        name: e.name,
+        avatar: e.avatar,
+        email: e.email,
+        score: e.score,
+        completion: e.goals.avgPercent,
+      })),
     }))
     .sort(
       (a, b) => (b.avgScore ?? -1) - (a.avgScore ?? -1) || b.headcount - a.headcount,
     );
 
-  // Team trend: the average of everyone's completion for each week label that
-  // appears in anyone's series, oldest first.
-  const byLabel = new Map<string, { sum: number; n: number; at: number }>();
-  for (const e of employees) {
-    for (const p of e.trend) {
-      const slot = byLabel.get(p.label) ?? { sum: 0, n: 0, at: 0 };
-      slot.sum += p.percent;
-      slot.n++;
-      byLabel.set(p.label, slot);
-    }
-  }
-  const order = new Map<string, number>();
-  for (const u of users) {
-    for (const w of u.weeks) {
-      const label = dayLabel(w.startDate);
-      const at = w.startDate.getTime();
-      if (!order.has(label) || at < order.get(label)!) order.set(label, at);
-    }
-  }
-  const trend = [...byLabel.entries()]
-    .map(([label, { sum, n }]) => ({
-      label,
-      percent: Math.round(sum / n),
-      at: order.get(label) ?? 0,
-    }))
-    .sort((a, b) => a.at - b.at)
-    .map(({ label, percent }) => ({ label, percent }));
+  const trend = mergeTrends(employees);
 
   return {
     ...meta,
@@ -615,7 +774,7 @@ function buildRange(
       avgScore: avg(scored.map((e) => e.score as number)),
       avgCompletion: avg(completions),
       attendanceRate: pct(attended, attendanceDenom),
-      onTimeRate: pct(onTime, submitted),
+      onTimeRate: pct(onTime, owedTotal),
       goalsSet: employees.reduce((s, e) => s + e.goals.set, 0),
       goalsDone: employees.reduce((s, e) => s + e.goals.done, 0),
       tasksDone: employees.reduce((s, e) => s + e.tasks.done, 0),

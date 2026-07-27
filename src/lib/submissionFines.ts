@@ -16,16 +16,14 @@ import {
   LATE_SUBMISSION_PENALTY,
   MISSED_SUBMISSION_PENALTY,
 } from "@/lib/penalties";
-import { currentSubmissionCycle } from "@/lib/lateness";
+import {
+  currentSubmissionCycle,
+  SUBMISSION_DEADLINE_EPOCH,
+} from "@/lib/lateness";
 import {
   isSubmissionExempt,
   submissionExemptEmails,
 } from "@/lib/submissionExempt";
-
-// Don't retroactively fine for weekly cycles whose deadline fell before this
-// feature went live — its first governed cycle is the one due 2026-07-19 12:00
-// Tashkent (= 07:00 UTC). Cycles older than this are skipped entirely.
-const SUBMISSION_FINES_EPOCH = new Date("2026-07-19T07:00:00.000Z");
 
 const LATE_NOTE = "Goals not submitted by the Sunday 12:00 deadline";
 const MISSED_NOTE = "Goals not submitted by the Monday 11:00 meeting";
@@ -46,9 +44,11 @@ export async function reconcileSubmissionFines(opts?: {
   // rather than waiting for a deadline to come round.
   await releaseExemptSubmissionFines(opts?.userId);
 
-  // Nothing due yet, or a cycle from before the feature existed.
+  // Nothing due yet, or a cycle from before the deadline was enforced.
   if (cycle.phase === "before") return;
-  if (cycle.submissionDeadline.getTime() < SUBMISSION_FINES_EPOCH.getTime()) {
+  if (
+    cycle.submissionDeadline.getTime() < SUBMISSION_DEADLINE_EPOCH.getTime()
+  ) {
     return;
   }
 

@@ -261,6 +261,7 @@ export default async function AdminPage({
             createdAt: true,
             weeks: {
               select: {
+                id: true,
                 startDate: true,
                 endDate: true,
                 submittedLate: true,
@@ -299,7 +300,13 @@ export default async function AdminPage({
               select: { status: true, meeting: { select: { scheduledAt: true } } },
             },
             penalties: {
-              select: { type: true, amount: true, createdAt: true, paidAt: true },
+              select: {
+                type: true,
+                amount: true,
+                weekId: true,
+                createdAt: true,
+                paidAt: true,
+              },
             },
             bonuses: { select: { amount: true, createdAt: true } },
             assignedTasks: {
@@ -775,16 +782,7 @@ export default async function AdminPage({
       )}
 
       {tab === "perf" && perf && (
-        <section>
-          <p className="mb-4 px-1 text-xs text-muted-fg">
-            Score = 50% goal completion, 25% meeting attendance, 25% on-time
-            reporting. Completion prefers weeks that have ended, so a week in
-            progress doesn&rsquo;t drag anyone down; when a range holds only the
-            open week it&rsquo;s marked &ldquo;so far.&rdquo; People with no
-            completion history in the range aren&rsquo;t scored.
-          </p>
-          <PerformancePanel report={perf} />
-        </section>
+        <PerformancePanel report={perf} />
       )}
 
       {tab === "month" && (

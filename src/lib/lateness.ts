@@ -6,6 +6,23 @@
 const TASHKENT_UTC_OFFSET_HOURS = 5;
 
 /**
+ * When the Sunday-12:00 deadline started being enforced — the first governed
+ * cycle is the one due 2026-07-19 12:00 Tashkent (= 07:00 UTC). Nothing before
+ * this was ever fined, so nothing before it is judged late either: the fine
+ * sweep skips those cycles (lib/submissionFines.ts) and so do the reporting
+ * stats (lib/performance.ts).
+ */
+export const SUBMISSION_DEADLINE_EPOCH = new Date("2026-07-19T07:00:00.000Z");
+
+/** Whether the Sunday-12:00 rule was in force for the week starting here. */
+export function submissionDeadlineApplies(weekStart: Date): boolean {
+  return (
+    weekSubmissionDeadline(weekStart).getTime() >=
+    SUBMISSION_DEADLINE_EPOCH.getTime()
+  );
+}
+
+/**
  * The submission deadline for a week: Sunday 12:00 Asia/Tashkent immediately
  * before the week's Monday start, as a UTC instant.
  */
