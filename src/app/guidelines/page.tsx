@@ -10,6 +10,8 @@ import {
   ALL_GUIDES,
   FEATURED_GUIDE,
   GUIDE_GROUPS,
+  GUIDELINES_DIR,
+  guideHref,
   type Guide,
   type GuideTone,
 } from "@/lib/guidelines";
@@ -52,18 +54,20 @@ function formatBytes(bytes: number): string {
 }
 
 /**
- * Size of each guide's PDF, read from public/ at request time and keyed by file
- * path. Best-effort: a file that can't be stat'ed (a different runtime layout)
- * simply shows no size rather than failing the page.
+ * Size of each guide's PDF, read from private/guidelines at request time and
+ * keyed by slug. Best-effort: a file that can't be stat'ed (a different runtime
+ * layout) simply shows no size rather than failing the page.
  */
 async function guideSizes(): Promise<Map<string, string>> {
   const entries = await Promise.all(
     ALL_GUIDES.map(async (g) => {
       try {
-        const s = await stat(path.join(process.cwd(), "public", g.file));
-        return [g.file, formatBytes(s.size)] as const;
+        const s = await stat(
+          path.join(process.cwd(), ...GUIDELINES_DIR, g.pdf),
+        );
+        return [g.slug, formatBytes(s.size)] as const;
       } catch {
-        return [g.file, ""] as const;
+        return [g.slug, ""] as const;
       }
     }),
   );
@@ -122,7 +126,7 @@ export default async function GuidelinesPage() {
         </p>
         <GuideCard
           guide={FEATURED_GUIDE}
-          size={sizes.get(FEATURED_GUIDE.file)}
+          size={sizes.get(FEATURED_GUIDE.slug)}
           featured
         />
       </section>
@@ -133,7 +137,7 @@ export default async function GuidelinesPage() {
           <p className="mb-3 text-xs text-muted-fg">{group.blurb}</p>
           <div className="grid gap-4 lg:grid-cols-2">
             {group.guides.map((g) => (
-              <GuideCard key={g.slug} guide={g} size={sizes.get(g.file)} />
+              <GuideCard key={g.slug} guide={g} size={sizes.get(g.slug)} />
             ))}
           </div>
         </section>
@@ -257,7 +261,7 @@ function GuideCard({
       {/* Ways to read it */}
       <div className="flex flex-wrap items-center gap-2 border-t border-line px-5 py-3">
         <a
-          href={g.file}
+          href={guideHref(g)}
           target="_blank"
           rel="noreferrer"
           className="rounded-lg bg-brand px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-dark"
@@ -265,7 +269,7 @@ function GuideCard({
           Read guide
         </a>
         <a
-          href={g.file}
+          href={guideHref(g, true)}
           download
           className="rounded-lg border border-line px-3 py-1.5 text-sm font-medium text-ink transition hover:bg-canvas"
         >

@@ -1,10 +1,11 @@
 // The internal guides published on /guidelines. Content mirrors each PDF's own
 // cover block (title, purpose line, version, owner, approver) and its numbered
 // section list, so the page reads as a shelf of the real documents rather than a
-// list of download links. The PDFs themselves live in public/guidelines/.
+// list of download links.
 //
-// Adding a guide: drop the PDF in public/guidelines, add an entry here with its
-// section list, and pick a tone that isn't already taken in its group.
+// Adding a guide: drop the PDF in private/guidelines (NOT public/ — see below),
+// add an entry here with its section list, and pick a tone that isn't already
+// taken in its group.
 
 /** Which accent identifies the document — see the guide tokens in globals.css. */
 export type GuideTone = "indigo" | "teal" | "plum" | "cyan" | "olive";
@@ -26,8 +27,8 @@ export type Guide = {
   owner: { name: string; role: string } | null;
   approvedBy: { name: string; role: string } | null;
   pages: number;
-  /** Public path to the PDF. */
-  file: string;
+  /** File name inside private/guidelines — never a URL, see `guideHref`. */
+  pdf: string;
   /** Numbered sections, in the order the document lists them. */
   sections: string[];
 };
@@ -51,7 +52,7 @@ const GOAL_SETTING: Guide = {
   owner: { name: "Safina Teshabayeva", role: "COO" },
   approvedBy: { name: "Valera Arakelyan", role: "CEO, Freshman Academy" },
   pages: 7,
-  file: "/guidelines/goal-setting-guidelines.pdf",
+  pdf: "goal-setting-guidelines.pdf",
   sections: [
     "Why Goals Matter",
     "The SMART Checklist",
@@ -86,7 +87,7 @@ export const GUIDE_GROUPS: GuideGroup[] = [
           role: "Founder, Freshman Academy",
         },
         pages: 5,
-        file: "/guidelines/department-leadership-guidelines.pdf",
+        pdf: "department-leadership-guidelines.pdf",
         sections: [
           "Positioning vs. Marketing",
           "Competitive Advantage",
@@ -109,7 +110,7 @@ export const GUIDE_GROUPS: GuideGroup[] = [
         owner: null,
         approvedBy: null,
         pages: 5,
-        file: "/guidelines/admissions-program-leadership-guide.pdf",
+        pdf: "admissions-program-leadership-guide.pdf",
         sections: [
           "Program Goal & Tracks",
           "Keeping the Connection With Students",
@@ -141,7 +142,7 @@ export const GUIDE_GROUPS: GuideGroup[] = [
           role: "Founder, Freshman Academy",
         },
         pages: 8,
-        file: "/guidelines/masters-program-mentor-guidelines.pdf",
+        pdf: "masters-program-mentor-guidelines.pdf",
         sections: [
           "The Role of the Program Coordinator",
           "The Weekly Monday Message",
@@ -173,7 +174,7 @@ export const GUIDE_GROUPS: GuideGroup[] = [
           role: "CEO, Freshman Academy",
         },
         pages: 6,
-        file: "/guidelines/office-management-guidelines.pdf",
+        pdf: "office-management-guidelines.pdf",
         sections: [
           "The Role of the Office Manager",
           "Core Character Traits Required",
@@ -194,3 +195,25 @@ export const ALL_GUIDES: Guide[] = [
   FEATURED_GUIDE,
   ...GUIDE_GROUPS.flatMap((g) => g.guides),
 ];
+
+/**
+ * Where the PDFs live, relative to the project root. Deliberately NOT under
+ * public/: anything in public/ is served as a static asset with no session
+ * check, so these internal documents would have been downloadable by anyone who
+ * knew (or guessed) the URL, signed in or not. Every read now goes through the
+ * authenticated handler at /guidelines/file/[slug].
+ */
+export const GUIDELINES_DIR = ["private", "guidelines"] as const;
+
+/** Look a guide up by slug — the allowlist the download route resolves against. */
+export function guideBySlug(slug: string): Guide | undefined {
+  return ALL_GUIDES.find((g) => g.slug === slug);
+}
+
+/**
+ * The in-app URL for a guide. `download` asks the handler for an attachment
+ * disposition instead of opening the PDF in the browser's viewer.
+ */
+export function guideHref(guide: Guide, download = false): string {
+  return `/guidelines/file/${guide.slug}${download ? "?dl=1" : ""}`;
+}

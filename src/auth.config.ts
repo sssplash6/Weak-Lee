@@ -51,10 +51,13 @@ export const authConfig = {
       const isOnOnboarding = nextUrl.pathname.startsWith("/onboarding");
       const isOnAdmin = nextUrl.pathname.startsWith("/admin");
       const isOnSignin = nextUrl.pathname.startsWith("/signin");
+      // Covers both the page and the PDF handler under /guidelines/file/…,
+      // which streams internal documents.
+      const isOnGuidelines = nextUrl.pathname.startsWith("/guidelines");
 
       // Require a session for protected areas. /admin additionally checks the
       // admin allowlist inside the page (needs DB/email, not available here).
-      if (isOnDashboard || isOnOnboarding || isOnAdmin) {
+      if (isOnDashboard || isOnOnboarding || isOnAdmin || isOnGuidelines) {
         return isLoggedIn; // redirected to signIn page when false
       }
       if (isOnSignin && isLoggedIn) {
