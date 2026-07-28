@@ -122,6 +122,7 @@ export default async function AdminPage({
           select: {
             startDate: true,
             endDate: true,
+            isCurrent: true,
             submittedLate: true,
             submittedAt: true,
             goals: goalSelect,
@@ -342,6 +343,7 @@ export default async function AdminPage({
       submittedAt: Date | null;
       misdated: boolean;
       notClosed?: boolean;
+      aheadLabel?: string | null;
       goals: PeriodGoal[];
     },
   ): AdminUser {
@@ -354,6 +356,7 @@ export default async function AdminPage({
       weekLabel: fields.label,
       misdated: fields.misdated,
       notClosed: fields.notClosed ?? false,
+      aheadLabel: fields.aheadLabel ?? null,
       late: fields.late,
       submittedAtLabel: fields.submittedAt
         ? formatDateTimeTz(fields.submittedAt)
@@ -403,18 +406,21 @@ export default async function AdminPage({
   // "previous". Comparing against the deadline instant (not the Monday) keeps
   // this robust to how week bounds are stored.
   const cutoff = cycle.submissionDeadline.getTime();
-  // A redeploy race can leave a stray duplicate week for a cycle. When choosing
-  // which one represents the person, a submitted week always beats an
-  // unsubmitted duplicate, so someone who actually reported never reads as "not
-  // submitted".
+  // The earliest week starting on/after the cutoff — the one this cycle is about.
+  // Someone who reports ahead also has later weeks past the cutoff; those are
+  // next week's, so they must never win here (sorting by submittedAt did let a
+  // week reported far in advance take this slot). A redeploy race can leave a
+  // stray duplicate week for a cycle, so on an identical start date a submitted
+  // week beats an unsubmitted duplicate — someone who actually reported never
+  // reads as "not submitted".
   const currentWeekOf = (weeks: (typeof rawUsers)[number]["weeks"]) => {
     const cur = weeks.filter((w) => w.startDate.getTime() >= cutoff);
     if (cur.length === 0) return null;
-    const submitted = cur
-      .filter((w) => w.submittedAt != null)
-      .sort((a, b) => a.submittedAt!.getTime() - b.submittedAt!.getTime());
-    if (submitted.length > 0) return submitted[0];
-    return cur.sort((a, b) => a.startDate.getTime() - b.startDate.getTime())[0];
+    return cur.sort(
+      (a, b) =>
+        a.startDate.getTime() - b.startDate.getTime() ||
+        Number(b.submittedAt != null) - Number(a.submittedAt != null),
+    )[0];
   };
   const previousWeekOf = (weeks: (typeof rawUsers)[number]["weeks"]) => {
     const prev = weeks.filter((w) => w.startDate.getTime() < cutoff);
@@ -430,11 +436,21 @@ export default async function AdminPage({
   // Current week = the week people must have goals in for this cycle.
   const usersCurrentWeek = rawUsers.map((u) => {
     const wk = currentWeekOf(u.weeks);
+    // Someone who reports ahead has already closed this cycle's week and moved
+    // on to a later one — the week their own dashboard shows. The goals below
+    // are then the closed week's outcome (completion rates and reflection
+    // reasons included), not live progress, so say so on the row.
+    const live = u.weeks.find((w) => w.isCurrent);
+    const ahead =
+      live && wk && live.startDate.getTime() > wk.startDate.getTime()
+        ? fmtRange(live.startDate, live.endDate)
+        : null;
     return baseUser(u, {
       label: wk ? fmtRange(wk.startDate, wk.endDate) : null,
       late: wk?.submittedLate ?? false,
       submittedAt: wk?.submittedAt ?? null,
       misdated: false,
+      aheadLabel: ahead,
       goals: wk?.goals ?? [],
     });
   });

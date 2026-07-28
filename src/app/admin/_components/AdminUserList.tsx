@@ -62,6 +62,9 @@ export type AdminUser = {
   misdated: boolean;
   // Previous-week only: they never closed the week out (still stuck on it).
   notClosed: boolean;
+  // Set when they've already closed this week and started a later one — the
+  // range of that later week, which is what their own dashboard shows.
+  aheadLabel: string | null;
   late: boolean;
   submittedAtLabel: string | null;
   percent: number;
@@ -217,6 +220,14 @@ function UserRow({
                 Didn&rsquo;t close
               </span>
             )}
+            {u.aheadLabel && (
+              <span
+                className="shrink-0 rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-orange-700"
+                title={`Already closed this week and started ${u.aheadLabel} — the goals here are the closed week's.`}
+              >
+                Week ahead
+              </span>
+            )}
             {u.goalCount === 0 && (
               <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700">
                 No goals
@@ -246,11 +257,24 @@ function UserRow({
             {u.email ?? "no email"}
             {u.department ? ` · ${u.department}` : ""}
           </p>
+          {/* Which period this row is actually about, then its submission. The
+              range matters most for someone running ahead or behind, whose own
+              dashboard is on a different week than the tab. */}
           <p className="truncate text-xs text-muted-fg">
-            {u.submittedAtLabel
-              ? `${labels.goalsWord} submitted ${u.submittedAtLabel}`
-              : `${labels.goalsWord} not submitted yet`}
+            {[
+              u.weekLabel,
+              u.submittedAtLabel
+                ? `${labels.goalsWord} submitted ${u.submittedAtLabel}`
+                : `${labels.goalsWord} not submitted yet`,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
           </p>
+          {u.aheadLabel && (
+            <p className="truncate text-xs text-orange-700">
+              {`Already on ${u.aheadLabel} — the goals below are the week they closed, not what they're working on now.`}
+            </p>
+          )}
         </div>
 
         <div className="hidden w-40 shrink-0 sm:block">
