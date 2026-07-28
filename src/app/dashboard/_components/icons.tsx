@@ -182,6 +182,46 @@ export function ArrowLeftIcon({ className }: IconProps) {
   );
 }
 
+/** A sun — the light half of the theme toggle. */
+export function SunIcon({ className }: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="4" />
+      {/* four cardinal rays, then four diagonals */}
+      <path d="M12 2.6v2.1M12 19.3v2.1M2.6 12h2.1M19.3 12h2.1" />
+      <path d="M5.4 5.4l1.5 1.5M17.1 17.1l1.5 1.5M18.6 5.4l-1.5 1.5M6.9 17.1l-1.5 1.5" />
+    </svg>
+  );
+}
+
+/** A crescent moon — the dark half of the theme toggle. */
+export function MoonIcon({ className }: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      {/* a crescent cut from a disc, tilted so it reads as a moon at 14px */}
+      <path d="M20 14.4A8.2 8.2 0 0 1 9.6 4a8.4 8.4 0 1 0 10.4 10.4Z" />
+    </svg>
+  );
+}
+
 /** A speech bubble — used for the "share feedback" action. */
 export function ChatIcon({ className }: IconProps) {
   return (

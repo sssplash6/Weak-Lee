@@ -7,6 +7,7 @@ import { AVATARS, resolveAvatar } from "@/lib/avatar";
 import { setAvatar } from "../actions";
 import { useDismissible } from "@/lib/useDismissible";
 import { ThemeToggle } from "@/app/_components/ThemeToggle";
+import { PencilIcon } from "./icons";
 
 type Props = {
   name?: string | null;
@@ -65,13 +66,26 @@ export function ProfileMenu({
 
       {open && (
         <div className="pop-in absolute right-0 z-10 mt-2 w-64 rounded-xl border border-line bg-surface p-1 shadow-lg">
-          <div className="px-3 py-2">
-            <p className="truncate text-sm font-medium text-ink">
-              {name ?? "Student"}
-            </p>
-            {email && (
-              <p className="truncate text-xs text-muted-fg">{email}</p>
-            )}
+          {/* Name, with editing the profile as a pencil right beside it —
+              it's an action on this identity, not another destination. */}
+          <div className="flex items-start gap-2 px-3 py-2">
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-ink">
+                {name ?? "Student"}
+              </p>
+              {email && (
+                <p className="truncate text-xs text-muted-fg">{email}</p>
+              )}
+            </div>
+            <Link
+              href="/profile"
+              onClick={() => setOpen(false)}
+              aria-label="Edit profile"
+              title="Edit profile"
+              className="-mr-1 shrink-0 rounded-lg p-1.5 text-muted-fg transition hover:bg-canvas hover:text-brand"
+            >
+              <PencilIcon className="h-4 w-4" />
+            </Link>
           </div>
 
           <div className="my-1 border-t border-line" />
@@ -128,12 +142,11 @@ export function ProfileMenu({
           <div className="my-1 border-t border-line" />
 
           <Link
-            href="/profile"
-
+            href="/guidelines"
             onClick={() => setOpen(false)}
             className="block rounded-lg px-3 py-2 text-left text-sm font-medium text-ink transition hover:bg-canvas"
           >
-            Edit profile
+            Guidelines
           </Link>
           <Link
             href="/team"

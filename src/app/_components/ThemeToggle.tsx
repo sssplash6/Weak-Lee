@@ -1,14 +1,22 @@
 "use client";
 
 import { useState } from "react";
+import { MoonIcon, SunIcon } from "@/app/dashboard/_components/icons";
 
 type Theme = "light" | "dark";
 
 const STORAGE_KEY = "theme";
 
-const OPTIONS: { value: Theme; label: string; icon: string }[] = [
-  { value: "light", label: "Light", icon: "☀️" },
-  { value: "dark", label: "Dark", icon: "🌙" },
+// Line icons rather than emoji: emoji render differently per platform, sit off
+// the text baseline, and keep their own colour on the selected (navy) half —
+// these inherit currentColor, so the active side goes white with its label.
+const OPTIONS: {
+  value: Theme;
+  label: string;
+  Icon: (props: { className?: string }) => React.ReactElement;
+}[] = [
+  { value: "light", label: "Light", Icon: SunIcon },
+  { value: "dark", label: "Dark", Icon: MoonIcon },
 ];
 
 /** Read the theme the pre-paint script already applied to <html>. */
@@ -58,7 +66,7 @@ export function ThemeToggle() {
                 : "text-muted-fg hover:text-ink"
             }`}
           >
-            <span aria-hidden="true">{o.icon}</span>
+            <o.Icon className="h-4 w-4" />
             <span>{o.label}</span>
           </button>
         );
