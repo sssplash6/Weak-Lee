@@ -182,6 +182,25 @@ export function ArrowLeftIcon({ className }: IconProps) {
   );
 }
 
+/** A closed padlock — marks something scoped to another department. */
+export function LockIcon({ className }: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <rect x="4.5" y="10.5" width="15" height="10" rx="2.2" />
+      <path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" />
+    </svg>
+  );
+}
+
 /** A sun — the light half of the theme toggle. */
 export function SunIcon({ className }: IconProps) {
   return (

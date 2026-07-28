@@ -2,7 +2,9 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { NextRequest } from "next/server";
 import { auth } from "@/auth";
-import { GUIDELINES_DIR, guideBySlug } from "@/lib/guidelines";
+import { isAdmin } from "@/lib/admin";
+import { prisma } from "@/lib/prisma";
+import { canReadGuide, GUIDELINES_DIR, guideBySlug } from "@/lib/guidelines";
 
 /**
  * Serves a guideline PDF to a signed-in user. The documents sit in
@@ -25,6 +27,25 @@ export async function GET(
   const { slug } = await ctx.params;
   const guide = guideBySlug(slug);
   if (!guide) return new Response("No such guide.", { status: 404 });
+
+  // Department-scoped guides: the card is rendered locked, but the URL has to be
+  // closed too, or "locked" means nothing.
+  if (guide.departments != null) {
+    const viewer = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { department: true },
+    });
+    const allowed = canReadGuide(guide, {
+      department: viewer?.department,
+      isAdmin: isAdmin(session.user.email),
+    });
+    if (!allowed) {
+      return new Response(
+        `This guide is for the ${guide.departments[0]} department.`,
+        { status: 403 },
+      );
+    }
+  }
 
   let file: Buffer;
   try {

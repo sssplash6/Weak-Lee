@@ -1,16 +1,22 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { stat } from "node:fs/promises";
 import path from "node:path";
 
 export const metadata: Metadata = { title: "Guidelines" };
 import { auth } from "@/auth";
+import { isAdmin } from "@/lib/admin";
+import { prisma } from "@/lib/prisma";
 import { BackLink } from "@/app/_components/BackLink";
+import { LockIcon } from "@/app/dashboard/_components/icons";
 import {
   ALL_GUIDES,
+  canReadGuide,
   FEATURED_GUIDE,
   GUIDE_GROUPS,
   GUIDELINES_DIR,
+  guideDepartmentLabel,
   guideHref,
   type Guide,
   type GuideTone,
@@ -78,8 +84,21 @@ export default async function GuidelinesPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/signin");
 
-  const sizes = await guideSizes();
+  // The viewer's department decides which guides unlock. It's free text people
+  // type in their profile, so it can be missing entirely.
+  const [viewer, sizes] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { department: true },
+    }),
+    guideSizes(),
+  ]);
+  const me = {
+    department: viewer?.department,
+    isAdmin: isAdmin(session.user.email),
+  };
   const totalPages = ALL_GUIDES.reduce((s, g) => s + g.pages, 0);
+  const openToMe = ALL_GUIDES.filter((g) => canReadGuide(g, me)).length;
 
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8">
@@ -90,8 +109,22 @@ export default async function GuidelinesPage() {
           </div>
           <h1 className="mt-1 text-2xl font-bold text-ink">Guidelines</h1>
           <p className="mt-1 text-sm text-muted-fg">
-            {`How we work, written down — ${ALL_GUIDES.length} guides, ${totalPages} pages. Read the one for your role; everyone reads goal setting.`}
+            {`How we work, written down — ${ALL_GUIDES.length} guides, ${totalPages} pages. ${
+              openToMe === ALL_GUIDES.length
+                ? "All of them are open to you."
+                : `${openToMe} are open to you; the rest belong to another department.`
+            }`}
           </p>
+          {!me.department && (
+            <p className="mt-1 text-sm text-accent-ink">
+              Your profile has no department yet, so department guides stay
+              locked.{" "}
+              <Link href="/profile" className="font-semibold underline">
+                Add it
+              </Link>
+              .
+            </p>
+          )}
         </div>
         <BackLink href="/dashboard" label="My dashboard" />
       </header>
@@ -127,6 +160,7 @@ export default async function GuidelinesPage() {
         <GuideCard
           guide={FEATURED_GUIDE}
           size={sizes.get(FEATURED_GUIDE.slug)}
+          locked={!canReadGuide(FEATURED_GUIDE, me)}
           featured
         />
       </section>
@@ -137,7 +171,12 @@ export default async function GuidelinesPage() {
           <p className="mb-3 text-xs text-muted-fg">{group.blurb}</p>
           <div className="grid gap-4 lg:grid-cols-2">
             {group.guides.map((g) => (
-              <GuideCard key={g.slug} guide={g} size={sizes.get(g.slug)} />
+              <GuideCard
+                key={g.slug}
+                guide={g}
+                size={sizes.get(g.slug)}
+                locked={!canReadGuide(g, me)}
+              />
             ))}
           </div>
         </section>
@@ -160,13 +199,19 @@ export default async function GuidelinesPage() {
 function GuideCard({
   guide: g,
   size,
+  locked = false,
   featured = false,
 }: {
   guide: Guide;
   size?: string;
+  /** Belongs to another department: shown in full, but not openable. */
+  locked?: boolean;
   featured?: boolean;
 }) {
   const tone = TONE[g.tone];
+  // Shown on every department-scoped guide, whether or not it's yours, so the
+  // scoping is legible rather than mysterious.
+  const deptLabel = guideDepartmentLabel(g);
 
   return (
     <article
@@ -193,11 +238,22 @@ function GuideCard({
             >
               {g.kicker}
             </p>
-            {g.version && (
-              <span className="shrink-0 rounded-full border border-line bg-surface px-2 py-0.5 text-[10px] font-bold tracking-wide text-muted-fg">
-                {g.version}
-              </span>
-            )}
+            <div className="flex shrink-0 items-center gap-1.5">
+              {deptLabel && (
+                <span
+                  className={`inline-flex items-center gap-1 rounded-full border border-line bg-surface px-2 py-0.5 text-[10px] font-bold tracking-wide ${tone.ink}`}
+                  title={`Only the ${deptLabel} department can open this guide`}
+                >
+                  {locked && <LockIcon className="h-2.5 w-2.5" />}
+                  {deptLabel}
+                </span>
+              )}
+              {g.version && (
+                <span className="rounded-full border border-line bg-surface px-2 py-0.5 text-[10px] font-bold tracking-wide text-muted-fg">
+                  {g.version}
+                </span>
+              )}
+            </div>
           </div>
 
           <h3
@@ -258,26 +314,37 @@ function GuideCard({
         )}
       </div>
 
-      {/* Ways to read it */}
+      {/* Ways to read it — or why you can't */}
       <div className="flex flex-wrap items-center gap-2 border-t border-line px-5 py-3">
-        <a
-          href={guideHref(g)}
-          target="_blank"
-          rel="noreferrer"
-          className="rounded-lg bg-brand px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-dark"
-        >
-          Read guide
-        </a>
-        <a
-          href={guideHref(g, true)}
-          download
-          className="rounded-lg border border-line px-3 py-1.5 text-sm font-medium text-ink transition hover:bg-canvas"
-        >
-          Download
-        </a>
-        <span className="ml-auto text-[11px] font-medium uppercase tracking-wide text-muted-fg">
-          PDF
-        </span>
+        {locked ? (
+          <p className="flex items-center gap-2 text-xs text-muted-fg">
+            <LockIcon className="h-3.5 w-3.5 shrink-0" />
+            {`For the ${deptLabel} department. Ask ${
+              g.owner ? g.owner.name : "an admin"
+            } if you need it.`}
+          </p>
+        ) : (
+          <>
+            <a
+              href={guideHref(g)}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-lg bg-brand px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-dark"
+            >
+              Read guide
+            </a>
+            <a
+              href={guideHref(g, true)}
+              download
+              className="rounded-lg border border-line px-3 py-1.5 text-sm font-medium text-ink transition hover:bg-canvas"
+            >
+              Download
+            </a>
+            <span className="ml-auto text-[11px] font-medium uppercase tracking-wide text-muted-fg">
+              PDF
+            </span>
+          </>
+        )}
       </div>
     </article>
   );

@@ -29,6 +29,13 @@ export type Guide = {
   pages: number;
   /** File name inside private/guidelines — never a URL, see `guideHref`. */
   pdf: string;
+  /**
+   * Departments allowed to open it, or null for everyone. The first entry is the
+   * canonical name shown on the badge; the rest are accepted spellings, because
+   * `User.department` is free text people type themselves. Matching is
+   * case-insensitive and apostrophe-insensitive — see `canReadGuide`.
+   */
+  departments: readonly string[] | null;
   /** Numbered sections, in the order the document lists them. */
   sections: string[];
 };
@@ -49,10 +56,14 @@ const GOAL_SETTING: Guide = {
   tone: "indigo",
   version: "v1.1",
   dated: "May 2026",
-  owner: { name: "Safina Teshabayeva", role: "COO" },
-  approvedBy: { name: "Valera Arakelyan", role: "CEO, Freshman Academy" },
+  // Owner is Valera by decision, overriding the PDF's cover block (which lists
+  // Safina as owner and Valera as approver). With one person in both roles the
+  // approver line would just repeat the owner, so it's dropped here.
+  owner: { name: "Valera Arakelyan", role: "CEO, Freshman Academy" },
+  approvedBy: null,
   pages: 7,
   pdf: "goal-setting-guidelines.pdf",
+  departments: null,
   sections: [
     "Why Goals Matter",
     "The SMART Checklist",
@@ -88,6 +99,8 @@ export const GUIDE_GROUPS: GuideGroup[] = [
         },
         pages: 5,
         pdf: "department-leadership-guidelines.pdf",
+        // Scoped by role, not department: a leader in any department needs it.
+        departments: null,
         sections: [
           "Positioning vs. Marketing",
           "Competitive Advantage",
@@ -111,6 +124,7 @@ export const GUIDE_GROUPS: GuideGroup[] = [
         approvedBy: null,
         pages: 5,
         pdf: "admissions-program-leadership-guide.pdf",
+        departments: ["Admissions Program", "Admissions", "AP"],
         sections: [
           "Program Goal & Tracks",
           "Keeping the Connection With Students",
@@ -143,6 +157,12 @@ export const GUIDE_GROUPS: GuideGroup[] = [
         },
         pages: 8,
         pdf: "masters-program-mentor-guidelines.pdf",
+        departments: [
+          "Master's Program",
+          "Masters Program",
+          "Master's",
+          "Masters",
+        ],
         sections: [
           "The Role of the Program Coordinator",
           "The Weekly Monday Message",
@@ -175,6 +195,7 @@ export const GUIDE_GROUPS: GuideGroup[] = [
         },
         pages: 6,
         pdf: "office-management-guidelines.pdf",
+        departments: null,
         sections: [
           "The Role of the Office Manager",
           "Core Character Traits Required",
@@ -216,4 +237,41 @@ export function guideBySlug(slug: string): Guide | undefined {
  */
 export function guideHref(guide: Guide, download = false): string {
   return `/guidelines/file/${guide.slug}${download ? "?dl=1" : ""}`;
+}
+
+/**
+ * Fold a typed department name down to something comparable: trimmed, lowercased,
+ * inner whitespace collapsed, and apostrophes dropped so "Master's Program",
+ * "Masters Program" and "master’s  program" all land on the same key.
+ */
+function normalizeDepartment(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/['’]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** The department name shown on a restricted guide's badge. */
+export function guideDepartmentLabel(guide: Guide): string | null {
+  return guide.departments?.[0] ?? null;
+}
+
+/**
+ * Whether this person may open the guide. Unrestricted guides are open to
+ * everyone signed in; restricted ones need a matching department. Admins always
+ * pass — they publish these documents and answer for them.
+ *
+ * Enforced in the download route, not just used to dim a card: hiding the button
+ * while leaving the URL open would be no protection at all.
+ */
+export function canReadGuide(
+  guide: Guide,
+  viewer: { department?: string | null; isAdmin?: boolean },
+): boolean {
+  if (guide.departments == null) return true;
+  if (viewer.isAdmin) return true;
+  if (!viewer.department) return false;
+  const mine = normalizeDepartment(viewer.department);
+  return guide.departments.some((d) => normalizeDepartment(d) === mine);
 }
