@@ -33,6 +33,25 @@
   --color-chart-bad: #b91c1c; /* red 700 */
   --color-chart-mute: #94a3b8; /* slate 400 — the one intentionally grey slot */
 
+  /* Guideline document accents — one hue per guide on /guidelines, so each
+     document's banner is recognisable at a glance. Deliberately outside the
+     brand navy (actions), accent orange (progress) and red (delete): these
+     identify a document, they don't mean anything. `-ink` is the readable text
+     step, `-soft` the banner wash. Dark steps are re-mixed below, never
+     flipped — a light wash on a dark surface goes muddy. */
+  --color-guide-indigo-ink: #4338ca;
+  --color-guide-indigo-soft: #eceefc;
+  --color-guide-teal-ink: #0f766e;
+  --color-guide-teal-soft: #e4f2f0;
+  --color-guide-plum-ink: #7e22ce;
+  --color-guide-plum-soft: #f3eafc;
+  --color-guide-cyan-ink: #0e7490;
+  --color-guide-cyan-soft: #e3f1f6;
+  /* Olive is darkened past the obvious #4d7c0f: that sat at 4.44:1 on its own
+     wash, a hair under AA for the 11px kicker. */
+  --color-guide-olive-ink: #45700d;
+  --color-guide-olive-soft: #eef4e3;
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 
@@ -73,6 +92,22 @@
 
   --color-ink: #e7ebf0; /* primary text */
   --color-muted-fg: #98a2b0; /* secondary text */
+
+  /* Guide accents, re-stepped for the dark surface: the ink lightened to stay
+     readable on #161d26, the wash a deep version of the same hue so banners keep
+     their identity instead of turning into grey slabs. Each wash is held to a
+     1.10–1.20 step against the card so the banner still reads as a band —
+     the first pass had plum at 1.00, i.e. invisible. */
+  --color-guide-indigo-ink: #9aa2f6;
+  --color-guide-indigo-soft: #1e2342;
+  --color-guide-teal-ink: #4ecec0;
+  --color-guide-teal-soft: #102b2a;
+  --color-guide-plum-ink: #c48af0;
+  --color-guide-plum-soft: #301b46;
+  --color-guide-cyan-ink: #56c2df;
+  --color-guide-cyan-soft: #0f2932;
+  --color-guide-olive-ink: #a3cc63;
+  --color-guide-olive-soft: #1f2b14;
 
   /* Dark chart marks: re-stepped for the dark surface rather than flipped —
      same validation (separation, dark lightness band, contrast on #161d26). */
