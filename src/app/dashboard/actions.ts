@@ -5,7 +5,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { getOrCreateCurrentWeek, nextWeekBounds } from "@/lib/weeks";
 import { getOrCreateCurrentMonth, nextMonthBounds } from "@/lib/months";
-import { submissionTiming } from "@/lib/lateness";
+import { submissionTiming, weekOpensAt } from "@/lib/lateness";
 import {
   clampPercent,
   goalPercent,
@@ -764,10 +764,23 @@ export async function startNewWeek(
     ({ start, end } = nextWeekBounds(week.endDate));
   }
 
+  const now = new Date();
+
+  // A week can't be opened before the Sunday its goals are due (00:00 Tashkent).
+  // Without this, closing mid-week jumps straight onto next week's dates and the
+  // person spends the rest of the cycle a week ahead of everyone else — see
+  // weekOpensAt. Enforced here, not just in the UI, because the range is
+  // caller-supplied. Closing late (or catching up) is always allowed.
+  if (now.getTime() < weekOpensAt(start).getTime()) {
+    throw new Error(
+      "This week isn't over yet — you can close it and start the next one from Sunday.",
+    );
+  }
+
   // How late this submission is against the new week's deadlines. "late" =
   // after Sunday 12:00; "missed" = after the Monday 11:00 meeting (flagged not
   // submitted there). Both count as a late submission for the flag/fine.
-  const timing = submissionTiming(new Date(), start);
+  const timing = submissionTiming(now, start);
   const submittedLate = timing !== "on-time";
 
   await prisma.$transaction(async (tx) => {

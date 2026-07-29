@@ -32,11 +32,18 @@ export function StartNewWeekButton({
   carryGoals,
   defaultStart,
   defaultEnd,
+  canStart,
+  opensOnLabel,
 }: {
   incompleteGoals: IncompleteGoal[];
   carryGoals: CarryGoal[];
   defaultStart: string;
   defaultEnd: string;
+  // False until the Sunday the new week's goals are due. Closing before then
+  // would put this person a week ahead of everyone else's cycle, so the button
+  // is locked rather than hidden — with the date it unlocks.
+  canStart: boolean;
+  opensOnLabel: string;
 }) {
   const [open, setOpen] = useState(false);
   const [reasons, setReasons] = useState<Record<string, string>>({});
@@ -53,6 +60,9 @@ export function StartNewWeekButton({
   // Set once the user tries to start the week; drives the "what's missing" hints
   // so we never disable the button without telling them why.
   const [attempted, setAttempted] = useState(false);
+  // Anything the server refused (e.g. a start date that isn't open yet), shown
+  // in the dialog instead of throwing to the error boundary.
+  const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const hasUnfinished = incompleteGoals.length > 0;
@@ -65,12 +75,18 @@ export function StartNewWeekButton({
     (g) => !carry[g.id] || (carryDeadlines[g.id] ?? "").length > 0,
   );
 
+  // A week can't be opened ahead of schedule, so the start date can't be pushed
+  // past the default (the week that follows the one closing). Bringing it
+  // earlier — catching up — stays allowed.
+  const startTooFar = start > defaultStart;
+
   // Everything that's stopping the week from starting, in plain language.
   const missing: string[] = [];
   if (hasUnfinished && !allFilled)
     missing.push("a reason for every goal below 100%");
   if (!carryValid) missing.push("a deadline for each carried goal");
   if (!validRange) missing.push("a valid start date");
+  if (startTooFar) missing.push(`a start date no later than ${formatDayLabel(defaultStart)}`);
 
   function close() {
     setOpen(false);
@@ -82,6 +98,7 @@ export function StartNewWeekButton({
     setStart(defaultStart);
     setEnd(defaultEnd);
     setAttempted(false);
+    setError(null);
   }
 
   // Close on Escape and lock body scroll while the modal is open.
@@ -100,11 +117,17 @@ export function StartNewWeekButton({
   }, [open, isPending]);
 
   function submit() {
-    if ((hasUnfinished && !allFilled) || !carryValid || !validRange) {
+    if (
+      (hasUnfinished && !allFilled) ||
+      !carryValid ||
+      !validRange ||
+      startTooFar
+    ) {
       // Don't silently no-op — reveal exactly which fields still need filling.
       setAttempted(true);
       return;
     }
+    setError(null);
     const payload = incompleteGoals.map((g) => ({
       goalId: g.id,
       reason: (reasons[g.id] ?? "").trim(),
@@ -113,12 +136,32 @@ export function StartNewWeekButton({
       .filter((g) => carry[g.id])
       .map((g) => ({ goalId: g.id, deadline: carryDeadlines[g.id] }));
     startTransition(async () => {
-      await startNewWeek(payload, { start, end }, carryPayload);
-      close();
+      try {
+        await startNewWeek(payload, { start, end }, carryPayload);
+        close();
+      } catch (e) {
+        setError(
+          e instanceof Error ? e.message : "Couldn't start the new week.",
+        );
+      }
     });
   }
 
   if (!open) {
+    // Before the window opens, say when it does rather than offering a button
+    // that would only be refused.
+    if (!canStart) {
+      return (
+        <div className="w-full rounded-xl border border-line bg-canvas px-4 py-3 text-center">
+          <p className="text-sm font-semibold text-muted-fg">
+            {`Start new week (${formatRangeLabel(defaultStart, defaultEnd)})`}
+          </p>
+          <p className="mt-0.5 text-xs text-muted-fg">
+            {`Opens Sunday, ${opensOnLabel} — finish this week first.`}
+          </p>
+        </div>
+      );
+    }
     return (
       <button
         type="button"
@@ -157,7 +200,7 @@ export function StartNewWeekButton({
               <input
                 type="date"
                 value={start}
-                max={end || undefined}
+                max={defaultStart}
                 onChange={(e) => setStart(e.target.value)}
                 className="mt-1 w-full rounded-lg border border-line px-3 py-2 text-sm text-ink focus:border-brand focus:outline-none"
               />
@@ -277,6 +320,12 @@ export function StartNewWeekButton({
       {attempted && missing.length > 0 && (
         <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-600">
           Before starting the week, add {missing.join(", ")}.
+        </p>
+      )}
+
+      {error && (
+        <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-600">
+          {error}
         </p>
       )}
 
