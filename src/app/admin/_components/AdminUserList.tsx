@@ -270,8 +270,10 @@ function UserRow({
               .filter(Boolean)
               .join(" · ")}
           </p>
+          {/* Wraps rather than truncates — clipped mid-sentence, the warning
+              reads as noise instead of an explanation of the goals below. */}
           {u.aheadLabel && (
-            <p className="truncate text-xs text-orange-700">
+            <p className="text-xs text-orange-700">
               {`Already on ${u.aheadLabel} — the goals below are the week they closed, not what they're working on now.`}
             </p>
           )}
