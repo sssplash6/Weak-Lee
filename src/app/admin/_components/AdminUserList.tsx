@@ -59,7 +59,6 @@ export type AdminUser = {
   department: string | null;
   avatar: string | null;
   weekLabel: string | null;
-  misdated: boolean;
   // Previous-week only: they never closed the week out (still stuck on it).
   notClosed: boolean;
   // Set when they've already closed this week and started a later one — the
@@ -337,7 +336,11 @@ function UserRow({
         >
           Bonus
         </button>
-        {u.misdated && <FixWeekButton userId={u.id} weekLabel={u.weekLabel} />}
+        {/* Only for someone whose live week is ahead of this cycle's — the one
+            case there's anything to repair. */}
+        {u.aheadLabel && (
+          <FixWeekButton userId={u.id} aheadLabel={u.aheadLabel} />
+        )}
         {isSelf ? (
           // Invisible stand-in matching the delete button's footprint (px-4
           // around an h-4 w-4 icon) so every row's columns line up.
@@ -766,12 +769,16 @@ function AddBonusForm({
   );
 }
 
+// Pulls someone who's running ahead back onto the current week: re-dates their
+// live week, or — if they got ahead by closing this week early — reopens the week
+// they closed and folds the ahead one into it. Either way no goals are lost, so
+// one confirmation step is enough.
 function FixWeekButton({
   userId,
-  weekLabel,
+  aheadLabel,
 }: {
   userId: string;
-  weekLabel: string | null;
+  aheadLabel: string;
 }) {
   const [confirming, setConfirming] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -789,7 +796,7 @@ function FixWeekButton({
             })
           }
           className="rounded bg-brand px-2 py-1 font-medium text-white transition hover:bg-brand-dark disabled:opacity-50"
-          title={`Re-date${weekLabel ? ` (${weekLabel})` : ""} to the current week`}
+          title={`Bring them back from ${aheadLabel} to the current week (goals kept)`}
         >
           {isPending ? "Moving…" : "Move to this week"}
         </button>
@@ -810,7 +817,7 @@ function FixWeekButton({
       type="button"
       onClick={() => setConfirming(true)}
       className="shrink-0 rounded-lg border border-orange-200 px-2.5 py-1 text-xs font-medium text-orange-700 transition hover:bg-orange-50"
-      title="Move this user's week to the current calendar week (keeps all goals)"
+      title={`They're on ${aheadLabel} — move them back to the current week (goals kept)`}
     >
       Fix week
     </button>

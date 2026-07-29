@@ -341,7 +341,6 @@ export default async function AdminPage({
       label: string | null;
       late: boolean;
       submittedAt: Date | null;
-      misdated: boolean;
       notClosed?: boolean;
       aheadLabel?: string | null;
       goals: PeriodGoal[];
@@ -354,7 +353,6 @@ export default async function AdminPage({
       department: u.department,
       avatar: u.avatar,
       weekLabel: fields.label,
-      misdated: fields.misdated,
       notClosed: fields.notClosed ?? false,
       aheadLabel: fields.aheadLabel ?? null,
       late: fields.late,
@@ -449,7 +447,6 @@ export default async function AdminPage({
       label: wk ? fmtRange(wk.startDate, wk.endDate) : null,
       late: wk?.submittedLate ?? false,
       submittedAt: wk?.submittedAt ?? null,
-      misdated: false,
       aheadLabel: ahead,
       goals: wk?.goals ?? [],
     });
@@ -464,7 +461,6 @@ export default async function AdminPage({
       label: wk ? fmtRange(wk.startDate, wk.endDate) : null,
       late: wk?.submittedLate ?? false,
       submittedAt: wk?.submittedAt ?? null,
-      misdated: false,
       notClosed: wk != null && !closed,
       goals: wk?.goals ?? [],
     });
@@ -476,7 +472,6 @@ export default async function AdminPage({
       label: m ? monthLabel(m.startDate) : null,
       late: false,
       submittedAt: m?.submittedAt ?? null,
-      misdated: false,
       goals: m?.goals ?? [],
     });
   });

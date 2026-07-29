@@ -5,6 +5,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/admin";
 import { getWeekBounds } from "@/lib/weeks";
+import { goalPercent } from "@/lib/progress";
 import { currentMeetingSlot } from "@/lib/meetings";
 import {
   formatMoney,
@@ -34,28 +35,92 @@ export async function deleteUser(userId: string) {
 }
 
 /**
- * Re-date a user's current week to the current calendar week, preserving all of
- * their goals and subtasks (they belong to the same week row — nothing is moved
- * or deleted). Used to recover users whose first week was created a week ahead
- * during launch (LAUNCH_START_NEXT_WEEK). Admin-only.
+ * Put a user who's running ahead of the team's cycle back on the current
+ * calendar week. Two shapes, both non-destructive:
+ *
+ *  - Nothing occupies the current week (their week is simply misdated — e.g. the
+ *    first week seeded a week early at launch): re-date it. Goals and subtasks
+ *    ride along, since they belong to the same week row.
+ *  - The current week is already taken by a week they closed early: re-dating
+ *    would leave two weeks with identical dates and the review picking the wrong
+ *    one, so undo the close instead — reopen that week and fold the ahead week
+ *    into it.
+ *
+ * Admin-only.
  */
 export async function moveUserWeekToCurrent(userId: string) {
   const session = await auth();
   if (!isAdmin(session?.user?.email)) {
     throw new Error("Not authorized");
   }
-  const week = await prisma.week.findFirst({
-    where: { userId, isCurrent: true },
-    select: { id: true },
+  const weeks = await prisma.week.findMany({
+    where: { userId },
+    orderBy: { startDate: "desc" },
+    select: {
+      id: true,
+      startDate: true,
+      isCurrent: true,
+      goals: {
+        orderBy: { position: "asc" },
+        select: {
+          id: true,
+          title: true,
+          completedAt: true,
+          manualPercent: true,
+          subtasks: { select: { isDone: true } },
+        },
+      },
+    },
   });
-  if (!week) throw new Error("That user has no current week.");
+  const live = weeks.find((w) => w.isCurrent);
+  if (!live) throw new Error("That user has no current week.");
 
   const { start, end } = getWeekBounds(new Date());
-  await prisma.week.update({
-    where: { id: week.id },
-    data: { startDate: start, endDate: end },
-  });
+  if (toYmd(live.startDate) === toYmd(start)) return; // already on this week
+
+  const closed = weeks.find(
+    (w) => !w.isCurrent && toYmd(w.startDate) === toYmd(start),
+  );
+  if (!closed) {
+    await prisma.week.update({
+      where: { id: live.id },
+      data: { startDate: start, endDate: end },
+    });
+  } else {
+    // Goals carried into the ahead week are copies of ones still sitting on the
+    // week being reopened. Move over only what's new or further along, so real
+    // work survives and the carried copies don't come back doubled; the rest go
+    // with the ahead week (goals and subtasks cascade).
+    const percentByTitle = new Map(
+      closed.goals.map((g) => [g.title, goalPercent(g)]),
+    );
+    const moving = live.goals.filter((g) => {
+      const existing = percentByTitle.get(g.title);
+      return existing === undefined || goalPercent(g) > existing;
+    });
+    await prisma.$transaction(async (tx) => {
+      let position = closed.goals.length;
+      for (const g of moving) {
+        await tx.goal.update({
+          where: { id: g.id },
+          data: { weekId: closed.id, position: ++position },
+        });
+      }
+      // Fines raised against the ahead week would otherwise be orphaned
+      // (Penalty.week is SetNull) — hang them on the week that remains.
+      await tx.penalty.updateMany({
+        where: { weekId: live.id },
+        data: { weekId: closed.id },
+      });
+      await tx.week.delete({ where: { id: live.id } });
+      await tx.week.update({
+        where: { id: closed.id },
+        data: { isCurrent: true },
+      });
+    });
+  }
   revalidatePath("/admin");
+  revalidatePath("/dashboard");
 }
 
 /**
