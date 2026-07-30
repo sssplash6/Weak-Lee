@@ -34,17 +34,43 @@ export async function deleteUser(userId: string) {
   revalidatePath("/admin");
 }
 
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Whether a week was submitted days before it supposedly began — proof it was
+ * never that week at all. It's the launch offset: first weeks were seeded one
+ * week ahead (LAUNCH_START_NEXT_WEEK), and every close since chained off those
+ * wrong dates, so the person's whole run of weeks is labelled a week late.
+ * The two days of slack keep the legitimate Sunday-before submission — always
+ * within a day of the Monday start — from reading as misdated.
+ */
+function wasMislabelled(week: {
+  startDate: Date;
+  submittedAt: Date | null;
+}): boolean {
+  return (
+    week.submittedAt != null &&
+    week.submittedAt.getTime() < week.startDate.getTime() - 2 * 24 * 3_600_000
+  );
+}
+
 /**
  * Put a user who's running ahead of the team's cycle back on the current
- * calendar week. Two shapes, both non-destructive:
+ * calendar week. Three shapes, none of which lose work:
  *
- *  - Nothing occupies the current week (their week is simply misdated — e.g. the
- *    first week seeded a week early at launch): re-date it. Goals and subtasks
- *    ride along, since they belong to the same week row.
- *  - The current week is already taken by a week they closed early: re-dating
- *    would leave two weeks with identical dates and the review picking the wrong
- *    one, so undo the close instead — reopen that week and fold the ahead week
- *    into it.
+ *  - Nothing occupies the current week: re-date their week onto it. Goals and
+ *    subtasks ride along, since they belong to the same week row.
+ *  - The current week is taken by a week that was submitted before it began —
+ *    the launch offset. Their whole chain of weeks is a week late, so slide the
+ *    run back: the live week takes the current slot and each week it displaces
+ *    moves back one, until a slot is free. Only date labels change.
+ *  - The current week is taken by a correctly-dated week they closed early:
+ *    re-dating would leave two weeks with identical dates and the review picking
+ *    the wrong one, so undo the close instead — reopen that week and fold the
+ *    ahead week into it.
+ *
+ * Goal deadlines are never rewritten: they're the user's own calendar dates, and
+ * guessing at them is the one thing here that couldn't be undone.
  *
  * Admin-only.
  */
@@ -60,6 +86,7 @@ export async function moveUserWeekToCurrent(userId: string) {
       id: true,
       startDate: true,
       isCurrent: true,
+      submittedAt: true,
       goals: {
         orderBy: { position: "asc" },
         select: {
@@ -86,6 +113,36 @@ export async function moveUserWeekToCurrent(userId: string) {
       where: { id: live.id },
       data: { startDate: start, endDate: end },
     });
+  } else if (wasMislabelled(closed)) {
+    // Slide the whole chain back a week. Each pass parks a week on the slot it
+    // should hold, then picks up whoever was sitting there to place one week
+    // earlier; it ends at the oldest week, whose own slot is free. Every week is
+    // touched at most once, so this always terminates.
+    const moves: { id: string; start: Date; end: Date }[] = [];
+    const moved = new Set<string>();
+    let mover: (typeof weeks)[number] | undefined = live;
+    let slot = { start, end };
+    while (mover) {
+      moved.add(mover.id);
+      moves.push({ id: mover.id, start: slot.start, end: slot.end });
+      const displaced: (typeof weeks)[number] | undefined = weeks.find(
+        (w) => !moved.has(w.id) && toYmd(w.startDate) === toYmd(slot.start),
+      );
+      if (!displaced) break;
+      mover = displaced;
+      slot = {
+        start: new Date(slot.start.getTime() - WEEK_MS),
+        end: new Date(slot.end.getTime() - WEEK_MS),
+      };
+    }
+    await prisma.$transaction(
+      moves.map((m) =>
+        prisma.week.update({
+          where: { id: m.id },
+          data: { startDate: m.start, endDate: m.end },
+        }),
+      ),
+    );
   } else {
     // Goals carried into the ahead week are copies of ones still sitting on the
     // week being reopened. Move over only what's new or further along, so real
