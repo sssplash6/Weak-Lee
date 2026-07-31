@@ -83,27 +83,36 @@ export default async function PenaltiesPage() {
 
   const viewerIsAdmin = isAdmin(session.user.email);
 
+  // Everyone can report a colleague, so everyone gets the roster.
   const users = await prisma.user.findMany({
     orderBy: [{ name: "asc" }, { email: "asc" }],
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      department: true,
-      avatar: true,
-      penalties: {
-        orderBy: { createdAt: "desc" },
+    select: { id: true, name: true, email: true, avatar: true },
+  });
+
+  // Who owes what across the team is admin-only, so only admins fetch it.
+  const finedUsers = viewerIsAdmin
+    ? await prisma.user.findMany({
+        orderBy: [{ name: "asc" }, { email: "asc" }],
         select: {
           id: true,
-          type: true,
-          amount: true,
-          note: true,
-          createdAt: true,
-          paidAt: true,
+          name: true,
+          email: true,
+          department: true,
+          avatar: true,
+          penalties: {
+            orderBy: { createdAt: "desc" },
+            select: {
+              id: true,
+              type: true,
+              amount: true,
+              note: true,
+              createdAt: true,
+              paidAt: true,
+            },
+          },
         },
-      },
-    },
-  });
+      })
+    : [];
 
   const reasonIndexOf = (type: string) => {
     const idx = REASONS.findIndex((r) => r.type === type);
@@ -112,9 +121,10 @@ export default async function PenaltiesPage() {
   };
 
   // Split each person's fines into active (outstanding) and archived (settled),
-  // then build one row per group. The active matrix leads the page with what's
-  // still owed; the archive records what's already been paid.
-  const built = users.map((u) => {
+  // then build one row per group. The active matrix leads the admin view with
+  // what's still owed; the archive records what's already been paid. Both are
+  // empty for non-admins, who see their own fines on their dashboard instead.
+  const built = finedUsers.map((u) => {
     const av = resolveAvatar(u.avatar, u.email ?? u.id);
     const active = u.penalties.filter((p) => p.paidAt == null);
     const settled = u.penalties.filter((p) => p.paidAt != null);
@@ -192,8 +202,9 @@ export default async function PenaltiesPage() {
         <div>
           <h1 className="mt-1 text-2xl font-bold text-ink">Penalties</h1>
           <p className="mt-1 text-sm text-muted-fg">
-            The penalty policy, everyone&rsquo;s current fines, and a direct
-            line to report a colleague.
+            {viewerIsAdmin
+              ? "The penalty policy, everyone’s current fines, and a direct line to report a colleague."
+              : "The penalty policy and a direct line to report a colleague. Your own fines are on your dashboard."}
           </p>
         </div>
         <BackLink href="/dashboard" label="Dashboard" />
@@ -252,36 +263,36 @@ export default async function PenaltiesPage() {
         </p>
       </section>
 
-      <section className="mt-8">
-        <h2 className="mb-1 px-1 text-sm font-semibold text-ink">
-          Active fines
-        </h2>
-        <p className="mb-3 px-1 text-xs text-muted-fg">
-          Outstanding fines by reason — what each person still owes. Tap a
-          person to see each fine.
-          {viewerIsAdmin && (
-            <> Settle a fine once it&rsquo;s been cut from their salary.</>
+      {viewerIsAdmin && (
+        <section className="mt-8">
+          <h2 className="mb-1 px-1 text-sm font-semibold text-ink">
+            Active fines
+          </h2>
+          <p className="mb-3 px-1 text-xs text-muted-fg">
+            Outstanding fines by reason — what each person still owes. Tap a
+            person to see each fine. Settle a fine once it&rsquo;s been cut from
+            their salary.
+          </p>
+          {rows.length > 0 ? (
+            <PenaltyMatrix
+              rows={rows}
+              grandOutstanding={grandOutstanding}
+              viewerIsAdmin={viewerIsAdmin}
+            />
+          ) : (
+            <div className="rounded-xl border border-line bg-surface px-4 py-8 text-center">
+              <p className="text-sm font-semibold text-green-700">
+                No outstanding fines 🎉
+              </p>
+              <p className="mt-1 text-xs text-muted-fg">
+                Everyone&rsquo;s all settled up.
+              </p>
+            </div>
           )}
-        </p>
-        {rows.length > 0 ? (
-          <PenaltyMatrix
-            rows={rows}
-            grandOutstanding={grandOutstanding}
-            viewerIsAdmin={viewerIsAdmin}
-          />
-        ) : (
-          <div className="rounded-xl border border-line bg-surface px-4 py-8 text-center">
-            <p className="text-sm font-semibold text-green-700">
-              No outstanding fines 🎉
-            </p>
-            <p className="mt-1 text-xs text-muted-fg">
-              Everyone&rsquo;s all settled up.
-            </p>
-          </div>
-        )}
-      </section>
+        </section>
+      )}
 
-      {archiveRows.length > 0 && (
+      {viewerIsAdmin && archiveRows.length > 0 && (
         <section className="mt-8">
           <h2 className="mb-1 px-1 text-sm font-semibold text-ink">
             Archive
