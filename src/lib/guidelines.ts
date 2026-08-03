@@ -206,6 +206,41 @@ export const GUIDE_GROUPS: GuideGroup[] = [
       },
     ],
   },
+  {
+    title: "Tools we run",
+    blurb:
+      "How the bots and systems behind the programs work, and what to do when one looks broken.",
+    guides: [
+      {
+        slug: "alumni-bot",
+        title: "Freshman Alumni Bot",
+        kicker: "Internal guide · For alumni group leaders",
+        purpose:
+          "How to switch on the bot in your group, walk members through onboarding, and handle the people who fall outside the usual checks.",
+        monogram: "AB",
+        tone: "plum",
+        version: "v1.0",
+        dated: "August 2026",
+        // The cover carries no owner/approver block, just the bot's handle.
+        owner: null,
+        approvedBy: null,
+        pages: 4,
+        pdf: "freshman-alumni-bot-guide.pdf",
+        // Open to everyone: the group-leader steps are only part of it, and the
+        // rest is what any member is walked through, so nobody needs shielding
+        // from it.
+        departments: null,
+        sections: [
+          "How to Set It Up",
+          "Why Administrator Matters",
+          "What the Bot Puts in Your Group",
+          "What a Member Goes Through",
+          "If Something Looks Wrong",
+          "Commands for Department Leads",
+        ],
+      },
+    ],
+  },
 ];
 
 /** The guide everyone is measured against — shown first, on its own. */
