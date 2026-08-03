@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<!--
+  Source for private/guidelines/program-routing-tree.pdf.
+
+  Kept because the tree is data, not drawing: edit the `tree` object below and
+  both the diagram and the destinations table on page 3 follow, since the table
+  is derived from the same object. Layout is tuned for a landscape A4 sheet, so
+  changing the number of leaves may need ROW_H adjusting to keep one page.
+
+  To regenerate the PDF: open this file in Chrome, Print, Save as PDF, with
+  "Background graphics" ticked. The @page rule already sets landscape A4 and
+  zero margins, so no other print settings need changing. Save it over
+  private/guidelines/program-routing-tree.pdf and update `pages` in
+  src/lib/guidelines.ts if the page count changed.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Program Routing Tree — Freshman Academy</title>
+<style>
+  @page { size: A4 landscape; margin: 0; }
+  :root{
+    --navy:#1b2b45;
+    --ink:#26313f;
+    --dim:#6b7686;
+    --orange:#e08a2b;
+    --green:#5f9e4a;
+    --rust:#c1512e;
+    --line:#c3c6ca;
+    --paper:#ffffff;
+  }
+  *{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  html,body{margin:0;padding:0;background:#fff;
+    font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;color:var(--ink);}
+  .page{
+    width:297mm;height:210mm;position:relative;overflow:hidden;
+    page-break-after:always;background:#fff;
+  }
+  .page:last-child{page-break-after:auto;}
+
+  /* ---------- cover ---------- */
+  .cover{background:var(--navy);color:#fff;padding:22mm 24mm;}
+  .cover .wordmark{font-size:10.5px;letter-spacing:.16em;font-weight:700;color:#fff;}
+  .cover .kicker{
+    font-size:9px;letter-spacing:.15em;text-transform:uppercase;
+    color:#8fa6c4;font-weight:600;padding-bottom:7px;border-bottom:1px solid #34496b;
+  }
+  .cover .kicker-wrap{margin-top:38mm;}
+  .cover h1{font-size:40px;font-weight:800;margin:16px 0 0;letter-spacing:-.01em;}
+  .cover .subtitle{font-size:17px;font-weight:600;color:var(--orange);margin-top:7px;}
+  .cover .purpose{font-size:11.5px;line-height:1.55;color:#cfd8e5;margin-top:14px;max-width:150mm;}
+  .cover .meta{
+    position:absolute;left:24mm;right:24mm;bottom:22mm;
+    border-top:1px solid #34496b;padding-top:11px;display:flex;gap:26mm;
+  }
+  .cover .meta div span{
+    display:block;font-size:8px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--orange);font-weight:700;margin-bottom:4px;
+  }
+  .cover .meta div em{font-style:italic;font-size:11px;color:#e8edf4;}
+
+  /* ---------- inner pages ---------- */
+  .sheet{padding:12mm 14mm 10mm;display:flex;flex-direction:column;}
+  .runhead{
+    display:flex;justify-content:space-between;align-items:baseline;
+    border-bottom:1px solid var(--line);padding-bottom:5px;
+    font-size:8.5px;
+  }
+  .runhead b{font-weight:700;color:var(--ink);}
+  .runhead span{color:var(--rust);}
+  .sectionline{display:flex;align-items:center;gap:9px;margin:9px 0 3px;}
+  .stamp{
+    width:19px;height:19px;background:var(--orange);color:#fff;
+    font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;
+  }
+  .sectionline h2{font-size:14.5px;font-weight:700;margin:0;color:var(--ink);}
+  .rule{border-bottom:1.5px solid var(--orange);margin-bottom:5px;}
+  .lede{font-size:9.5px;color:var(--dim);margin:0 0 4px;}
+  .runfoot{
+    position:absolute;left:14mm;right:14mm;bottom:7mm;
+    display:flex;justify-content:space-between;
+    font-size:8px;color:var(--dim);border-top:1px solid var(--line);padding-top:4px;
+  }
+
+  /* ---------- tree ---------- */
+  #stage{position:relative;margin:2px auto 0;}
+  svg.connectors{position:absolute;top:0;left:0;overflow:visible;}
+  .node{
+    position:absolute;border-radius:9px;background:var(--paper);
+    border:1.8px solid var(--line);padding:5px 8px 5px 22px;
+    display:flex;flex-direction:column;justify-content:center;z-index:2;
+  }
+  .node .icon{
+    position:absolute;left:-11px;top:50%;transform:translateY(-50%);
+    width:22px;height:22px;border-radius:50%;background:var(--paper);
+    border:1.8px solid var(--line);display:flex;align-items:center;justify-content:center;
+  }
+  .node .icon svg{width:11px;height:11px;}
+  .node .ttl{font-weight:700;font-size:9.5px;line-height:1.2;}
+  .node .sub{font-size:7.9px;color:var(--dim);line-height:1.28;margin-top:2px;}
+  .node.root{border-color:var(--navy);}
+  .node.root .icon{border-color:var(--navy);} .node.root .icon svg{stroke:var(--navy);}
+  .node.root .ttl{color:var(--navy);font-size:10.5px;}
+  .node.t1{border-color:var(--orange);} .node.t1 .icon{border-color:var(--orange);}
+  .node.t1 .icon svg{stroke:var(--orange);} .node.t1 .ttl{color:#8a5416;font-size:10px;}
+  .node.t2{border-color:var(--green);} .node.t2 .icon{border-color:var(--green);}
+  .node.t2 .icon svg{stroke:var(--green);} .node.t2 .ttl{color:#3d6b2e;}
+  .node.t3{border-color:var(--rust);} .node.t3 .icon{border-color:var(--rust);}
+  .node.t3 .icon svg{stroke:var(--rust);} .node.t3 .ttl{color:#8a3a20;}
+  .junction{fill:var(--paper);stroke:var(--line);stroke-width:1.6px;}
+
+  .legend{display:flex;gap:16px;font-size:7.6px;color:var(--dim);margin-top:3px;}
+  .legend i{display:inline-block;width:8px;height:8px;border-radius:50%;
+    border:1.8px solid var(--line);margin-right:4px;vertical-align:-1px;}
+  .legend .l0 i{border-color:var(--navy);} .legend .l1 i{border-color:var(--orange);}
+  .legend .l2 i{border-color:var(--green);} .legend .l3 i{border-color:var(--rust);}
+
+  /* ---------- destinations table ---------- */
+  table{width:100%;border-collapse:collapse;font-size:9px;margin-top:4px;}
+  thead th{
+    background:var(--navy);color:#fff;text-align:left;font-size:8.4px;
+    font-weight:700;padding:6px 8px;
+  }
+  tbody td{padding:6px 8px;border-bottom:1px solid #e6e8ea;vertical-align:top;line-height:1.35;}
+  tbody tr:nth-child(even) td{background:#f7f8f9;}
+  tbody td.prog{font-weight:700;color:#8a3a20;white-space:nowrap;}
+  tbody td.path{color:var(--dim);font-size:8.4px;}
+  .pathstep{color:#8a5416;font-weight:600;}
+</style>
+</head>
+<body>
+
+<!-- ============ 1. COVER ============ -->
+<div class="page cover">
+  <div class="wordmark">FRESHMAN ACADEMY</div>
+  <div class="kicker-wrap">
+    <div class="kicker">Internal guide &nbsp;·&nbsp; For the sales team</div>
+    <h1>Program Routing Tree</h1>
+    <div class="subtitle">Sales intake — route by stage &amp; goals</div>
+    <p class="purpose">
+      Which program a new student inquiry belongs in, decided one question at a
+      time: how far along they already are, what they are aiming at, and how
+      close their profile sits to the ideal applicant.
+    </p>
+  </div>
+  <div class="meta">
+    <div><span>Department</span><em>Sales</em></div>
+    <div><span>Updated</span><em>3 August 2026</em></div>
+    <div><span>Routes</span><em>10 destinations</em></div>
+  </div>
+</div>
+
+<!-- ============ 2. THE TREE ============ -->
+<div class="page sheet">
+  <div class="runhead"><b>Program Routing Tree</b><span>3 August 2026 · Internal</span></div>
+  <div class="sectionline"><div class="stamp">1</div><h2>The Routing Tree</h2></div>
+  <div class="rule"></div>
+  <p class="lede">Read left to right. Each step narrows the inquiry until it lands on a program.</p>
+  <div id="stage"></div>
+  <div class="legend">
+    <span class="l0"><i></i>Intake</span>
+    <span class="l1"><i></i>Stage</span>
+    <span class="l2"><i></i>Situation</span>
+    <span class="l3"><i></i>Program</span>
+  </div>
+  <div class="runfoot"><span>Freshman Academy · Sales</span><span>Page 2 / 3</span></div>
+</div>
+
+<!-- ============ 3. DESTINATIONS ============ -->
+<div class="page sheet">
+  <div class="runhead"><b>Program Routing Tree</b><span>3 August 2026 · Internal</span></div>
+  <div class="sectionline"><div class="stamp">2</div><h2>Where Each Route Lands</h2></div>
+  <div class="rule"></div>
+  <p class="lede">The same ten destinations as the tree, listed so a program can be looked up directly.</p>
+  <table>
+    <thead>
+      <tr><th style="width:26%">Program</th><th style="width:38%">When it fits</th><th style="width:36%">Reached through</th></tr>
+    </thead>
+    <tbody id="dest"></tbody>
+  </table>
+  <div class="runfoot"><span>Freshman Academy · Sales</span><span>Page 3 / 3</span></div>
+</div>
+
+<script>
+const ICON = `<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.4"></circle><path d="M4.5 20c0-4.2 3.4-7 7.5-7s7.5 2.8 7.5 7"></path></svg>`;
+
+// Content is verbatim from the source tree — titles and sub-lines unchanged.
+const tree = {
+  tier:0, title:"New Student Inquiry", sub:"Sales intake — route by stage & goals",
+  children:[
+    { tier:1, title:"Still Building Toward Application", sub:"Not yet ready for a full application build",
+      children:[
+        { tier:2, title:"Not Yet Admissions-Eligible", sub:"Below 10th grade",
+          children:[
+            { tier:3, title:"Advanced English — Track B", sub:"On-ramp into Admissions; also fits AP-rejects" },
+            { tier:3, title:"SAT Program", sub:"Age 13–18 · IELTS 6.5+ · needs a starting roadmap" }
+          ]},
+        { tier:2, title:"College-Credit Track", sub:"9th–11th grade, strong academics",
+          children:[
+            { tier:3, title:"AP Classes", sub:"SAT done/near · targeting US or Singapore" },
+            { tier:3, title:"Advanced English — Track C", sub:"IELTS 7+ · research or humanities depth" }
+          ]}
+      ]},
+    { tier:1, title:"Ready for Full Application Build", sub:"Grade 10+ · primarily targeting the US",
+      children:[
+        { tier:2, title:"Research-Oriented / Non-US Target", sub:"Central Asian · targeting Europe, China, Australia",
+          children:[
+            { tier:3, title:"Research Program", sub:"SAT 1350+ · IELTS 7+ · CS, Physics, Humanities, Business" }
+          ]},
+        { tier:2, title:"Profile Gap Assessment", sub:"How close to the ideal applicant?",
+          children:[
+            { tier:3, title:"Admissions Program", sub:"Missing 1–2 pieces · 20h/wk · $2,050 / 3 mo" },
+            { tier:3, title:"Flexible Support", sub:"Near-ideal profile, needs targeted pieces" }
+          ]}
+      ]},
+    { tier:1, title:"Already Engaged with Freshman", sub:"Existing students & alumni",
+      children:[
+        { tier:2, title:"Post-Admissions / Near Deadline", sub:"",
+          children:[
+            { tier:3, title:"Advanced English — Track A", sub:"Post-Admissions, prepping for college rigor" },
+            { tier:3, title:"Flexible Support", sub:"Targeted help close to a deadline" }
+          ]},
+        { tier:2, title:"Ambitious but Financially Blocked", sub:"“No one around them has done this”",
+          children:[
+            { tier:3, title:"Imkon Scholars", sub:"Layers onto Admissions / Flexible Support" }
+          ]}
+      ]}
+  ]
+};
+
+// Retuned for a landscape A4 sheet rather than an endless scrolling canvas.
+const COL_X = [0, 250, 508, 770];
+const COL_W = [202, 212, 222, 242];
+const ROW_H = 57;
+const CARD_H = 45;
+const TOP_MARGIN = 6;
+
+let leafCount = 0;
+function assignLeafY(node){
+  if(!node.children || node.children.length===0){
+    node.y = TOP_MARGIN + leafCount*ROW_H + ROW_H/2;
+    leafCount++;
+  } else {
+    node.children.forEach(assignLeafY);
+    const ys = node.children.map(c=>c.y);
+    node.y = (Math.min(...ys)+Math.max(...ys))/2;
+  }
+  node.x = COL_X[node.tier];
+  node.w = COL_W[node.tier];
+}
+assignLeafY(tree);
+
+const totalHeight = TOP_MARGIN + leafCount*ROW_H + TOP_MARGIN;
+const totalWidth = COL_X[3] + COL_W[3];
+const stage = document.getElementById('stage');
+stage.style.width = totalWidth+'px';
+stage.style.height = totalHeight+'px';
+
+const svgNS = "http://www.w3.org/2000/svg";
+const svg = document.createElementNS(svgNS,"svg");
+svg.setAttribute("class","connectors");
+svg.setAttribute("width", totalWidth);
+svg.setAttribute("height", totalHeight);
+stage.appendChild(svg);
+
+function drawPath(d){
+  const p = document.createElementNS(svgNS,"path");
+  p.setAttribute("d", d);
+  p.setAttribute("fill","none");
+  p.setAttribute("stroke","#c3c6ca");
+  p.setAttribute("stroke-width","1.6");
+  svg.appendChild(p);
+}
+function drawDot(x,y){
+  const c = document.createElementNS(svgNS,"circle");
+  c.setAttribute("cx",x); c.setAttribute("cy",y); c.setAttribute("r",3.4);
+  c.setAttribute("class","junction");
+  svg.appendChild(c);
+}
+function connect(node){
+  if(!node.children) return;
+  const startX = node.x + node.w;
+  const startY = node.y;
+  const trunkX = startX + (COL_X[node.tier+1]-startX)/2;
+  const endX = Math.min(...node.children.map(c=>c.x));
+  const childYs = node.children.map(c=>c.y);
+  drawPath(`M ${startX} ${startY} H ${trunkX}`);
+  drawDot(startX, startY);
+  if(node.children.length>1){
+    drawPath(`M ${trunkX} ${Math.min(...childYs)} V ${Math.max(...childYs)}`);
+  }
+  node.children.forEach(c=>{
+    drawPath(`M ${trunkX} ${c.y} H ${endX}`);
+    drawDot(trunkX, c.y);
+    connect(c);
+  });
+}
+connect(tree);
+
+function renderNode(node){
+  const div = document.createElement('div');
+  div.className = 'node ' + (node.tier===0?'root':'t'+node.tier);
+  div.style.left = node.x+'px';
+  div.style.top = (node.y - CARD_H/2)+'px';
+  div.style.width = node.w+'px';
+  div.style.minHeight = CARD_H+'px';
+  div.innerHTML = `<div class="icon">${ICON}</div>
+    <div class="ttl">${node.title}</div>
+    ${node.sub ? `<div class="sub">${node.sub}</div>` : ``}`;
+  stage.appendChild(div);
+  if(node.children) node.children.forEach(renderNode);
+}
+renderNode(tree);
+
+// Page 3 is derived from the very same tree, so the two can never drift apart.
+const rows = [];
+(function walk(node, trail){
+  if(!node.children || node.children.length===0){
+    rows.push({ title:node.title, sub:node.sub, trail });
+    return;
+  }
+  node.children.forEach(c => walk(c, node.tier===0 ? [] : trail.concat(node.title)));
+})(tree, []);
+
+document.getElementById('dest').innerHTML = rows.map(r => `
+  <tr>
+    <td class="prog">${r.title}</td>
+    <td>${r.sub || "—"}</td>
+    <td class="path">${r.trail.map(t=>`<span class="pathstep">${t}</span>`).join(" &rsaquo; ")}</td>
+  </tr>`).join("");
+</script>
+</body>
+</html>

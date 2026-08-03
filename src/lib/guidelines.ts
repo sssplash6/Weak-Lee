@@ -207,6 +207,34 @@ export const GUIDE_GROUPS: GuideGroup[] = [
     ],
   },
   {
+    title: "Bringing students in",
+    blurb:
+      "How an inquiry becomes a student: which program fits whom, and what each one asks of them.",
+    guides: [
+      {
+        slug: "program-routing-tree",
+        title: "Program Routing Tree",
+        kicker: "Internal guide · For the sales team",
+        purpose:
+          "Which program a new student inquiry belongs in, decided one question at a time: how far along they already are, what they are aiming at, and how close their profile sits to the ideal applicant.",
+        monogram: "PRT",
+        tone: "teal",
+        // A routing diagram rather than a written guide — no version or
+        // owner/approver block on the cover, so none is claimed here.
+        version: null,
+        dated: "August 2026",
+        owner: null,
+        approvedBy: null,
+        pages: 3,
+        pdf: "program-routing-tree.pdf",
+        // Left open: it maps which program suits whom, which anyone fielding a
+        // question about the programs benefits from, not just Sales.
+        departments: null,
+        sections: ["The Routing Tree", "Where Each Route Lands"],
+      },
+    ],
+  },
+  {
     title: "Tools we run",
     blurb:
       "How the bots and systems behind the programs work, and what to do when one looks broken.",
