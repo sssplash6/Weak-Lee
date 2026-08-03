@@ -165,22 +165,34 @@ export default async function GuidelinesPage() {
         />
       </section>
 
-      {GUIDE_GROUPS.map((group) => (
-        <section key={group.title} className="mb-10">
-          <h2 className="mb-1 text-sm font-semibold text-ink">{group.title}</h2>
-          <p className="mb-3 text-xs text-muted-fg">{group.blurb}</p>
-          <div className="grid gap-4 lg:grid-cols-2">
-            {group.guides.map((g) => (
-              <GuideCard
-                key={g.slug}
-                guide={g}
-                size={sizes.get(g.slug)}
-                locked={!canReadGuide(g, me)}
-              />
-            ))}
-          </div>
-        </section>
-      ))}
+      {/* Groups sit on the same two-column grid as the cards do, so a group
+          holding a single guide takes one column and pairs up with the next
+          one-guide group instead of reserving a whole row and leaving the space
+          beside its card empty. Groups with more than one guide still span the
+          full width and lay their cards out two across. */}
+      <div className="mb-10 grid gap-x-4 gap-y-10 lg:grid-cols-2">
+        {GUIDE_GROUPS.map((group) => {
+          const wide = group.guides.length > 1;
+          return (
+            <section key={group.title} className={wide ? "lg:col-span-2" : ""}>
+              <h2 className="mb-1 text-sm font-semibold text-ink">
+                {group.title}
+              </h2>
+              <p className="mb-3 text-xs text-muted-fg">{group.blurb}</p>
+              <div className={`grid gap-4 ${wide ? "lg:grid-cols-2" : ""}`}>
+                {group.guides.map((g) => (
+                  <GuideCard
+                    key={g.slug}
+                    guide={g}
+                    size={sizes.get(g.slug)}
+                    locked={!canReadGuide(g, me)}
+                  />
+                ))}
+              </div>
+            </section>
+          );
+        })}
+      </div>
 
       <p className="text-xs text-muted-fg">
         These documents are internal to Freshman Academy — don&rsquo;t forward
