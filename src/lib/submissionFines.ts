@@ -211,7 +211,7 @@ async function releaseExemptSubmissionFines(userId?: string): Promise<void> {
         tx,
         u.id,
         "FINE",
-        `Your ${label} was removed — this account isn't expected to submit weekly goals.`,
+        `Your ${label} was removed — this account isn't fined for late weekly submissions.`,
       );
     });
   }

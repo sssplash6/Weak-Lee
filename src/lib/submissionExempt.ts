@@ -1,10 +1,18 @@
-// Accounts that aren't expected to report weekly goals. alumni@freshman.academy
-// is the shared graduates account: it can still set goals like anyone else, but
-// the Sunday 12:00 deadline doesn't apply to it, so it is never fined for a
-// missing or late submission. Add more (comma-separated) via the
-// SUBMISSION_EXEMPT_EMAILS env var.
+// Accounts that are never fined for a late or missing weekly submission. Two
+// different reasons land here, and the exemption covers fines only — nothing on
+// these accounts is hidden from the reporting stats or the admin review.
+//
+//  - alumni@freshman.academy is the shared graduates account: it can still set
+//    goals like anyone else, but the Sunday 12:00 deadline doesn't apply to it.
+//  - malika@freshman.academy reports weekly like everyone else and still counts
+//    in the reporting stats; she is simply never fined for reporting late.
+//
+// Add more (comma-separated) via the SUBMISSION_EXEMPT_EMAILS env var.
 
-const BUILT_IN_EXEMPT = ["alumni@freshman.academy"];
+const BUILT_IN_EXEMPT = [
+  "alumni@freshman.academy",
+  "malika@freshman.academy",
+];
 
 /** Every email exempt from submission fines: built-ins plus env, lowercased. */
 export function submissionExemptEmails(): string[] {
