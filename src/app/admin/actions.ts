@@ -523,14 +523,19 @@ async function recomputeMeetingPenalties(
 }
 
 /**
- * Create a goal and assign it to a specific person. Lives outside the weekly
- * goal flow (see the AssignedTask model) — a standalone task the assignee
+ * Create a goal and assign it to one or more people. Lives outside the weekly
+ * goal flow (see the AssignedTask model) — a standalone task each assignee
  * tracks. Admin-only. `scope` picks which dashboard view (week/month) surfaces
  * it. Deadline is an optional YYYY-MM-DD (stored at UTC midnight, treated as
  * date-only like goal deadlines).
+ *
+ * Each assignee gets their own row, so completing, editing, or deleting one
+ * person's copy leaves everybody else's alone. The batch is written in a single
+ * transaction: it lands for everyone or for nobody, so a failure partway can't
+ * assign half the team a goal the rest never hear about.
  */
 export async function assignTask(
-  userId: string,
+  userIds: string[],
   title: string,
   deadline?: string | null,
   note?: string,
@@ -543,8 +548,15 @@ export async function assignTask(
   const cleanTitle = title.trim().slice(0, 300);
   if (!cleanTitle) throw new Error("A title is required.");
 
-  const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user) throw new Error("User not found");
+  // Selecting "Everyone" and a name individually must not assign twice.
+  const ids = [...new Set(userIds.filter(Boolean))];
+  if (ids.length === 0) throw new Error("Pick at least one person.");
+
+  const found = await prisma.user.findMany({
+    where: { id: { in: ids } },
+    select: { id: true },
+  });
+  if (found.length !== ids.length) throw new Error("User not found");
 
   let due: Date | null = null;
   if (deadline) {
@@ -560,22 +572,26 @@ export async function assignTask(
     throw new Error("Invalid scope");
   }
 
-  await prisma.assignedTask.create({
-    data: {
-      userId,
-      assignedById: session!.user.id,
-      title: cleanTitle,
-      note: note?.trim().slice(0, 500) || null,
-      scope,
-      deadline: due,
-    },
+  const cleanNote = note?.trim().slice(0, 500) || null;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.assignedTask.createMany({
+      data: ids.map((userId) => ({
+        userId,
+        assignedById: session!.user.id,
+        title: cleanTitle,
+        note: cleanNote,
+        scope,
+        deadline: due,
+      })),
+    });
+    await notify(
+      tx,
+      ids,
+      "TASK_ASSIGNED",
+      `You were assigned a ${scope === "MONTHLY" ? "monthly" : "weekly"} goal: “${cleanTitle}”${due ? ` — due ${formatYmd(toYmd(due))}` : ""}.`,
+    );
   });
-  await notify(
-    prisma,
-    userId,
-    "TASK_ASSIGNED",
-    `You were assigned a ${scope === "MONTHLY" ? "monthly" : "weekly"} goal: “${cleanTitle}”${due ? ` — due ${formatYmd(toYmd(due))}` : ""}.`,
-  );
   revalidatePath("/admin");
   revalidatePath("/dashboard");
 }

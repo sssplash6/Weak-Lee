@@ -19,7 +19,7 @@ export function AssignGoalButton({
   people: { id: string; name: string }[];
 }) {
   const [open, setOpen] = useState(false);
-  const [userId, setUserId] = useState(people[0]?.id ?? "");
+  const [selected, setSelected] = useState<string[]>([]);
   const [scope, setScope] = useState<Scope>("WEEKLY");
   const [title, setTitle] = useState("");
   const [deadline, setDeadline] = useState("");
@@ -28,7 +28,22 @@ export function AssignGoalButton({
   const [assigned, setAssigned] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  const canSubmit = userId !== "" && title.trim().length > 0;
+  const everyone = people.length > 0 && selected.length === people.length;
+  const canSubmit = selected.length > 0 && title.trim().length > 0;
+
+  function togglePerson(id: string) {
+    setSelected((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  }
+
+  // One control for the whole team: selects everybody, or clears the lot when
+  // they're already all on.
+  function toggleEveryone() {
+    setSelected((prev) =>
+      prev.length === people.length ? [] : people.map((p) => p.id),
+    );
+  }
 
   function close() {
     setOpen(false);
@@ -52,8 +67,8 @@ export function AssignGoalButton({
   }, [open, isPending]);
 
   function submit() {
-    if (!userId) {
-      setError("Pick a person.");
+    if (selected.length === 0) {
+      setError("Pick at least one person.");
       return;
     }
     if (title.trim().length === 0) {
@@ -63,9 +78,10 @@ export function AssignGoalButton({
     setError(null);
     startTransition(async () => {
       try {
-        await assignTask(userId, title.trim(), deadline || null, note, scope);
-        const who = people.find((p) => p.id === userId)?.name ?? "them";
-        setAssigned(`Assigned to ${who}.`);
+        await assignTask(selected, title.trim(), deadline || null, note, scope);
+        setAssigned(`Assigned to ${describe(selected, people)}.`);
+        // The selection survives, so a second goal can go to the same people
+        // without picking them all again.
         setTitle("");
         setDeadline("");
         setNote("");
@@ -108,23 +124,60 @@ export function AssignGoalButton({
       >
         <h2 className="text-base font-bold text-ink">Assign a goal</h2>
         <p className="mt-1 text-sm text-muted-fg">
-          Hand a goal to a teammate. It appears in their{" "}
-          {scope === "MONTHLY" ? "monthly" : "weekly"} view, and you can track it
-          under your fines.
+          {`Hand a goal to one or more teammates. It appears in their ${
+            scope === "MONTHLY" ? "monthly" : "weekly"
+          } view, and you can track it under your fines.`}
         </p>
 
         <div className="mt-4 flex flex-col gap-2.5">
-          <select
-            value={userId}
-            onChange={(e) => setUserId(e.target.value)}
-            className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink focus:border-brand focus:outline-none"
-          >
-            {people.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
+          <div>
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-xs font-semibold text-ink">Assign to</span>
+              <span className="text-xs text-muted-fg">
+                {selected.length === 0
+                  ? "nobody yet"
+                  : `${selected.length} of ${people.length} selected`}
+              </span>
+            </div>
+            {/* Chips rather than a multi-select: the whole team is visible at a
+                glance, and picking several needs no modifier keys. Capped in
+                height so a growing team scrolls instead of pushing the goal
+                field off the modal. */}
+            <div className="mt-1.5 flex max-h-32 flex-wrap gap-1.5 overflow-y-auto">
+              {people.length > 1 && (
+                <button
+                  type="button"
+                  onClick={toggleEveryone}
+                  aria-pressed={everyone}
+                  className={`rounded-full border px-2.5 py-1 text-xs font-semibold transition ${
+                    everyone
+                      ? "border-brand bg-brand text-white"
+                      : "border-line text-muted-fg hover:text-ink"
+                  }`}
+                >
+                  Everyone
+                </button>
+              )}
+              {people.map((p) => {
+                const on = selected.includes(p.id);
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => togglePerson(p.id)}
+                    aria-pressed={on}
+                    className={`rounded-full border px-2.5 py-1 text-xs font-medium transition ${
+                      on
+                        ? "border-brand bg-brand text-white"
+                        : "border-line text-muted-fg hover:text-ink"
+                    }`}
+                  >
+                    {p.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
           <div className="grid grid-cols-2 rounded-lg border border-line bg-canvas p-0.5 text-xs font-semibold">
             {(
@@ -206,6 +259,21 @@ export function AssignGoalButton({
         )}
     </>
   );
+}
+
+// Who the batch went to, for the confirmation line: the name when it's one
+// person, otherwise a count — and "everyone" when the whole team is on.
+function describe(
+  selected: string[],
+  people: { id: string; name: string }[],
+): string {
+  if (selected.length === 1) {
+    return people.find((p) => p.id === selected[0])?.name ?? "them";
+  }
+  if (selected.length === people.length) {
+    return `everyone (${selected.length} people)`;
+  }
+  return `${selected.length} people`;
 }
 
 function PlusIcon({ className }: { className?: string }) {
