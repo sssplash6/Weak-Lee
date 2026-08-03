@@ -7,6 +7,7 @@ import { isAdmin } from "@/lib/admin";
 import { getWeekBounds } from "@/lib/weeks";
 import { goalPercent } from "@/lib/progress";
 import { currentMeetingSlot } from "@/lib/meetings";
+import { currentSubmissionCycle } from "@/lib/lateness";
 import {
   formatMoney,
   MAX_PENALTY,
@@ -234,7 +235,75 @@ export async function deletePenalty(penaltyId: string) {
   if (!isAdmin(session?.user?.email)) {
     throw new Error("Not authorized");
   }
-  await prisma.penalty.delete({ where: { id: penaltyId } });
+  const penalty = await prisma.penalty.findUnique({
+    where: { id: penaltyId },
+    select: {
+      id: true,
+      userId: true,
+      type: true,
+      amount: true,
+      meetingId: true,
+      createdAt: true,
+    },
+  });
+  if (!penalty) return; // already gone — nothing to undo
+
+  // Late-submission and meeting fines aren't stored decisions, they're derived:
+  // one from whether the week was reported on time, the other from the
+  // attendance history. Deleting the row on its own achieved nothing — the next
+  // reconcile re-derived it and raised the fine again, so the button looked
+  // broken. Record the waiver alongside the delete and both reconcilers leave it
+  // alone from then on.
+  const waiver =
+    penalty.type === "LATE_SUBMISSION"
+      ? {
+          // The cycle this fine belongs to: the Sunday-12:00 deadline that had
+          // most recently passed when it was raised — the same key the sweep
+          // groups a cycle's fines by.
+          cycleDeadline: currentSubmissionCycle(penalty.createdAt)
+            .submissionDeadline,
+          meetingId: null,
+        }
+      : (penalty.type === "MEETING_SKIPPED" || penalty.type === "MEETING_LATE") &&
+          penalty.meetingId
+        ? { cycleDeadline: null, meetingId: penalty.meetingId }
+        : null;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.penalty.delete({ where: { id: penalty.id } });
+    if (waiver) {
+      await tx.fineWaiver.upsert({
+        where: waiver.meetingId
+          ? {
+              userId_meetingId: {
+                userId: penalty.userId,
+                meetingId: waiver.meetingId,
+              },
+            }
+          : {
+              userId_cycleDeadline: {
+                userId: penalty.userId,
+                cycleDeadline: waiver.cycleDeadline!,
+              },
+            },
+        create: {
+          userId: penalty.userId,
+          cycleDeadline: waiver.cycleDeadline,
+          meetingId: waiver.meetingId,
+          waivedById: session!.user.id,
+        },
+        update: {},
+      });
+    }
+    await notify(
+      tx,
+      penalty.userId,
+      "FINE",
+      `Your ${formatMoney(penalty.amount)} fine was cancelled.`,
+    );
+  });
+
+  revalidatePath("/penalties");
   revalidatePath("/admin");
   revalidatePath("/dashboard");
 }
@@ -458,6 +527,18 @@ async function recomputeMeetingPenalties(
   });
   const byMeeting = new Map(existing.map((p) => [p.meetingId, p]));
 
+  // Meetings whose fine an admin cancelled for this person. The skip itself is
+  // left in the history and still counts toward the consecutive-skip streak
+  // below — what was forgiven is the money, not the fact.
+  const waivedMeetings = new Set(
+    (
+      await tx.fineWaiver.findMany({
+        where: { userId, meetingId: { not: null } },
+        select: { meetingId: true },
+      })
+    ).map((w) => w.meetingId),
+  );
+
   let streak = 0;
   for (const a of attendances) {
     let desired: { type: "MEETING_SKIPPED" | "MEETING_LATE"; amount: number } | null =
@@ -471,6 +552,11 @@ async function recomputeMeetingPenalties(
     } else {
       streak = 0;
     }
+
+    // A waived meeting is priced as if it warranted nothing: any fine still on
+    // it stays in `byMeeting` and is swept up as stale below, and none is
+    // raised again. The streak arithmetic above has already run.
+    if (waivedMeetings.has(a.meetingId)) desired = null;
 
     if (!desired) continue;
 

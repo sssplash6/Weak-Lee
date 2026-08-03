@@ -84,10 +84,26 @@ export async function reconcileSubmissionFines(opts?: {
     },
   });
 
+  // Cycles an admin has already forgiven for someone (they removed the fine on
+  // the admin page). Without this the sweep would re-derive the fine from the
+  // unsubmitted week on the very next page load and undo the decision.
+  const waived = new Set(
+    (
+      await prisma.fineWaiver.findMany({
+        where: {
+          cycleDeadline: submissionDeadline,
+          ...(opts?.userId ? { userId: opts.userId } : {}),
+        },
+        select: { userId: true },
+      })
+    ).map((w) => w.userId),
+  );
+
   for (const u of users) {
     // Accounts not expected to report weekly (e.g. alumni) are never fined for
     // it — releaseExemptSubmissionFines above has already cleaned up after them.
     if (isSubmissionExempt(u.email)) continue;
+    if (waived.has(u.id)) continue;
 
     // Count as submitted if ANY current-cycle week is, and tier by the earliest
     // submission — so a stray unsubmitted duplicate can't wrongly flag someone

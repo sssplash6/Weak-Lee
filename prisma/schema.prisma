@@ -50,6 +50,8 @@ model User {
   penalties        Penalty[] @relation("PenaltiesReceived")
   penaltiesIssued  Penalty[] @relation("PenaltiesIssued")
   penaltiesSettled Penalty[] @relation("PenaltiesSettled")
+  fineWaivers        FineWaiver[] @relation("FineWaiversReceived")
+  fineWaiversGranted FineWaiver[] @relation("FineWaiversIssued")
   bonuses         Bonus[]   @relation("BonusesReceived")
   bonusesIssued   Bonus[]   @relation("BonusesIssued")
   assignedTasks   AssignedTask[] @relation("AssignedReceived")
@@ -223,6 +225,7 @@ model Meeting {
 
   attendances Attendance[]
   penalties   Penalty[]
+  fineWaivers FineWaiver[]
 }
 
 // Whether a person attended a meeting. There's no automatic arrival detection —
@@ -248,6 +251,36 @@ model Attendance {
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([meetingId, userId])
+  @@index([userId])
+}
+
+// A fine an admin deliberately cancelled, for the two kinds the app derives
+// rather than stores: late submissions (recomputed from whether the week was
+// reported on time) and meeting attendance (recomputed from the attendance
+// history). Deleting those Penalty rows alone never held — the next reconcile
+// re-derived them from the source and raised the fine again — so a waiver
+// records the decision the source can't.
+//
+// Exactly one of the two keys is set: `cycleDeadline` is the Sunday-12:00
+// instant identifying a submission cycle (see lib/lateness weekSubmissionDeadline),
+// `meetingId` names a meeting. Manual (OTHER) fines need none of this: nothing
+// re-derives them, so deleting one is already final.
+model FineWaiver {
+  id            String    @id @default(cuid())
+  userId        String
+  cycleDeadline DateTime?
+  meetingId     String?
+  waivedById    String?
+  createdAt     DateTime  @default(now())
+
+  user     User     @relation("FineWaiversReceived", fields: [userId], references: [id], onDelete: Cascade)
+  waivedBy User?    @relation("FineWaiversIssued", fields: [waivedById], references: [id], onDelete: SetNull)
+  meeting  Meeting? @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  // One waiver per person per cycle, and per person per meeting. Postgres treats
+  // NULLs as distinct, so the unused key never collides across rows.
+  @@unique([userId, cycleDeadline])
+  @@unique([userId, meetingId])
   @@index([userId])
 }
 
