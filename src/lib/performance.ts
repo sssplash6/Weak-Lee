@@ -56,6 +56,7 @@ export type PerformanceSource = {
   penalties: {
     type: PenaltyType;
     amount: number;
+    paidAmount: number;
     weekId: string | null;
     createdAt: Date;
     paidAt: Date | null;
@@ -547,12 +548,12 @@ function computeOne(
       bonusCount: bonuses.length,
       fineTotal,
       fineCount: penalties.length,
+      // What's still owed and what's been settled — a part-paid fine
+      // contributes to both, split at whatever has actually been deducted.
       outstanding: penalties
         .filter((p) => p.paidAt == null)
-        .reduce((s, p) => s + p.amount, 0),
-      paid: penalties
-        .filter((p) => p.paidAt != null)
-        .reduce((s, p) => s + p.amount, 0),
+        .reduce((s, p) => s + (p.amount - p.paidAmount), 0),
+      paid: penalties.reduce((s, p) => s + p.paidAmount, 0),
       net: bonusTotal - fineTotal,
       byType,
     },

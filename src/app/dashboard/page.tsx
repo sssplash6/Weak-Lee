@@ -169,6 +169,7 @@ export default async function DashboardPage({
           id: true,
           type: true,
           amount: true,
+          paidAmount: true,
           note: true,
           createdAt: true,
           paidAt: true,
@@ -243,18 +244,20 @@ export default async function DashboardPage({
       }),
     ]);
 
-  // The user's own fines. Only *outstanding* (unpaid) fines drive the money
-  // block — once a fine is settled (cut from salary) it drops out, so the
-  // figure reflects what they actually still owe. Settled fines are summed
-  // separately as a "paid to date" note. This week's outstanding fines are
-  // broken out front-and-centre, on both views.
+  // The user's own fines. Only what's *still owed* drives the money block —
+  // a fine drops out once it's fully settled (cut from salary), and one that's
+  // been part-paid counts for the remainder only, so the figure is always what
+  // they'd actually pay today. Everything settled to date, whole fines and part
+  // payments alike, is summed separately as a quiet "paid" note. This week's
+  // outstanding fines are broken out front-and-centre, on both views.
   // A fine's "date" is the meeting it relates to (for skips) or when it was
   // recorded (late submissions / manual fines).
   const activePenalties = penalties.filter((p) => p.paidAt == null);
-  const outstandingTotal = activePenalties.reduce((s, p) => s + p.amount, 0);
-  const paidTotal = penalties
-    .filter((p) => p.paidAt != null)
-    .reduce((s, p) => s + p.amount, 0);
+  const outstandingTotal = activePenalties.reduce(
+    (s, p) => s + (p.amount - p.paidAmount),
+    0,
+  );
+  const paidTotal = penalties.reduce((s, p) => s + p.paidAmount, 0);
   // "This week" for the fines breakdown: the viewed period's own bounds on the
   // week view; the current calendar week on the month view (fines aren't
   // month-scoped, so the week split must stay literal there).
@@ -268,7 +271,11 @@ export default async function DashboardPage({
   const toRow = (p: (typeof penalties)[number]) => ({
     id: p.id,
     label: PENALTY_LABEL[p.type],
-    amount: p.amount,
+    // What's left on it, with the original amount alongside so a part payment
+    // is visible rather than looking like the fine was quietly reduced.
+    amount: p.amount - p.paidAmount,
+    fullAmount: p.amount,
+    paidAmount: p.paidAmount,
     note: p.note,
     dateLabel: formatDateTimeTz(penaltyDate(p)),
   });

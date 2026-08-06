@@ -11,7 +11,8 @@ import { formatMoney } from "@/lib/penalties";
 import { BackLink } from "@/app/_components/BackLink";
 import { ReportForm } from "./_components/ReportForm";
 import { PenaltyMatrix } from "./_components/PenaltyMatrix";
-import { FineArchive } from "./_components/FineArchive";
+import { FineArchive, type ReceiptLine } from "./_components/FineArchive";
+import { LedgerBar } from "./_components/LedgerBar";
 import { REASONS } from "./reasons";
 
 // The written penalty policy, digitized from the company sheet. Amounts here
@@ -100,14 +101,26 @@ export default async function PenaltiesPage() {
           department: true,
           avatar: true,
           penalties: {
-            orderBy: { createdAt: "desc" },
+            // Oldest first — the order a settlement is applied in, so every
+            // list built from this reads in the same order money moves.
+            orderBy: [{ createdAt: "asc" }, { id: "asc" }],
             select: {
               id: true,
               type: true,
               amount: true,
+              paidAmount: true,
               note: true,
               createdAt: true,
               paidAt: true,
+              payments: {
+                orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+                select: {
+                  id: true,
+                  amount: true,
+                  batchId: true,
+                  createdAt: true,
+                },
+              },
             },
           },
         },
@@ -120,50 +133,85 @@ export default async function PenaltiesPage() {
     return idx === -1 ? REASONS.length - 1 : idx;
   };
 
-  // Split each person's fines into active (outstanding) and archived (settled),
-  // then build one row per group. The active matrix leads the admin view with
-  // what's still owed; the archive records what's already been paid. Both are
-  // empty for non-admins, who see their own fines on their dashboard instead.
+  // Build both sides of each person's ledger. Settling isn't all-or-nothing per
+  // fine any more, so "active" and "settled" aren't two piles of fines: a fine
+  // is open until its last dollar is paid, and the settled side is the payment
+  // history — receipts, each spread over the fines it went to. Both are empty
+  // for non-admins, who see their own fines on their dashboard instead.
   const built = finedUsers.map((u) => {
     const av = resolveAvatar(u.avatar, u.email ?? u.id);
-    const active = u.penalties.filter((p) => p.paidAt == null);
-    const settled = u.penalties.filter((p) => p.paidAt != null);
+    const open = u.penalties.filter((p) => p.paidAt == null);
+    const owedOn = (p: { amount: number; paidAmount: number }) =>
+      p.amount - p.paidAmount;
 
     const byType: Record<string, number> = {};
-    for (const p of active) byType[p.type] = (byType[p.type] ?? 0) + p.amount;
-    const outstanding = active.reduce((s, p) => s + p.amount, 0);
-    const paid = settled.reduce((s, p) => s + p.amount, 0);
+    for (const p of open) byType[p.type] = (byType[p.type] ?? 0) + owedOn(p);
+    const outstanding = open.reduce((s, p) => s + owedOn(p), 0);
+    // Money already sitting against fines that are still open — the part
+    // payments. Distinct from `paid`, which counts everything ever settled.
+    const partPaid = open.reduce((s, p) => s + p.paidAmount, 0);
+    const paid = u.penalties.reduce((s, p) => s + p.paidAmount, 0);
 
-    const person = {
+    // Group every payment into the settlement it was part of. One settle action
+    // writes one batch, however many fines it touched, so a batch is a receipt.
+    const byBatch = new Map<
+      string,
+      { batchId: string; at: number; dateLabel: string; amount: number; lines: ReceiptLine[] }
+    >();
+    for (const p of u.penalties) {
+      // A fine is closed by its final payment — that's the one that reads
+      // "cleared" rather than "$20 of $60".
+      const closing = p.paidAt != null ? p.payments.at(-1)?.id : undefined;
+      for (const pay of p.payments) {
+        const receipt = byBatch.get(pay.batchId) ?? {
+          batchId: pay.batchId,
+          at: pay.createdAt.getTime(),
+          dateLabel: formatDateTimeTz(pay.createdAt),
+          amount: 0,
+          lines: [] as ReceiptLine[],
+        };
+        receipt.amount += pay.amount;
+        receipt.lines.push({
+          id: pay.id,
+          reasonIndex: reasonIndexOf(p.type),
+          note: p.note,
+          amount: pay.amount,
+          fineAmount: p.amount,
+          cleared: pay.id === closing,
+        });
+        byBatch.set(pay.batchId, receipt);
+      }
+    }
+    // Newest settlement first; `at` is only the sort key, so it's dropped here.
+    const receipts = [...byBatch.values()]
+      .sort((a, b) => b.at - a.at)
+      .map((r) => ({
+        batchId: r.batchId,
+        dateLabel: r.dateLabel,
+        amount: r.amount,
+        lines: r.lines,
+      }));
+
+    return {
       id: u.id,
       name: u.name ?? u.email ?? "—",
       department: u.department,
       emoji: av.emoji,
       bg: av.bg,
-    };
-
-    return {
-      ...person,
       outstanding,
+      partPaid,
       paid,
+      clearedCount: u.penalties.filter((p) => p.paidAt != null).length,
       cells: REASONS.map((r) => byType[r.type] ?? 0),
-      fines: active.map((p) => ({
+      fines: open.map((p) => ({
         id: p.id,
         reasonIndex: reasonIndexOf(p.type),
         note: p.note,
         dateLabel: formatDateTimeTz(p.createdAt),
         amount: p.amount,
+        paidAmount: p.paidAmount,
       })),
-      // Archived fines, most recently settled first.
-      archived: settled
-        .map((p) => ({
-          id: p.id,
-          reasonIndex: reasonIndexOf(p.type),
-          note: p.note,
-          paidLabel: formatDateTimeTz(p.paidAt!),
-          amount: p.amount,
-        }))
-        .sort((a, b) => (a.paidLabel < b.paidLabel ? 1 : -1)),
+      receipts,
     };
   });
 
@@ -172,9 +220,9 @@ export default async function PenaltiesPage() {
     .filter((r) => r.outstanding > 0)
     .sort((a, b) => b.outstanding - a.outstanding || a.name.localeCompare(b.name));
 
-  // Archive: only people with at least one settled fine, most paid first.
+  // Settled: everyone who has paid something, most paid first.
   const archiveRows = built
-    .filter((r) => r.archived.length > 0)
+    .filter((r) => r.receipts.length > 0)
     .map((r) => ({
       id: r.id,
       name: r.name,
@@ -182,7 +230,9 @@ export default async function PenaltiesPage() {
       emoji: r.emoji,
       bg: r.bg,
       paid: r.paid,
-      fines: r.archived,
+      clearedCount: r.clearedCount,
+      stillOwed: r.outstanding,
+      receipts: r.receipts,
     }))
     .sort((a, b) => b.paid - a.paid || a.name.localeCompare(b.name));
 
@@ -263,6 +313,15 @@ export default async function PenaltiesPage() {
         </p>
       </section>
 
+      {viewerIsAdmin && (grandOutstanding > 0 || grandPaid > 0) && (
+        <section className="mt-8">
+          <h2 className="mb-3 px-1 text-sm font-semibold text-ink">
+            Where the team stands
+          </h2>
+          <LedgerBar settled={grandPaid} outstanding={grandOutstanding} />
+        </section>
+      )}
+
       {viewerIsAdmin && (
         <section className="mt-8">
           <h2 className="mb-1 px-1 text-sm font-semibold text-ink">
@@ -270,8 +329,9 @@ export default async function PenaltiesPage() {
           </h2>
           <p className="mb-3 px-1 text-xs text-muted-fg">
             Outstanding fines by reason — what each person still owes. Tap a
-            person to see each fine. Settle a fine once it&rsquo;s been cut from
-            their salary.
+            person to see each fine. Settle any amount once it&rsquo;s been cut
+            from their salary: it clears their oldest fines first, and whatever
+            it doesn&rsquo;t cover stays here as a part-paid balance.
           </p>
           {rows.length > 0 ? (
             <PenaltyMatrix
@@ -295,13 +355,12 @@ export default async function PenaltiesPage() {
       {viewerIsAdmin && archiveRows.length > 0 && (
         <section className="mt-8">
           <h2 className="mb-1 px-1 text-sm font-semibold text-ink">
-            Archive
+            Settled
           </h2>
           <p className="mb-3 px-1 text-xs text-muted-fg">
-            Settled fines — cut from salaries and paid off.
-            {grandPaid > 0 && (
-              <> {formatMoney(grandPaid)} paid to date.</>
-            )}
+            Every settlement recorded — cut from a salary and put against their
+            fines. {formatMoney(grandPaid)} paid to date. Tap a person for the
+            receipts; undo one and the fines it paid go back to outstanding.
           </p>
           <FineArchive rows={archiveRows} viewerIsAdmin={viewerIsAdmin} />
         </section>

@@ -138,9 +138,9 @@ export default async function AdminPage({
             goals: goalSelect,
           },
         },
-        // Only outstanding (unpaid) fines — the per-user total and list here
-        // mean "what they still owe". Settled fines live in the /penalties
-        // archive.
+        // Only fines that are still open — the per-user total and list here
+        // mean "what they still owe", so a part-paid fine counts for its
+        // remainder. Settled fines live in the /penalties ledger.
         penalties: {
           where: { paidAt: null },
           orderBy: { createdAt: "desc" },
@@ -148,6 +148,7 @@ export default async function AdminPage({
             id: true,
             type: true,
             amount: true,
+            paidAmount: true,
             note: true,
             createdAt: true,
           },
@@ -239,11 +240,11 @@ export default async function AdminPage({
         user: { select: { name: true, email: true } },
       },
     }),
-    // Every outstanding penalty, uncapped. Feeds the "Outstanding" stat, which
+    // Every still-open penalty, uncapped. Feeds the "Outstanding" stat, which
     // must not miss entries the capped recent-penalties list drops.
     prisma.penalty.findMany({
       where: { paidAt: null },
-      select: { amount: true },
+      select: { amount: true, paidAmount: true },
     }),
     // Full per-user history for the Performance tab — every week and month with
     // goals, plus attendance, fines, bonuses, assigned tasks and the daily focus
@@ -304,6 +305,7 @@ export default async function AdminPage({
               select: {
                 type: true,
                 amount: true,
+                paidAmount: true,
                 weekId: true,
                 createdAt: true,
                 paidAt: true,
@@ -362,11 +364,18 @@ export default async function AdminPage({
       percent: weekPercent(fields.goals),
       goalCount: fields.goals.length,
       completedCount: fields.goals.filter(isGoalComplete).length,
-      penaltyTotal: u.penalties.reduce((s, p) => s + p.amount, 0),
+      penaltyTotal: u.penalties.reduce(
+        (s, p) => s + (p.amount - p.paidAmount),
+        0,
+      ),
       penalties: u.penalties.map((p) => ({
         id: p.id,
         label: PENALTY_LABEL[p.type],
-        amount: p.amount,
+        amount: p.amount - p.paidAmount,
+        // Part-paid fines are flagged so the row doesn't look like the fine
+        // itself was cheaper than it was.
+        partPaid: p.paidAmount > 0 ? p.paidAmount : null,
+        fullAmount: p.amount,
         note: p.note,
         dateLabel: formatDateTimeTz(p.createdAt),
       })),
@@ -518,9 +527,13 @@ export default async function AdminPage({
     };
   });
 
-  // Outstanding fines across everyone — settled fines are excluded (archived
-  // on /penalties), so this tracks what the team still owes.
-  const finesTotal = allPenalties.reduce((s, p) => s + p.amount, 0);
+  // Outstanding fines across everyone — settled fines are excluded and
+  // part-paid ones count for their remainder, so this tracks what the team
+  // still owes. The paid side lives on /penalties.
+  const finesTotal = allPenalties.reduce(
+    (s, p) => s + (p.amount - p.paidAmount),
+    0,
+  );
 
   // Per-tab aggregate stats. "Active" = has at least one goal in that period.
   function statsOf(list: AdminUser[]) {

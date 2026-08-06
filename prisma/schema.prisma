@@ -50,6 +50,7 @@ model User {
   penalties        Penalty[] @relation("PenaltiesReceived")
   penaltiesIssued  Penalty[] @relation("PenaltiesIssued")
   penaltiesSettled Penalty[] @relation("PenaltiesSettled")
+  finePaymentsRecorded FinePayment[] @relation("FinePaymentsRecorded")
   fineWaivers        FineWaiver[] @relation("FineWaiversReceived")
   fineWaiversGranted FineWaiver[] @relation("FineWaiversIssued")
   bonuses         Bonus[]   @relation("BonusesReceived")
@@ -118,9 +119,17 @@ enum PenaltyType {
 // it relates to so it can surface in the right view and be recomputed.
 //
 // Settlement lifecycle: a fine is "active" (outstanding) while `paidAt` is null.
-// When an admin records that it was cut from the person's salary, `paidAt` and
-// `settledById` are set — the fine then leaves the active ledger and lives in
-// the archive. Outstanding for a user = sum of amounts where paidAt is null.
+// Settling is partial-friendly — an admin can record any amount cut from a
+// person's salary, and it's applied to their fines oldest-first. `paidAmount`
+// tracks how much of this fine that has covered so far:
+//
+//   paidAmount = 0            → untouched, owes `amount`
+//   0 < paidAmount < amount   → part-paid, still active, owes the difference
+//   paidAmount = amount       → fully settled; `paidAt`/`settledById` set and
+//                               the fine moves to the archive
+//
+// So outstanding for a user = sum(amount - paidAmount) where paidAt is null,
+// and every individual movement of money is recorded as a FinePayment.
 model Penalty {
   id         String      @id @default(cuid())
   userId     String
@@ -131,20 +140,44 @@ model Penalty {
   meetingId  String?
   issuedById String?
   createdAt  DateTime    @default(now())
-  // Set when the fine is settled (deducted from salary and marked paid). Null
-  // means still outstanding. `settledBy` is the admin who recorded it.
+  // Set when the fine is settled in full (the last of it deducted from salary).
+  // Null means still outstanding. `settledBy` is the admin who closed it out.
   paidAt      DateTime?
   settledById String?
+  // Money recorded against this fine so far, 0 ≤ paidAmount ≤ amount.
+  paidAmount  Int       @default(0)
 
   user     User     @relation("PenaltiesReceived", fields: [userId], references: [id], onDelete: Cascade)
   issuedBy User?    @relation("PenaltiesIssued", fields: [issuedById], references: [id], onDelete: SetNull)
   settledBy User?   @relation("PenaltiesSettled", fields: [settledById], references: [id], onDelete: SetNull)
   week     Week?    @relation(fields: [weekId], references: [id], onDelete: SetNull)
   meeting  Meeting? @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  payments FinePayment[]
 
   @@index([userId])
   @@index([weekId])
   @@index([meetingId])
+}
+
+// One movement of money against one fine — "$50 of this $80 was cut from their
+// salary on 6 Aug". Settling a custom amount spreads it over a person's open
+// fines oldest-first, so one settlement can write several of these; they share
+// a `batchId` and read back as a single receipt. Undoing a receipt deletes its
+// rows and gives the fines their balance back, which is why the ledger is kept
+// here rather than only as a running total on Penalty.
+model FinePayment {
+  id           String   @id @default(cuid())
+  penaltyId    String
+  amount       Int
+  batchId      String
+  recordedById String?
+  createdAt    DateTime @default(now())
+
+  penalty    Penalty @relation(fields: [penaltyId], references: [id], onDelete: Cascade)
+  recordedBy User?   @relation("FinePaymentsRecorded", fields: [recordedById], references: [id], onDelete: SetNull)
+
+  @@index([penaltyId])
+  @@index([batchId])
 }
 
 // A bonus awarded to a user — the positive counterpart of a Penalty, tracked

@@ -3,7 +3,11 @@ import { formatMoney } from "@/lib/penalties";
 type WeekPenalty = {
   id: string;
   label: string;
+  /** What's still owed on the fine — the figure that counts. */
   amount: number;
+  /** The fine as issued, and how much of it has been settled so far. */
+  fullAmount: number;
+  paidAmount: number;
   note: string | null;
   dateLabel: string;
 };
@@ -86,11 +90,22 @@ function PenaltyGroup({
 }
 
 /**
- * One fine: reason + amount on the top line (amount right-aligned, stays put
- * when the reason wraps), with the note and date on a quieter line below.
+ * One fine: reason + what's left on it on the top line (amount right-aligned,
+ * stays put when the reason wraps), with the note and date on a quieter line
+ * below. A part-paid fine shows how much of it has already come out of a
+ * salary, so the smaller figure above reads as progress rather than a mistake.
  */
 function PenaltyLine({ penalty: p }: { penalty: WeekPenalty }) {
-  const sub = [p.note, p.dateLabel].filter(Boolean).join(" · ");
+  const partPaid = p.paidAmount > 0;
+  const sub = [
+    p.note,
+    p.dateLabel,
+    partPaid
+      ? `${formatMoney(p.paidAmount)} of ${formatMoney(p.fullAmount)} paid`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
   return (
     <li className="border-t border-red-200/70 py-1.5 first:border-t-0">
       <div className="flex items-baseline justify-between gap-2">
@@ -99,6 +114,9 @@ function PenaltyLine({ penalty: p }: { penalty: WeekPenalty }) {
         </span>
         <span className="shrink-0 text-xs font-bold tabular-nums text-red-700">
           {formatMoney(p.amount)}
+          {partPaid && (
+            <span className="font-normal text-red-700/50"> left</span>
+          )}
         </span>
       </div>
       {sub && <p className="mt-0.5 text-[11px] text-red-700/55">{sub}</p>}

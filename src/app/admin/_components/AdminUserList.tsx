@@ -40,7 +40,11 @@ export type AdminTask = {
 export type AdminPenalty = {
   id: string;
   label: string;
+  /** What's still owed on it. */
   amount: number;
+  /** Already settled against it, or null when nothing has been paid yet. */
+  partPaid: number | null;
+  fullAmount: number;
   note: string | null;
   dateLabel: string;
 };
@@ -526,6 +530,11 @@ function PenaltyRow({ penalty: p }: { penalty: AdminPenalty }) {
         {p.note ? <span className="text-muted-fg"> · {p.note}</span> : ""}
       </span>
       <span className="shrink-0 text-[11px] text-muted-fg">{p.dateLabel}</span>
+      {p.partPaid !== null && (
+        <span className="shrink-0 text-[11px] tabular-nums text-green-700">
+          {formatMoney(p.partPaid)} of {formatMoney(p.fullAmount)} paid
+        </span>
+      )}
       <span className="shrink-0 text-xs font-semibold tabular-nums text-red-600">
         {formatMoney(p.amount)}
       </span>

@@ -1,5 +1,6 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
@@ -15,6 +16,7 @@ import {
   meetingPenaltyAmount,
   type AttendanceStatus,
 } from "@/lib/penalties";
+import { allocateSettlement } from "@/lib/settlement";
 import { formatYmd, toYmd } from "@/lib/dates";
 import { notify } from "@/lib/notifications";
 import type { Prisma } from "@/generated/prisma/client";
@@ -242,11 +244,20 @@ export async function deletePenalty(penaltyId: string) {
       userId: true,
       type: true,
       amount: true,
+      paidAmount: true,
       meetingId: true,
       createdAt: true,
     },
   });
   if (!penalty) return; // already gone — nothing to undo
+  // Money has already moved against this one. Deleting it would erase a payment
+  // that really happened, so the admin has to undo the payment first — an
+  // explicit decision, taken on the settled side of the ledger.
+  if (penalty.paidAmount > 0) {
+    throw new Error(
+      "This fine has been part-paid — undo the payment on /penalties first.",
+    );
+  }
 
   // Late-submission and meeting fines aren't stored decisions, they're derived:
   // one from whether the week was reported on time, the other from the
@@ -308,112 +319,220 @@ export async function deletePenalty(penaltyId: string) {
   revalidatePath("/dashboard");
 }
 
-/** Sum of a user's still-outstanding (unpaid) fines. */
+/** Sum of what a user still owes — every fine's unpaid remainder. */
 async function outstandingFinesTotal(
   db: Prisma.TransactionClient | typeof prisma,
   userId: string,
 ): Promise<number> {
   const agg = await db.penalty.aggregate({
     where: { userId, paidAt: null },
-    _sum: { amount: true },
+    _sum: { amount: true, paidAmount: true },
   });
-  return agg._sum.amount ?? 0;
+  return (agg._sum.amount ?? 0) - (agg._sum.paidAmount ?? 0);
 }
 
-/**
- * Settle one fine — record that it was cut from the person's salary and mark it
- * paid. Moves the fine out of the active ledger into the archive and notifies
- * the person, noting whatever they still owe. No-op if already settled.
- * Admin-only.
- */
-export async function settleFine(penaltyId: string) {
-  const session = await auth();
-  if (!isAdmin(session?.user?.email)) {
-    throw new Error("Not authorized");
-  }
-  const penalty = await prisma.penalty.findUnique({
-    where: { id: penaltyId },
-    select: { id: true, userId: true, amount: true, paidAt: true },
-  });
-  if (!penalty) throw new Error("Fine not found");
-  if (penalty.paidAt) return; // already settled
-
-  await prisma.$transaction(async (tx) => {
-    await tx.penalty.update({
-      where: { id: penalty.id },
-      data: { paidAt: new Date(), settledById: session!.user.id },
-    });
-    const outstanding = await outstandingFinesTotal(tx, penalty.userId);
-    await notify(
-      tx,
-      penalty.userId,
-      "FINE",
-      `Your ${formatMoney(penalty.amount)} fine was deducted from your salary and marked paid. ` +
-        (outstanding > 0
-          ? `${formatMoney(outstanding)} still outstanding.`
-          : `You're all settled — nothing outstanding.`),
-    );
-  });
-
-  revalidatePath("/penalties");
-  revalidatePath("/admin");
-  revalidatePath("/dashboard");
-}
+/** What a settlement did, handed back so the UI can report it. */
+export type SettlementResult = {
+  /** How much was actually placed (never more than was owed). */
+  applied: number;
+  /** Fines this payment closed out. */
+  cleared: number;
+  /** What the person still owes afterwards. */
+  outstanding: number;
+};
 
 /**
- * Settle every outstanding fine for a person at once — the payroll case: their
- * fines were deducted from their salary this cycle. Marks them all paid, sends
- * one summary notification with the total deducted, and archives them.
- * Admin-only.
+ * Record money against a person's fines. The heart of settling: `amount` is
+ * whatever was cut from their salary, and it's applied to their open fines
+ * **oldest first** (see lib/settlement — the same function the settle dialog
+ * previews with, so the admin's preview and the result can't drift apart). A
+ * fine that the payment covers in full is closed out and archived; the one it
+ * runs out on is left part-paid and stays in the active ledger owing the rest.
+ *
+ * Scope it to a single fine with `penaltyId`. Paying more than is owed places
+ * what it can and ignores the rest rather than overpaying. Every fine touched
+ * gets a FinePayment row, all sharing one `batchId`, so the settlement reads
+ * back as one receipt and can be undone as one.
  */
-export async function settleAllFines(userId: string) {
-  const session = await auth();
-  if (!isAdmin(session?.user?.email)) {
-    throw new Error("Not authorized");
+async function recordSettlement(
+  amount: number,
+  adminId: string,
+  target: { userId: string } | { penaltyId: string },
+): Promise<SettlementResult> {
+  const value = Math.round(Number(amount));
+  if (!Number.isFinite(value) || value <= 0 || value > MAX_PENALTY) {
+    throw new Error("Enter a valid amount to settle.");
   }
 
-  await prisma.$transaction(async (tx) => {
-    const active = await tx.penalty.findMany({
-      where: { userId, paidAt: null },
-      select: { amount: true },
-    });
-    if (active.length === 0) return;
-    const total = active.reduce((s, p) => s + p.amount, 0);
+  return prisma.$transaction(async (tx) => {
+    // Scoping by penalty still needs the owner: the notification and the
+    // remaining-total below are per person, not per fine.
+    let userId: string;
+    if ("userId" in target) {
+      userId = target.userId;
+    } else {
+      const owner = await tx.penalty.findUnique({
+        where: { id: target.penaltyId },
+        select: { userId: true },
+      });
+      if (!owner) throw new Error("Fine not found");
+      userId = owner.userId;
+    }
 
-    await tx.penalty.updateMany({
-      where: { userId, paidAt: null },
-      data: { paidAt: new Date(), settledById: session!.user.id },
+    const open = await tx.penalty.findMany({
+      where: {
+        userId,
+        paidAt: null,
+        ...("penaltyId" in target ? { id: target.penaltyId } : {}),
+      },
+      // Oldest debt first. `id` breaks ties so two fines raised in the same
+      // instant (the reconcile sweep does that) always settle in a stable order.
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: { id: true, amount: true, paidAmount: true },
     });
+
+    const plan = allocateSettlement(open, value);
+    if (plan.applied === 0) {
+      return { applied: 0, cleared: 0, outstanding: await outstandingFinesTotal(tx, userId) };
+    }
+
+    const batchId = randomUUID();
+    const now = new Date();
+    for (const [i, a] of plan.allocations.entries()) {
+      if (a.pay === 0) continue;
+      const fine = open[i];
+      // Match on the balance this plan was built from, so two admins settling
+      // the same person at once can't both spend the same headroom and push a
+      // fine past its amount — the second one finds nothing to update and the
+      // whole settlement rolls back rather than half-landing.
+      const updated = await tx.penalty.updateMany({
+        where: { id: fine.id, paidAt: null, paidAmount: fine.paidAmount },
+        data: {
+          paidAmount: fine.paidAmount + a.pay,
+          // Only a fine paid off in full leaves the active ledger.
+          ...(a.clears ? { paidAt: now, settledById: adminId } : {}),
+        },
+      });
+      if (updated.count === 0) {
+        throw new Error(
+          "These fines changed while you were settling — reload and try again.",
+        );
+      }
+      await tx.finePayment.create({
+        data: {
+          penaltyId: a.id,
+          amount: a.pay,
+          batchId,
+          recordedById: adminId,
+        },
+      });
+    }
+
+    const outstanding = await outstandingFinesTotal(tx, userId);
     await notify(
       tx,
       userId,
       "FINE",
-      `${formatMoney(total)} in fines was deducted from your salary and marked paid. You're all settled — nothing outstanding.`,
+      `${formatMoney(plan.applied)} was deducted from your salary and put toward your fines. ` +
+        (outstanding > 0
+          ? `${formatMoney(outstanding)} still outstanding.`
+          : `You're all settled — nothing outstanding.`),
     );
-  });
 
+    return { applied: plan.applied, cleared: plan.cleared, outstanding };
+  });
+}
+
+/** Every view that shows fine balances, refreshed after money moves. */
+function revalidateFines() {
   revalidatePath("/penalties");
   revalidatePath("/admin");
   revalidatePath("/dashboard");
 }
 
 /**
- * Reopen a settled fine — undo a settlement recorded by mistake. Moves the fine
- * back into the active ledger (paidAt/settledBy cleared). Silent (no
- * notification). Admin-only.
+ * Settle a custom amount against everything a person owes — the payroll case
+ * where part of their fines came out of this month's salary. Applied oldest
+ * fine first. Admin-only.
  */
-export async function reopenFine(penaltyId: string) {
+export async function settleAmount(
+  userId: string,
+  amount: number,
+): Promise<SettlementResult> {
   const session = await auth();
   if (!isAdmin(session?.user?.email)) {
     throw new Error("Not authorized");
   }
-  await prisma.penalty.update({
-    where: { id: penaltyId },
-    data: { paidAt: null, settledById: null },
+  const result = await recordSettlement(amount, session!.user.id, { userId });
+  revalidateFines();
+  return result;
+}
+
+/**
+ * Settle a custom amount against one specific fine — for when a person is
+ * paying a single fine down rather than their balance as a whole. Admin-only.
+ */
+export async function settleFineAmount(
+  penaltyId: string,
+  amount: number,
+): Promise<SettlementResult> {
+  const session = await auth();
+  if (!isAdmin(session?.user?.email)) {
+    throw new Error("Not authorized");
+  }
+  const result = await recordSettlement(amount, session!.user.id, { penaltyId });
+  revalidateFines();
+  return result;
+}
+
+/**
+ * Undo one settlement — the receipt written by a single settle action, across
+ * however many fines it touched. Each fine gets its balance back and reopens if
+ * the payment had closed it. For a mistyped amount this is the fix: undo the
+ * receipt and record the right one. Silent (no notification). Admin-only.
+ */
+export async function undoSettlement(batchId: string) {
+  const session = await auth();
+  if (!isAdmin(session?.user?.email)) {
+    throw new Error("Not authorized");
+  }
+  await prisma.$transaction(async (tx) => {
+    const payments = await tx.finePayment.findMany({
+      where: { batchId },
+      select: {
+        amount: true,
+        penalty: { select: { id: true, amount: true, paidAmount: true } },
+      },
+    });
+    if (payments.length === 0) return;
+
+    // A batch normally hits each fine once, but sum per fine anyway so an undo
+    // can never leave a stray part-payment behind.
+    const backOut = new Map<string, { total: number; amount: number; paidAmount: number }>();
+    for (const p of payments) {
+      const entry = backOut.get(p.penalty.id) ?? {
+        total: 0,
+        amount: p.penalty.amount,
+        paidAmount: p.penalty.paidAmount,
+      };
+      entry.total += p.amount;
+      backOut.set(p.penalty.id, entry);
+    }
+
+    for (const [id, e] of backOut) {
+      const paidAmount = Math.max(0, e.paidAmount - e.total);
+      await tx.penalty.update({
+        where: { id },
+        data: {
+          paidAmount,
+          // Anything short of the full amount is outstanding again.
+          ...(paidAmount < e.amount ? { paidAt: null, settledById: null } : {}),
+        },
+      });
+    }
+    await tx.finePayment.deleteMany({ where: { batchId } });
   });
-  revalidatePath("/penalties");
-  revalidatePath("/admin");
-  revalidatePath("/dashboard");
+  revalidateFines();
 }
 
 /**
@@ -562,10 +681,12 @@ async function recomputeMeetingPenalties(
 
     const current = byMeeting.get(a.meetingId);
     if (current) {
-      // Settled fines are frozen history — never re-price or re-type them, or
-      // we'd silently change what the person already paid.
+      // Fines with money against them are frozen history — never re-price or
+      // re-type one, or we'd silently change what the person already paid.
+      // That covers part-paid fines too: re-pricing one below what's been paid
+      // would leave it owing a negative amount.
       if (
-        current.paidAt == null &&
+        current.paidAmount === 0 &&
         (current.amount !== desired.amount || current.type !== desired.type)
       ) {
         await tx.penalty.update({
@@ -597,11 +718,11 @@ async function recomputeMeetingPenalties(
     }
   }
 
-  // Any leftover *unpaid* fines point at meetings that no longer warrant one —
-  // remove them. Settled fines are left alone (deleting one would erase a
-  // payment that actually happened).
+  // Any leftover fines with nothing paid against them point at meetings that no
+  // longer warrant one — remove them. Anything part-paid or settled is left
+  // alone (deleting one would erase a payment that actually happened).
   const stale = [...byMeeting.values()]
-    .filter((p) => p.paidAt == null)
+    .filter((p) => p.paidAmount === 0)
     .map((p) => p.id);
   if (stale.length > 0) {
     await tx.penalty.deleteMany({ where: { id: { in: stale } } });

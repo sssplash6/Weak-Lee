@@ -79,7 +79,7 @@ export async function reconcileSubmissionFines(opts?: {
           createdAt: { gte: submissionDeadline },
         },
         orderBy: { createdAt: "asc" },
-        select: { id: true, amount: true, paidAt: true },
+        select: { id: true, amount: true, paidAt: true, paidAmount: true },
       },
     },
   });
@@ -123,9 +123,11 @@ export async function reconcileSubmissionFines(opts?: {
     const existing = u.penalties[0];
 
     if (amount === 0) {
-      // Submitted on time. If a fine exists and is still unpaid, it was created
-      // in error (the duplicate-week bug) — remove it and let the person know.
-      if (existing && existing.paidAt == null) {
+      // Submitted on time. If a fine exists and nothing has been paid against
+      // it, it was created in error (the duplicate-week bug) — remove it and
+      // let the person know. Once money has moved, an admin has to unwind it
+      // deliberately on /penalties; deleting it here would erase the payment.
+      if (existing && existing.paidAt == null && existing.paidAmount === 0) {
         await prisma.$transaction(async (tx) => {
           await tx.penalty.delete({ where: { id: existing.id } });
           await notify(
@@ -174,7 +176,9 @@ export async function reconcileSubmissionFines(opts?: {
       });
     } else if (existing.paidAt == null && existing.amount < amount) {
       // Escalate an unpaid $20 to $40 at the Monday meeting. A fine that's
-      // already been settled is left alone rather than silently re-priced.
+      // already been settled is left alone rather than silently re-priced. A
+      // part-paid one does escalate — the amount only ever goes up, so what's
+      // been paid still stands and the person simply owes the difference.
       await prisma.$transaction(async (tx) => {
         await tx.penalty.update({
           where: { id: existing.id },
@@ -192,10 +196,11 @@ export async function reconcileSubmissionFines(opts?: {
 }
 
 /**
- * Drop any unpaid late-submission fine held by an exempt account — whether it
- * predates the exemption or slipped through some other path. Settled fines are
- * left alone (money already moved; an admin can reopen one if it was wrong).
- * Pass a `userId` to limit this to one person, matching the sweep above.
+ * Drop any untouched late-submission fine held by an exempt account — whether
+ * it predates the exemption or slipped through some other path. Fines with
+ * money against them are left alone (it already moved; an admin can reopen one
+ * on /penalties if it was wrong). Pass a `userId` to limit this to one person,
+ * matching the sweep above.
  */
 async function releaseExemptSubmissionFines(userId?: string): Promise<void> {
   const exempt = await prisma.user.findMany({
@@ -206,7 +211,7 @@ async function releaseExemptSubmissionFines(userId?: string): Promise<void> {
     select: {
       id: true,
       penalties: {
-        where: { type: "LATE_SUBMISSION", paidAt: null },
+        where: { type: "LATE_SUBMISSION", paidAt: null, paidAmount: 0 },
         select: { id: true, amount: true },
       },
     },

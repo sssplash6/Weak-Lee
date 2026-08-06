@@ -2,15 +2,28 @@
 
 import { Fragment, useState, useTransition } from "react";
 import { formatMoney } from "@/lib/penalties";
-import { reopenFine } from "../../admin/actions";
+import { undoSettlement } from "../../admin/actions";
 import { REASONS } from "../reasons";
 
-export type ArchivedFine = {
+/** What one receipt did to one fine. */
+export type ReceiptLine = {
   id: string;
   reasonIndex: number;
   note: string | null;
-  paidLabel: string;
+  /** Paid toward that fine in this receipt. */
   amount: number;
+  /** The fine's full amount, for the "$40 of $60" part-payment case. */
+  fineAmount: number;
+  /** True when this payment is what closed the fine out. */
+  cleared: boolean;
+};
+
+/** One settlement: an amount cut from a salary, spread over one or more fines. */
+export type Receipt = {
+  batchId: string;
+  dateLabel: string;
+  amount: number;
+  lines: ReceiptLine[];
 };
 
 export type ArchiveRow = {
@@ -19,15 +32,18 @@ export type ArchiveRow = {
   department: string | null;
   emoji: string;
   bg: string;
-  paid: number; // total settled
-  fines: ArchivedFine[]; // settled fines, most recent first
+  paid: number; // total settled, all time
+  clearedCount: number; // fines paid off in full
+  stillOwed: number; // what's left open, if anything
+  receipts: Receipt[]; // newest settlement first
 };
 
 /**
- * The settled-fines archive. One row per person who has paid something off;
- * tap to see each settled fine, when it was paid, and the reason. Admins can
- * reopen a fine (undo a settlement recorded by mistake) — it returns to the
- * active ledger above.
+ * The settled side of the ledger. One row per person who has paid something
+ * off, opening onto their payment history — each settlement as a receipt with
+ * the fines it went to, so a part payment is as legible as a cleared one.
+ * Admins can undo a whole receipt (a mistyped amount): every fine it touched
+ * gets its balance back and reopens in the active matrix above.
  */
 export function FineArchive({
   rows,
@@ -71,7 +87,17 @@ export function FineArchive({
                     )}
                   </span>
                   <span className="shrink-0 text-xs text-muted-fg">
-                    {r.fines.length} paid
+                    {r.clearedCount > 0 && (
+                      <>
+                        {r.clearedCount} cleared
+                        {r.stillOwed > 0 && " · "}
+                      </>
+                    )}
+                    {r.stillOwed > 0 && (
+                      <span className="tabular-nums text-red-600">
+                        {formatMoney(r.stillOwed)} still owed
+                      </span>
+                    )}
                   </span>
                   <span className="shrink-0 text-sm font-bold tabular-nums text-green-700">
                     {formatMoney(r.paid)}
@@ -89,10 +115,10 @@ export function FineArchive({
               {open && (
                 <li className="border-b border-line">
                   <ul className="rise-in flex flex-col px-4 pb-3 pt-1">
-                    {r.fines.map((f) => (
-                      <ArchivedFineLine
-                        key={f.id}
-                        fine={f}
+                    {r.receipts.map((receipt) => (
+                      <ReceiptLines
+                        key={receipt.batchId}
+                        receipt={receipt}
                         viewerIsAdmin={viewerIsAdmin}
                       />
                     ))}
@@ -107,44 +133,71 @@ export function FineArchive({
   );
 }
 
-/** One settled fine: reason, note, when it was paid, amount, and reopen (admin). */
-function ArchivedFineLine({
-  fine: f,
+/** One settlement: when, how much, what it went to, and an undo. */
+function ReceiptLines({
+  receipt,
   viewerIsAdmin,
 }: {
-  fine: ArchivedFine;
+  receipt: Receipt;
   viewerIsAdmin: boolean;
 }) {
-  const reason = REASONS[f.reasonIndex];
   const [isPending, startTransition] = useTransition();
 
   return (
-    <li className="flex items-center gap-3 border-t border-line py-2 first:border-t-0">
-      <span
-        className={`h-2 w-2 shrink-0 rounded-full ${reason.dot}`}
-        aria-hidden="true"
-      />
-      <span className="min-w-0 flex-1 truncate text-muted-fg">
-        {reason.label}
-        {f.note && <span> · {f.note}</span>}
-      </span>
-      <span className="shrink-0 text-[11px] text-muted-fg">
-        paid {f.paidLabel}
-      </span>
-      <span className="shrink-0 text-xs font-semibold tabular-nums text-green-700">
-        {formatMoney(f.amount)}
-      </span>
-      {viewerIsAdmin && (
-        <button
-          type="button"
-          disabled={isPending}
-          onClick={() => startTransition(() => void reopenFine(f.id))}
-          title="Reopen this fine (undo the settlement)"
-          className="shrink-0 rounded-lg border border-line px-2 py-0.5 text-[11px] font-semibold text-muted-fg transition hover:border-red-300 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
-        >
-          Reopen
-        </button>
-      )}
+    <li className="border-t border-line py-2 first:border-t-0">
+      <div className="flex items-center gap-3">
+        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-green-50 text-[10px] text-green-700">
+          ✓
+        </span>
+        <span className="min-w-0 flex-1 truncate text-xs font-semibold text-ink">
+          {formatMoney(receipt.amount)} deducted
+        </span>
+        <span className="shrink-0 text-[11px] text-muted-fg">
+          {receipt.dateLabel}
+        </span>
+        {viewerIsAdmin && (
+          <button
+            type="button"
+            disabled={isPending}
+            onClick={() =>
+              startTransition(() => void undoSettlement(receipt.batchId))
+            }
+            title="Undo this settlement — the fines it paid go back to outstanding"
+            className="shrink-0 rounded-lg border border-line px-2 py-0.5 text-[11px] font-semibold text-muted-fg transition hover:border-red-300 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+          >
+            Undo
+          </button>
+        )}
+      </div>
+      <ul className="mt-1 flex flex-col pl-8">
+        {receipt.lines.map((l) => {
+          const reason = REASONS[l.reasonIndex];
+          return (
+            <li
+              key={l.id}
+              className="flex items-baseline gap-2 py-0.5 text-[11px]"
+            >
+              <span
+                className={`h-1.5 w-1.5 shrink-0 translate-y-px rounded-full ${reason.dot}`}
+                aria-hidden="true"
+              />
+              <span className="min-w-0 flex-1 truncate text-muted-fg">
+                {reason.label}
+                {l.note && <span> · {l.note}</span>}
+              </span>
+              <span className="shrink-0 tabular-nums text-muted-fg">
+                {l.cleared ? (
+                  <span className="text-green-700">
+                    {formatMoney(l.amount)} · cleared
+                  </span>
+                ) : (
+                  `${formatMoney(l.amount)} of ${formatMoney(l.fineAmount)}`
+                )}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
     </li>
   );
 }
