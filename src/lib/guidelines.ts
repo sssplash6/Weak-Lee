@@ -204,6 +204,36 @@ export const GUIDE_GROUPS: GuideGroup[] = [
           "End of Day Checklist",
         ],
       },
+      {
+        slug: "office-health",
+        title: "Office Health & Sickness Regulations",
+        kicker: "Internal policy · For all Tashkent office staff",
+        purpose:
+          "What’s stocked in the office, when to work from home, how to report an absence, and who owns what.",
+        monogram: "OH",
+        tone: "plum",
+        // No version block on the cover — just issued / approved / owner.
+        version: null,
+        dated: "August 2026",
+        owner: { name: "Sofina", role: "Office Manager" },
+        approvedBy: {
+          name: "Valera Arakelyan",
+          role: "CEO, Freshman Academy",
+        },
+        pages: 2,
+        pdf: "office-health-sickness-regulations.pdf",
+        // Open to everyone: it sets out what every person in the office does
+        // when they're ill, not just what one department owns.
+        departments: null,
+        sections: [
+          "Purpose",
+          "Supplies",
+          "When to Stay Home or Work Remotely",
+          "Reporting an Absence",
+          "Common Area Hygiene",
+          "Ownership",
+        ],
+      },
     ],
   },
   {
