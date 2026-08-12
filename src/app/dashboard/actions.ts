@@ -766,14 +766,14 @@ export async function startNewWeek(
 
   const now = new Date();
 
-  // A week can't be opened before the Sunday its goals are due (00:00 Tashkent).
+  // A week can't be opened before Friday noon (Tashkent) of the week before it.
   // Without this, closing mid-week jumps straight onto next week's dates and the
   // person spends the rest of the cycle a week ahead of everyone else — see
   // weekOpensAt. Enforced here, not just in the UI, because the range is
   // caller-supplied. Closing late (or catching up) is always allowed.
   if (now.getTime() < weekOpensAt(start).getTime()) {
     throw new Error(
-      "This week isn't over yet — you can close it and start the next one from Sunday.",
+      "This week isn't over yet — you can close it and start the next one from Friday noon.",
     );
   }
 

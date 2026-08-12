@@ -404,15 +404,15 @@ export default async function DashboardPage({
   const defaultWeekEnd = toLocalYmd(nextWeek.end);
   const nextMonthName = monthLabel(nextMonthBounds(period.endDate).start);
 
-  // The next week can't be opened before the Sunday its goals are due, so the
-  // close button waits until then instead of letting someone close mid-week and
-  // spend the rest of the cycle a week ahead of the team (see weekOpensAt; the
-  // same rule is enforced in startNewWeek). Anyone catching up on an overdue
-  // week is already past their Sunday, so this never blocks them.
+  // The next week can't be opened before Friday noon of the week before it, so
+  // the close button waits until then instead of letting someone close mid-week
+  // and spend the rest of the cycle a week ahead of the team (see weekOpensAt;
+  // the same rule is enforced in startNewWeek). Anyone catching up on an
+  // overdue week is already past their Friday, so this never blocks them.
   const canStartNextWeek = now.getTime() >= weekOpensAt(nextWeek.start).getTime();
-  // The Sunday the window opens: the day before the new week's Monday.
+  // The Friday the window opens: three days before the new week's Monday.
   const opensOnLabel = formatYmd(
-    toLocalYmd(new Date(nextWeek.start.getTime() - 86_400_000)),
+    toLocalYmd(new Date(nextWeek.start.getTime() - 3 * 86_400_000)),
   );
 
   // Open goals due on each day, keyed by "YYYY-MM-DD", as a list of their

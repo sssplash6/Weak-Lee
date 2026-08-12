@@ -34,18 +34,20 @@ export function weekSubmissionDeadline(weekStart: Date): Date {
 }
 
 /**
- * The earliest moment the week beginning `weekStart` may be opened: 00:00
- * Tashkent on the Sunday its goals are due (12 hours before that Sunday-12:00
- * deadline).
+ * The earliest moment the week beginning `weekStart` may be opened: 12:00
+ * Tashkent on the Friday before its goals are due (48 hours before that
+ * Sunday-12:00 deadline). The window runs from then through the Monday the
+ * week begins — submitting after Sunday 12:00 is "late" and after the Monday
+ * meeting "missed" (see submissionTiming), but never blocked.
  *
  * Opening a week sooner means closing the current one before it's over, which
  * strands the person a week ahead of the team's cycle: their dashboard runs on
  * next week's goals while everyone else is still mid-week, and the admin review
  * shows the week they already closed instead of live work. Catching up is never
- * blocked by this — a week whose Sunday has passed is always openable.
+ * blocked by this — a week whose Friday noon has passed is always openable.
  */
 export function weekOpensAt(weekStart: Date): Date {
-  return new Date(weekSubmissionDeadline(weekStart).getTime() - 12 * 3_600_000);
+  return new Date(weekSubmissionDeadline(weekStart).getTime() - 48 * 3_600_000);
 }
 
 /**

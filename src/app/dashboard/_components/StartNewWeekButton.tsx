@@ -39,7 +39,7 @@ export function StartNewWeekButton({
   carryGoals: CarryGoal[];
   defaultStart: string;
   defaultEnd: string;
-  // False until the Sunday the new week's goals are due. Closing before then
+  // False until noon on the Friday before the new week. Closing before then
   // would put this person a week ahead of everyone else's cycle, so the button
   // is locked rather than hidden — with the date it unlocks.
   canStart: boolean;
@@ -157,7 +157,7 @@ export function StartNewWeekButton({
             {`Start new week (${formatRangeLabel(defaultStart, defaultEnd)})`}
           </p>
           <p className="mt-0.5 text-xs text-muted-fg">
-            {`Opens Sunday, ${opensOnLabel} — finish this week first.`}
+            {`Opens Friday, ${opensOnLabel} at 12:00 — finish this week first.`}
           </p>
         </div>
       );
