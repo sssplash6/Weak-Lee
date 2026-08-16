@@ -23,6 +23,18 @@ export function submissionDeadlineApplies(weekStart: Date): boolean {
 }
 
 /**
+ * One-off: the team was on a trip the week due 2026-08-16, so that single
+ * cycle's deadline moved from Sunday 12:00 to Sunday midnight (Tashkent).
+ * Every deadline-derived surface — fines, Late flags, cycle phase, stats —
+ * shifts with it, since they all go through weekSubmissionDeadline. Inert for
+ * every other week; safe to delete once the cycle is history (the fines the
+ * noon sweep had already issued are unwound by releaseTripShiftedFines in
+ * lib/submissionFines.ts).
+ */
+export const TRIP_SHIFTED_DEADLINE_FROM = new Date("2026-08-16T07:00:00.000Z"); // Sun 12:00 UZT
+export const TRIP_SHIFTED_DEADLINE_TO = new Date("2026-08-16T19:00:00.000Z"); // Sun 24:00 UZT
+
+/**
  * The submission deadline for a week: Sunday 12:00 Asia/Tashkent immediately
  * before the week's Monday start, as a UTC instant.
  */
@@ -30,6 +42,9 @@ export function weekSubmissionDeadline(weekStart: Date): Date {
   const d = new Date(weekStart);
   d.setUTCDate(d.getUTCDate() - 1); // step back to the Sunday before Monday
   d.setUTCHours(12 - TASHKENT_UTC_OFFSET_HOURS, 0, 0, 0); // 12:00 UZT = 07:00 UTC
+  if (d.getTime() === TRIP_SHIFTED_DEADLINE_FROM.getTime()) {
+    return new Date(TRIP_SHIFTED_DEADLINE_TO); // trip week — see above
+  }
   return d;
 }
 

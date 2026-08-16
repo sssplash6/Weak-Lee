@@ -19,6 +19,8 @@ import {
 import {
   currentSubmissionCycle,
   SUBMISSION_DEADLINE_EPOCH,
+  TRIP_SHIFTED_DEADLINE_FROM,
+  TRIP_SHIFTED_DEADLINE_TO,
 } from "@/lib/lateness";
 import {
   isSubmissionExempt,
@@ -27,6 +29,10 @@ import {
 
 const LATE_NOTE = "Goals not submitted by the Sunday 12:00 deadline";
 const MISSED_NOTE = "Goals not submitted by the Monday 11:00 meeting";
+// The 2026-08-16 trip week runs on a midnight deadline; a fine issued for
+// missing it shouldn't cite noon.
+const LATE_NOTE_TRIP =
+  "Goals not submitted by the Sunday midnight deadline (trip week)";
 
 /**
  * Reconcile late-submission fines for the current cycle. Pass a `userId` to
@@ -43,6 +49,10 @@ export async function reconcileSubmissionFines(opts?: {
   // every phase, so adding an exemption takes effect on the next page load
   // rather than waiting for a deadline to come round.
   await releaseExemptSubmissionFines(opts?.userId);
+
+  // Undo what the noon sweep wrote before the 2026-08-16 deadline moved to
+  // midnight (see TRIP_SHIFTED_DEADLINE_* in lib/lateness.ts).
+  await releaseTripShiftedFines(now, opts?.userId);
 
   // Nothing due yet, or a cycle from before the deadline was enforced.
   if (cycle.phase === "before") return;
@@ -147,7 +157,9 @@ export async function reconcileSubmissionFines(opts?: {
       u.weeks[0]?.id ??
       null;
     const missed = amount >= MISSED_SUBMISSION_PENALTY;
-    const note = missed ? MISSED_NOTE : LATE_NOTE;
+    const shiftedWeek =
+      submissionDeadline.getTime() === TRIP_SHIFTED_DEADLINE_TO.getTime();
+    const note = missed ? MISSED_NOTE : shiftedWeek ? LATE_NOTE_TRIP : LATE_NOTE;
 
     if (!existing) {
       await prisma.$transaction(async (tx) => {
@@ -171,7 +183,7 @@ export async function reconcileSubmissionFines(opts?: {
           "FINE",
           missed
             ? `You were fined ${formatMoney(amount)} for not submitting your goals by the Monday 11:00 meeting.`
-            : `You were fined ${formatMoney(amount)} for not submitting your goals by the Sunday 12:00 deadline.`,
+            : `You were fined ${formatMoney(amount)} for not submitting your goals by the Sunday ${shiftedWeek ? "midnight" : "12:00"} deadline.`,
         );
       });
     } else if (existing.paidAt == null && existing.amount < amount) {
@@ -235,6 +247,80 @@ async function releaseExemptSubmissionFines(userId?: string): Promise<void> {
         `Your ${label} was removed — this account isn't fined for late weekly submissions.`,
       );
     });
+  }
+}
+
+/**
+ * One-off follow-through for the trip-shifted 2026-08-16 deadline (see
+ * TRIP_SHIFTED_DEADLINE_* in lib/lateness.ts): by the time the deadline moved
+ * from Sunday noon to midnight, the noon sweep had already fined people and
+ * flagged weeks "late". This unwinds everything the noon deadline wrote:
+ *   • drops untouched fines from the noon sweep (money already settled against
+ *     one freezes it, same rule as everywhere else — /penalties can unwind it),
+ *   • clears the Late flag on weeks submitted between noon and midnight,
+ *   • re-keys waivers an admin granted against the noon deadline so the
+ *     forgiveness still counts for this cycle after it re-keys to midnight.
+ * Idempotent — after the first pass nothing matches — and inert once the trip
+ * cycle is a week old, at which point this function can simply be deleted.
+ */
+async function releaseTripShiftedFines(
+  now: Date,
+  userId?: string,
+): Promise<void> {
+  const from = TRIP_SHIFTED_DEADLINE_FROM;
+  const to = TRIP_SHIFTED_DEADLINE_TO;
+  if (now.getTime() >= to.getTime() + 7 * 86_400_000) return;
+  const scope = userId ? { userId } : {};
+
+  try {
+    const fines = await prisma.penalty.findMany({
+      where: {
+        type: "LATE_SUBMISSION",
+        createdAt: { gte: from, lt: to },
+        paidAt: null,
+        paidAmount: 0,
+        ...scope,
+      },
+      select: { id: true, userId: true, amount: true },
+    });
+    for (const f of fines) {
+      await prisma.$transaction(async (tx) => {
+        // Re-check the untouched guard inside the delete itself, in case a
+        // payment landed (or a racing reconcile already deleted it) since the
+        // read above.
+        const del = await tx.penalty.deleteMany({
+          where: { id: f.id, paidAt: null, paidAmount: 0 },
+        });
+        if (del.count === 0) return;
+        await notify(
+          tx,
+          f.userId,
+          "FINE",
+          `Your ${formatMoney(f.amount)} late-submission fine was removed — this week's deadline moved from Sunday noon to midnight for the team trip.`,
+        );
+      });
+    }
+
+    // Weeks submitted between noon and midnight were stamped late on the way
+    // in; under the midnight deadline they're on time. Only this cycle's weeks
+    // qualify — a week from an older cycle submitted today really is late.
+    await prisma.week.updateMany({
+      where: {
+        submittedLate: true,
+        submittedAt: { gte: from, lt: to },
+        startDate: { gte: from },
+        ...scope,
+      },
+      data: { submittedLate: false },
+    });
+
+    await prisma.fineWaiver.updateMany({
+      where: { cycleDeadline: from, ...scope },
+      data: { cycleDeadline: to },
+    });
+  } catch (e) {
+    // A one-off cleanup must never take a page load down with it.
+    console.error("releaseTripShiftedFines failed", e);
   }
 }
 
