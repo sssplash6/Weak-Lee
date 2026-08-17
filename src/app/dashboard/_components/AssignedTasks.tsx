@@ -24,15 +24,11 @@ export type AssignedTaskView = {
  */
 export function AssignedTasks({ tasks }: { tasks: AssignedTaskView[] }) {
   if (tasks.length === 0) return null;
+  // No header of its own — the "Assigned by leadership" section headline
+  // above carries the framing.
   return (
-    <div className="mb-5 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-sm font-semibold text-amber-700">Assigned to you</p>
-        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-700">
-          by admin
-        </span>
-      </div>
-      <ul className="mt-2 flex flex-col gap-1.5">
+    <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3">
+      <ul className="flex flex-col gap-1.5">
         {tasks.map((t) => (
           <AssignedRow key={t.id} task={t} />
         ))}

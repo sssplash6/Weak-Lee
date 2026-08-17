@@ -697,33 +697,43 @@ export default async function DashboardPage({
         </div>
       )}
 
-      {(inboxGoals.length > 0 || assignedTaskViews.length > 0) && (
+      {assignedTaskViews.length > 0 && (
         <section className="mb-6">
           <div className="mb-3 flex items-center gap-2">
-            <h2 className="text-sm font-semibold text-ink">Inbox</h2>
+            <h2 className="text-sm font-semibold text-ink">
+              Assigned by leadership
+            </h2>
             <span className="rounded-full bg-canvas px-2 py-0.5 text-[11px] font-bold tabular-nums text-muted-fg">
-              {inboxGoals.length + assignedTaskViews.length}
+              {assignedTaskViews.length}
             </span>
-            <span className="text-xs text-muted-fg">from your team</span>
           </div>
-
           <AssignedTasks tasks={assignedTaskViews} />
+        </section>
+      )}
 
-          {inboxGoals.length > 0 && (
-            <div className="flex flex-col gap-4">
-              {inboxGoals.map((goal, i) => (
-                <GoalCard
-                  key={goal.id}
-                  goal={goal}
-                  index={i + 1}
-                  team={team}
-                  todayYmd={todayYmd}
-                  nowStamp={nowStamp}
-                  locked={locked}
-                />
-              ))}
-            </div>
-          )}
+      {inboxGoals.length > 0 && (
+        <section className="mb-6">
+          <div className="mb-3 flex items-center gap-2">
+            <h2 className="text-sm font-semibold text-ink">
+              Assigned by colleagues
+            </h2>
+            <span className="rounded-full bg-canvas px-2 py-0.5 text-[11px] font-bold tabular-nums text-muted-fg">
+              {inboxGoals.length}
+            </span>
+          </div>
+          <div className="flex flex-col gap-4">
+            {inboxGoals.map((goal, i) => (
+              <GoalCard
+                key={goal.id}
+                goal={goal}
+                index={i + 1}
+                team={team}
+                todayYmd={todayYmd}
+                nowStamp={nowStamp}
+                locked={locked}
+              />
+            ))}
+          </div>
         </section>
       )}
 
