@@ -257,25 +257,28 @@ export function GoalCard({
         </div>
 
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pl-10">
-          <button
-            type="button"
-            onClick={() => setTasksOpen((v) => !v)}
-            aria-expanded={tasksOpen}
-            aria-label={tasksOpen ? "Hide subtasks" : "Show subtasks"}
-            title={tasksOpen ? "Hide subtasks" : "Show subtasks"}
-            // -ml-2 cancels the pill's own left padding so the chevron lines up
-            // exactly with the start of the goal title above it.
-            className={`${CONTROL_PILL} -ml-2 shrink-0 text-muted-fg hover:bg-canvas hover:text-ink`}
-          >
-            <ChevronIcon
-              className={`h-3.5 w-3.5 transition-transform ${
-                tasksOpen ? "rotate-90" : ""
-              }`}
-            />
-            <span className="tabular-nums">
-              {subtasks.length} {subtasks.length === 1 ? "task" : "tasks"}
-            </span>
-          </button>
+          {/* Nothing to collapse until a first subtask exists — no "0 tasks". */}
+          {subtasks.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setTasksOpen((v) => !v)}
+              aria-expanded={tasksOpen}
+              aria-label={tasksOpen ? "Hide subtasks" : "Show subtasks"}
+              title={tasksOpen ? "Hide subtasks" : "Show subtasks"}
+              // -ml-2 cancels the pill's own left padding so the chevron lines
+              // up exactly with the start of the goal title above it.
+              className={`${CONTROL_PILL} -ml-2 shrink-0 text-muted-fg hover:bg-canvas hover:text-ink`}
+            >
+              <ChevronIcon
+                className={`h-3.5 w-3.5 transition-transform ${
+                  tasksOpen ? "rotate-90" : ""
+                }`}
+              />
+              <span className="tabular-nums">
+                {subtasks.length} {subtasks.length === 1 ? "task" : "tasks"}
+              </span>
+            </button>
+          )}
           <PercentChip
             percent={percent}
             editable
@@ -366,36 +369,37 @@ export function GoalCard({
         </div>
       )}
 
-      {/* progress bar */}
-      <div className="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-line">
-        <div
-          className="h-full rounded-full bg-accent transition-[width] duration-500 ease-(--ease-in-out-strong)"
-          style={{ width: `${percent}%` }}
-        />
-      </div>
+      {/* progress bar — pointless on a fresh goal with nothing to measure, so
+          it waits for a first subtask or a (manual/completed) percent. */}
+      {(subtasks.length > 0 || percent > 0) && (
+        <div className="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-line">
+          <div
+            className="h-full rounded-full bg-accent transition-[width] duration-500 ease-(--ease-in-out-strong)"
+            style={{ width: `${percent}%` }}
+          />
+        </div>
+      )}
 
-      {tasksOpen && (
+      {/* Force-open when empty: the collapse toggle is gone then, and the
+          add-subtask field must never be strandable behind a closed state. */}
+      {(tasksOpen || subtasks.length === 0) && (
         <div className="rise-in">
           {/* subtasks */}
-          <ul className="mt-4 flex flex-col gap-1">
-            {subtasks.map((s) => (
-              <SubtaskRow
-                key={s.id}
-                subtask={s}
-                team={team}
-                locked={locked}
-                onToggle={onToggle}
-                onRename={onRenameSubtask}
-                onDelete={onDeleteSubtask}
-              />
-            ))}
-            {subtasks.length === 0 && (
-              <li className="px-1 py-1 text-sm text-muted-fg">
-                No subtasks yet
-                {locked ? "." : " — add one to start tracking progress."}
-              </li>
-            )}
-          </ul>
+          {subtasks.length > 0 && (
+            <ul className="mt-4 flex flex-col gap-1">
+              {subtasks.map((s) => (
+                <SubtaskRow
+                  key={s.id}
+                  subtask={s}
+                  team={team}
+                  locked={locked}
+                  onToggle={onToggle}
+                  onRename={onRenameSubtask}
+                  onDelete={onDeleteSubtask}
+                />
+              ))}
+            </ul>
+          )}
 
           {!locked && (
             <AddSubtaskForm
