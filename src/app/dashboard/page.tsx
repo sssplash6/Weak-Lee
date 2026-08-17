@@ -279,7 +279,7 @@ export default async function DashboardPage({
           scope: true,
           deadline: true,
           completedAt: true,
-          user: { select: { name: true, email: true } },
+          user: { select: { name: true, email: true, avatar: true } },
         },
       }),
       prisma.notification.findMany({
@@ -439,16 +439,21 @@ export default async function DashboardPage({
     }));
 
   // Goals this user handed to others (both scopes), pending first.
-  const assignedByMeViews = assignedByMe.map((t) => ({
-    id: t.id,
-    title: t.title,
-    recipient: displayName(t.user),
-    scope: t.scope,
-    deadlineLabel: t.deadline ? formatYmd(toYmd(t.deadline)) : null,
-    deadline: t.deadline ? toYmd(t.deadline) : null,
-    note: t.note,
-    done: t.completedAt != null,
-  }));
+  const assignedByMeViews = assignedByMe.map((t) => {
+    const av = resolveAvatar(t.user.avatar, t.user.email ?? t.user.name);
+    return {
+      id: t.id,
+      title: t.title,
+      recipient: displayName(t.user),
+      emoji: av.emoji,
+      bg: av.bg,
+      scope: t.scope,
+      deadlineLabel: t.deadline ? formatYmd(toYmd(t.deadline)) : null,
+      deadline: t.deadline ? toYmd(t.deadline) : null,
+      note: t.note,
+      done: t.completedAt != null,
+    };
+  });
 
   const overall = weekPercent(period.goals);
   const locked = period.goalsLocked;
@@ -629,11 +634,6 @@ export default async function DashboardPage({
           {moneyNotices && (
             <div className="mt-6 flex flex-col gap-3">{moneyNotices}</div>
           )}
-          {assignedByMeViews.length > 0 && (
-            <div className="mt-6">
-              <AssignedByMe items={assignedByMeViews} />
-            </div>
-          )}
         </div>
       </aside>
 
@@ -697,8 +697,10 @@ export default async function DashboardPage({
         </div>
       )}
 
+      {/* xl:hidden, not lg — the card lives in the right sidebar now, which
+          only exists from xl up; between lg and xl it must stay inline. */}
       {assignedByMeViews.length > 0 && (
-        <div className="mb-5 lg:hidden">
+        <div className="mb-5 xl:hidden">
           <AssignedByMe items={assignedByMeViews} />
         </div>
       )}
@@ -847,6 +849,11 @@ export default async function DashboardPage({
 
       <aside className="hidden w-64 shrink-0 xl:block">
         <div className="sticky top-8">
+          {assignedByMeViews.length > 0 && (
+            <div className="mb-6">
+              <AssignedByMe items={assignedByMeViews} />
+            </div>
+          )}
           <WeekCalendar deadlines={deadlineDots} dayTasks={dayTaskCounts} />
         </div>
       </aside>
