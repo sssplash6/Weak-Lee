@@ -743,7 +743,7 @@ async function recomputeMeetingPenalties(
  */
 export async function assignTask(
   userIds: string[],
-  title: string,
+  title: string | string[],
   deadline?: string | null,
   note?: string,
   scope: "WEEKLY" | "MONTHLY" = "WEEKLY",
@@ -752,8 +752,12 @@ export async function assignTask(
   if (!isAdmin(session?.user?.email)) {
     throw new Error("Not authorized");
   }
-  const cleanTitle = title.trim().slice(0, 300);
-  if (!cleanTitle) throw new Error("A title is required.");
+  // One title or a batch — several goals can go to the same people in one
+  // assignment (they share the deadline, note, and scope).
+  const cleanTitles = (Array.isArray(title) ? title : [title])
+    .map((t) => t.trim().slice(0, 300))
+    .filter(Boolean);
+  if (cleanTitles.length === 0) throw new Error("A title is required.");
 
   // Selecting "Everyone" and a name individually must not assign twice.
   const ids = [...new Set(userIds.filter(Boolean))];
@@ -783,20 +787,29 @@ export async function assignTask(
 
   await prisma.$transaction(async (tx) => {
     await tx.assignedTask.createMany({
-      data: ids.map((userId) => ({
-        userId,
-        assignedById: session!.user.id,
-        title: cleanTitle,
-        note: cleanNote,
-        scope,
-        deadline: due,
-      })),
+      data: ids.flatMap((userId) =>
+        cleanTitles.map((t) => ({
+          userId,
+          assignedById: session!.user.id,
+          title: t,
+          note: cleanNote,
+          scope,
+          deadline: due,
+        })),
+      ),
     });
+    // One notification per person, whatever the batch size.
+    const noun = scope === "MONTHLY" ? "monthly" : "weekly";
+    const dueSuffix = due ? ` — due ${formatYmd(toYmd(due))}` : "";
     await notify(
       tx,
       ids,
       "TASK_ASSIGNED",
-      `You were assigned a ${scope === "MONTHLY" ? "monthly" : "weekly"} goal: “${cleanTitle}”${due ? ` — due ${formatYmd(toYmd(due))}` : ""}.`,
+      cleanTitles.length === 1
+        ? `You were assigned a ${noun} goal: “${cleanTitles[0]}”${dueSuffix}.`
+        : `You were assigned ${cleanTitles.length} ${noun} goals: ${cleanTitles
+            .map((t) => `“${t}”`)
+            .join(", ")}${dueSuffix}.`,
     );
   });
   revalidatePath("/admin");

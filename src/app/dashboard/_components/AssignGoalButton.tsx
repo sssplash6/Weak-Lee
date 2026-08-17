@@ -21,6 +21,10 @@ export function AssignGoalButton({
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
   const [scope, setScope] = useState<Scope>("WEEKLY");
+  // Several goals can go out in one assignment: `titles` holds the queued
+  // ones, `title` is the one being typed (it counts on submit either way, so
+  // a single goal never needs the queue at all).
+  const [titles, setTitles] = useState<string[]>([]);
   const [title, setTitle] = useState("");
   const [deadline, setDeadline] = useState("");
   const [note, setNote] = useState("");
@@ -29,7 +33,15 @@ export function AssignGoalButton({
   const [isPending, startTransition] = useTransition();
 
   const everyone = people.length > 0 && selected.length === people.length;
-  const canSubmit = selected.length > 0 && title.trim().length > 0;
+  const allTitles = [...titles, title.trim()].filter(Boolean);
+  const canSubmit = selected.length > 0 && allTitles.length > 0;
+
+  function queueTitle() {
+    const t = title.trim();
+    if (!t) return;
+    setTitles((prev) => [...prev, t]);
+    setTitle("");
+  }
 
   function togglePerson(id: string) {
     setSelected((prev) =>
@@ -71,17 +83,22 @@ export function AssignGoalButton({
       setError("Pick at least one person.");
       return;
     }
-    if (title.trim().length === 0) {
+    if (allTitles.length === 0) {
       setError("Enter a goal.");
       return;
     }
     setError(null);
     startTransition(async () => {
       try {
-        await assignTask(selected, title.trim(), deadline || null, note, scope);
-        setAssigned(`Assigned to ${describe(selected, people)}.`);
-        // The selection survives, so a second goal can go to the same people
+        await assignTask(selected, allTitles, deadline || null, note, scope);
+        setAssigned(
+          `Assigned ${
+            allTitles.length > 1 ? `${allTitles.length} goals` : ""
+          } to ${describe(selected, people)}.`.replace("  ", " "),
+        );
+        // The selection survives, so another batch can go to the same people
         // without picking them all again.
+        setTitles([]);
         setTitle("");
         setDeadline("");
         setNote("");
@@ -202,15 +219,66 @@ export function AssignGoalButton({
             ))}
           </div>
 
-          <input
-            autoFocus
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Goal — e.g. QA the release"
-            maxLength={300}
-            className="w-full rounded-lg border border-line px-3 py-2 text-sm text-ink placeholder:text-muted-fg focus:border-brand focus:outline-none"
-          />
+          {titles.length > 0 && (
+            <ul className="flex flex-col gap-1.5">
+              {titles.map((t, i) => (
+                <li
+                  key={`${t}-${i}`}
+                  className="rise-in flex items-center gap-2.5 rounded-lg border border-line bg-canvas px-3 py-1.5"
+                >
+                  <span className="shrink-0 text-xs font-bold tabular-nums text-muted-fg">
+                    {i + 1}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-sm text-ink">
+                    {t}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setTitles((prev) => prev.filter((_, j) => j !== i))
+                    }
+                    aria-label={`Remove “${t}”`}
+                    className="shrink-0 rounded px-1 text-muted-fg transition hover:text-ink"
+                  >
+                    ✕
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <div className="flex items-center gap-2">
+            <input
+              autoFocus
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              onKeyDown={(e) => {
+                // Enter queues the goal and readies the field for the next
+                // one — a single goal can skip this and just hit Assign.
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  queueTitle();
+                }
+              }}
+              placeholder={
+                titles.length > 0
+                  ? "Add another goal…"
+                  : "Goal — e.g. QA the release"
+              }
+              maxLength={300}
+              className="w-full min-w-0 flex-1 rounded-lg border border-line px-3 py-2 text-sm text-ink placeholder:text-muted-fg focus:border-brand focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={queueTitle}
+              disabled={title.trim().length === 0}
+              aria-label="Add this goal and write another"
+              className="shrink-0 rounded-lg border border-line px-3 py-2 text-sm font-semibold text-brand transition hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Add
+            </button>
+          </div>
           <label className="flex items-center gap-2 text-xs text-muted-fg">
             Due
             <input
@@ -250,7 +318,11 @@ export function AssignGoalButton({
             onClick={submit}
             className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {isPending ? "Assigning…" : "Assign"}
+            {isPending
+              ? "Assigning…"
+              : allTitles.length > 1
+                ? `Assign ${allTitles.length} goals`
+                : "Assign"}
           </button>
         </div>
       </div>
