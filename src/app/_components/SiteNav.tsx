@@ -18,11 +18,25 @@ const HIDDEN = new Set(["/", "/dashboard", "/signin", "/onboarding"]);
 /**
  * A slim persistent nav for every page that isn't the dashboard. Until now
  * the only way off a subpage was "back to dashboard"; the bar makes the main
- * sections one click away from anywhere.
+ * sections one click away from anywhere. Daily reports only exists for the
+ * people in that loop (reporters and admins), so its link is opt-in via the
+ * root layout rather than in the static list.
  */
-export function SiteNav() {
+export function SiteNav({
+  showDailyReports = false,
+}: {
+  showDailyReports?: boolean;
+}) {
   const pathname = usePathname();
   if (HIDDEN.has(pathname)) return null;
+
+  const links = showDailyReports
+    ? [
+        LINKS[0],
+        { href: "/daily-reports", label: "Daily reports" },
+        ...LINKS.slice(1),
+      ]
+    : LINKS;
 
   return (
     <nav className="border-b border-line bg-surface">
@@ -34,7 +48,7 @@ export function SiteNav() {
           freshman.academy
         </Link>
         <div className="flex items-center gap-4">
-          {LINKS.map((l) => {
+          {links.map((l) => {
             const active =
               pathname === l.href || pathname.startsWith(`${l.href}/`);
             return (

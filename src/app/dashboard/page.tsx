@@ -26,9 +26,23 @@ import {
   needsCompletionReason,
   weekPercent,
 } from "@/lib/progress";
-import { formatDateTimeTz, formatYmd, toStamp, toYmd } from "@/lib/dates";
+import {
+  formatDateTimeTz,
+  formatYmd,
+  fromYmd,
+  toStamp,
+  toYmd,
+} from "@/lib/dates";
 import { weekOpensAt } from "@/lib/lateness";
 import { reconcileSubmissionFines } from "@/lib/submissionFines";
+import { dailyReporterEmails, isDailyReporter } from "@/lib/dailyReports";
+import {
+  dayDeadline,
+  formatTimeTz,
+  isRequiredDay,
+  tashkentTodayYmd,
+} from "@/lib/dailyReportTypes";
+import { resolveAvatar } from "@/lib/avatar";
 import type { Priority } from "@/lib/priority";
 import type { DayTaskCount } from "@/lib/dayTasks";
 import { GoalCard } from "./_components/GoalCard";
@@ -50,6 +64,11 @@ import { SubmitReminder } from "./_components/SubmitReminder";
 import { BonusNotice } from "./_components/BonusNotice";
 import { AssignedTasks } from "./_components/AssignedTasks";
 import { AssignGoalButton } from "./_components/AssignGoalButton";
+import { DailyReportPrompt } from "./_components/DailyReportPrompt";
+import {
+  TodaysReports,
+  type TodaysReportRow,
+} from "./_components/TodaysReports";
 import { AssignedByMe } from "./_components/AssignedByMe";
 import { PeriodToggle } from "./_components/PeriodToggle";
 import { PENALTY_LABEL } from "@/lib/penalties";
@@ -120,6 +139,56 @@ export default async function DashboardPage({
   const updatesSince = new Date(Date.now() - 48 * 60 * 60 * 1000);
 
   const now = new Date();
+
+  // Daily-report surfaces: reporters get their own way in (a status row under
+  // the period toggle — the dashboard hides the site nav), admins get today's
+  // reports at a glance in the sidebar.
+  const reportDayYmd = tashkentTodayYmd(now);
+  const reportDay = fromYmd(reportDayYmd);
+  const dailyReporter = isDailyReporter(session!.user.email);
+  const ownTodayReport = dailyReporter
+    ? await prisma.dailyReport.findUnique({
+        where: { userId_day: { userId, day: reportDay } },
+        select: { submittedAt: true },
+      })
+    : null;
+  let todaysReportRows: TodaysReportRow[] = [];
+  if (isAdmin(session!.user.email)) {
+    const reporterOrder = dailyReporterEmails();
+    const reporters = await prisma.user.findMany({
+      where: { email: { in: reporterOrder, mode: "insensitive" } },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        avatar: true,
+        dailyReports: {
+          where: { day: reportDay },
+          select: { content: true, submittedAt: true },
+        },
+      },
+    });
+    const rank = (e: string | null) =>
+      reporterOrder.indexOf((e ?? "").toLowerCase());
+    todaysReportRows = [...reporters]
+      .sort((a, b) => rank(a.email) - rank(b.email))
+      .map((r) => {
+        const report = r.dailyReports[0] ?? null;
+        const av = resolveAvatar(r.avatar, r.email ?? r.name);
+        return {
+          id: r.id,
+          name: displayName(r),
+          emoji: av.emoji,
+          bg: av.bg,
+          timeLabel: report ? formatTimeTz(report.submittedAt) : null,
+          late:
+            report != null &&
+            report.submittedAt.getTime() > dayDeadline(reportDay).getTime(),
+          optionalDay: !isRequiredDay(reportDay),
+          excerpt: report?.content.slice(0, 200) ?? null,
+        };
+      });
+  }
 
   // Window of day-task markers to load for the calendar. It renders one month
   // back to thirteen forward (see WeekCalendar); this is deliberately wider so
@@ -524,6 +593,11 @@ export default async function DashboardPage({
       <div className="mx-auto flex w-full max-w-6xl flex-1 gap-6 px-4 py-8">
       <aside className="hidden w-64 shrink-0 lg:block">
         <div className="sticky top-8">
+          {todaysReportRows.length > 0 && (
+            <div className="mb-6">
+              <TodaysReports rows={todaysReportRows} />
+            </div>
+          )}
           <WeekArchive
             weeks={archive}
             periodNoun={view}
@@ -579,6 +653,23 @@ export default async function DashboardPage({
       </header>
 
       <PeriodToggle view={view} />
+
+      {dailyReporter && (
+        <div className="mb-5">
+          <DailyReportPrompt
+            sentTimeLabel={
+              ownTodayReport ? formatTimeTz(ownTodayReport.submittedAt) : null
+            }
+            optionalDay={!isRequiredDay(reportDay)}
+          />
+        </div>
+      )}
+
+      {todaysReportRows.length > 0 && (
+        <div className="mb-5 lg:hidden">
+          <TodaysReports rows={todaysReportRows} />
+        </div>
+      )}
 
       {moneyNotices && (
         <div

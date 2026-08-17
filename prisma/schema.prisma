@@ -46,6 +46,7 @@ model User {
   feedback       Feedback[]
 
   dayTasks         DayTask[]
+  dailyReports     DailyReport[]
 
   penalties        Penalty[] @relation("PenaltiesReceived")
   penaltiesIssued  Penalty[] @relation("PenaltiesIssued")
@@ -237,6 +238,28 @@ enum NotificationType {
 // bonuses, task assignments, and colleague reports (see lib/notifications.ts),
 // and surfaced in the dashboard's "Last 48 hours" updates zone. `readAt` is
 // set when the user marks their notifications read — it drives the bell badge.
+// One person's daily report — a short note on the day, due by that day's
+// midnight (Tashkent). Weekdays are expected, weekends optional; who reports
+// and how a day's status is derived lives in lib/dailyReports.ts. The content
+// stays editable after sending: `submittedAt` keeps the FIRST send (on-time is
+// judged against it, mirroring Week.submittedAt), `lastSentAt` the most recent
+// send, and each resend re-notifies the recipient.
+model DailyReport {
+  id     String @id @default(cuid())
+  userId String
+  // The Tashkent calendar day the report is for, at UTC midnight — the same
+  // date-only convention as goal deadlines.
+  day         DateTime
+  content     String
+  submittedAt DateTime @default(now())
+  lastSentAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, day])
+  @@index([day])
+}
+
 model Notification {
   id        String           @id @default(cuid())
   userId    String

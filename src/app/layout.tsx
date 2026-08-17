@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { auth } from "@/auth";
+import { isAdmin } from "@/lib/admin";
+import { isDailyReporter } from "@/lib/dailyReports";
 import { SiteNav } from "./_components/SiteNav";
 import { Toaster } from "./_components/Toaster";
 import "./globals.css";
@@ -27,11 +30,17 @@ export const metadata: Metadata = {
 // flash. `suppressHydrationWarning` on <html> lets this win over the SSR default.
 const themeScript = `(function(){try{var t=localStorage.getItem("theme");if(t!=="light"&&t!=="dark"){t=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"}document.documentElement.setAttribute("data-theme",t)}catch(e){}})()`;
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Whether to show the "Daily reports" nav entry: reporters write there,
+  // admins read there, nobody else has business on the page.
+  const session = await auth().catch(() => null);
+  const email = session?.user?.email;
+  const showDailyReports = isDailyReporter(email) || isAdmin(email);
+
   return (
     <html
       lang="en"
@@ -43,7 +52,7 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body className="min-h-full flex flex-col">
-        <SiteNav />
+        <SiteNav showDailyReports={showDailyReports} />
         {children}
         <Toaster />
       </body>
