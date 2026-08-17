@@ -20,6 +20,7 @@ export function AssignGoalButton({
 }) {
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
+  const [query, setQuery] = useState("");
   const [scope, setScope] = useState<Scope>("WEEKLY");
   // Several goals can go out in one assignment: `titles` holds the queued
   // ones, `title` is the one being typed (it counts on submit either way, so
@@ -156,43 +157,67 @@ export function AssignGoalButton({
                   : `${selected.length} of ${people.length} selected`}
               </span>
             </div>
-            {/* Chips rather than a multi-select: the whole team is visible at a
-                glance, and picking several needs no modifier keys. Capped in
-                height so a growing team scrolls instead of pushing the goal
-                field off the modal. */}
-            <div className="mt-1.5 flex max-h-32 flex-wrap gap-1.5 overflow-y-auto">
-              {people.length > 1 && (
-                <button
-                  type="button"
+            {/* Search instead of a pill wall — the team outgrew a glance.
+                Matches toggle on click; picked people sit above the field as
+                removable chips so a selection filtered out of the list never
+                goes invisible. */}
+            {selected.length > 0 && (
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {selected.map((id) => {
+                  const person = people.find((p) => p.id === id);
+                  if (!person) return null;
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => togglePerson(id)}
+                      aria-label={`Remove ${person.name}`}
+                      className="inline-flex items-center gap-1.5 rounded-full border border-brand bg-brand px-2.5 py-1 text-xs font-medium text-white transition hover:bg-brand-dark"
+                    >
+                      {person.name}
+                      <span aria-hidden="true">✕</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            <input
+              autoFocus
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search teammates…"
+              className="mt-1.5 w-full rounded-lg border border-line px-3 py-2 text-sm text-ink placeholder:text-muted-fg focus:border-brand focus:outline-none"
+            />
+            <div className="mt-1.5 max-h-36 overflow-y-auto rounded-lg border border-line">
+              {query.trim() === "" && people.length > 1 && (
+                <PersonRow
+                  label="Everyone"
+                  on={everyone}
+                  bold
                   onClick={toggleEveryone}
-                  aria-pressed={everyone}
-                  className={`rounded-full border px-2.5 py-1 text-xs font-semibold transition ${
-                    everyone
-                      ? "border-brand bg-brand text-white"
-                      : "border-line text-muted-fg hover:text-ink"
-                  }`}
-                >
-                  Everyone
-                </button>
+                />
               )}
-              {people.map((p) => {
-                const on = selected.includes(p.id);
-                return (
-                  <button
+              {people
+                .filter((p) =>
+                  p.name.toLowerCase().includes(query.trim().toLowerCase()),
+                )
+                .map((p) => (
+                  <PersonRow
                     key={p.id}
-                    type="button"
+                    label={p.name}
+                    on={selected.includes(p.id)}
                     onClick={() => togglePerson(p.id)}
-                    aria-pressed={on}
-                    className={`rounded-full border px-2.5 py-1 text-xs font-medium transition ${
-                      on
-                        ? "border-brand bg-brand text-white"
-                        : "border-line text-muted-fg hover:text-ink"
-                    }`}
-                  >
-                    {p.name}
-                  </button>
-                );
-              })}
+                  />
+                ))}
+              {people.every(
+                (p) =>
+                  !p.name.toLowerCase().includes(query.trim().toLowerCase()),
+              ) && (
+                <p className="px-3 py-2 text-xs text-muted-fg">
+                  {`No one matches “${query.trim()}”.`}
+                </p>
+              )}
             </div>
           </div>
 
@@ -249,7 +274,6 @@ export function AssignGoalButton({
 
           <div className="flex items-center gap-2">
             <input
-              autoFocus
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -346,6 +370,37 @@ function describe(
     return `everyone (${selected.length} people)`;
   }
   return `${selected.length} people`;
+}
+
+// One row in the teammate search results; a check marks the selected.
+function PersonRow({
+  label,
+  on,
+  bold = false,
+  onClick,
+}: {
+  label: string;
+  on: boolean;
+  bold?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={on}
+      className="flex w-full items-center justify-between gap-2 border-t border-line px-3 py-1.5 text-sm transition first:border-t-0 hover:bg-canvas"
+    >
+      <span className={`min-w-0 truncate ${bold ? "font-semibold" : ""} text-ink`}>
+        {label}
+      </span>
+      {on && (
+        <span className="shrink-0 font-bold text-brand" aria-hidden="true">
+          ✓
+        </span>
+      )}
+    </button>
+  );
 }
 
 function PlusIcon({ className }: { className?: string }) {
