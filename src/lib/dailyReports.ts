@@ -39,3 +39,40 @@ export function dailyReportRecipient(): string {
     process.env.DAILY_REPORT_RECIPIENT ?? BUILT_IN_RECIPIENT
   ).toLowerCase();
 }
+
+// What each reporter goes by. Profile names mix given-first and surname-first
+// ("Shukhratov Shokhrukh" is surname-first), so the given name can't be
+// derived from the name string — report surfaces show these instead.
+// Env-added reporters fall back to the first word of their profile name.
+const REPORTER_FIRST_NAMES: Record<string, string> = {
+  "sanjar@freshman.academy": "Sanjar",
+  "sega@freshman.academy": "Sega",
+  "classes@freshman.academy": "Shokhrukh",
+  "khusanboy@freshman.academy": "Khusanboy",
+  "banu@freshman.academy": "Banu",
+  "tech@freshman.academy": "Samandar",
+};
+
+/** The name daily-report surfaces call this person by. */
+export function dailyReporterFirstName(
+  email: string | null | undefined,
+  profileName: string | null | undefined,
+): string {
+  return (
+    REPORTER_FIRST_NAMES[email?.toLowerCase() ?? ""] ??
+    profileName?.trim().split(/\s+/)[0] ??
+    email ??
+    "Someone"
+  );
+}
+
+/**
+ * Whether this account is the reports' reader. The review calendar, the day
+ * panel, and the dashboard "Today's reports" card exist for the recipient
+ * alone — other admins have no window into the reports.
+ */
+export function isDailyReportRecipient(
+  email: string | null | undefined,
+): boolean {
+  return !!email && email.toLowerCase() === dailyReportRecipient();
+}

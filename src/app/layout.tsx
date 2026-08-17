@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { auth } from "@/auth";
-import { isAdmin } from "@/lib/admin";
-import { isDailyReporter } from "@/lib/dailyReports";
+import { isDailyReporter, isDailyReportRecipient } from "@/lib/dailyReports";
 import { SiteNav } from "./_components/SiteNav";
 import { Toaster } from "./_components/Toaster";
 import "./globals.css";
@@ -36,10 +35,11 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   // Whether to show the "Daily reports" nav entry: reporters write there,
-  // admins read there, nobody else has business on the page.
+  // the recipient reads there, nobody else has business on the page.
   const session = await auth().catch(() => null);
   const email = session?.user?.email;
-  const showDailyReports = isDailyReporter(email) || isAdmin(email);
+  const showDailyReports =
+    isDailyReporter(email) || isDailyReportRecipient(email);
 
   return (
     <html

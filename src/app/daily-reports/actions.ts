@@ -4,7 +4,11 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { notify } from "@/lib/notifications";
-import { dailyReportRecipient, isDailyReporter } from "@/lib/dailyReports";
+import {
+  dailyReporterFirstName,
+  dailyReportRecipient,
+  isDailyReporter,
+} from "@/lib/dailyReports";
 import {
   DAILY_REPORTS_EPOCH,
   MAX_DAILY_REPORT,
@@ -52,7 +56,7 @@ export async function sendDailyReport(
     throw new Error(`Keep it under ${MAX_DAILY_REPORT} characters`);
   }
 
-  const reporterName = session.user.name ?? email ?? "A reporter";
+  const reporterName = dailyReporterFirstName(email, session.user.name);
   const recipient = await prisma.user.findFirst({
     where: { email: { equals: dailyReportRecipient(), mode: "insensitive" } },
     select: { id: true },

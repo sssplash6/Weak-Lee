@@ -35,7 +35,12 @@ import {
 } from "@/lib/dates";
 import { weekOpensAt } from "@/lib/lateness";
 import { reconcileSubmissionFines } from "@/lib/submissionFines";
-import { dailyReporterEmails, isDailyReporter } from "@/lib/dailyReports";
+import {
+  dailyReporterEmails,
+  dailyReporterFirstName,
+  isDailyReporter,
+  isDailyReportRecipient,
+} from "@/lib/dailyReports";
 import {
   dayDeadline,
   formatTimeTz,
@@ -152,8 +157,9 @@ export default async function DashboardPage({
         select: { submittedAt: true },
       })
     : null;
+  const reportRecipient = isDailyReportRecipient(session!.user.email);
   let todaysReportRows: TodaysReportRow[] = [];
-  if (isAdmin(session!.user.email)) {
+  if (reportRecipient) {
     const reporterOrder = dailyReporterEmails();
     const reporters = await prisma.user.findMany({
       where: { email: { in: reporterOrder, mode: "insensitive" } },
@@ -177,7 +183,7 @@ export default async function DashboardPage({
         const av = resolveAvatar(r.avatar, r.email ?? r.name);
         return {
           id: r.id,
-          name: displayName(r),
+          name: dailyReporterFirstName(r.email, r.name),
           emoji: av.emoji,
           bg: av.bg,
           timeLabel: report ? formatTimeTz(report.submittedAt) : null,
@@ -185,7 +191,7 @@ export default async function DashboardPage({
             report != null &&
             report.submittedAt.getTime() > dayDeadline(reportDay).getTime(),
           optionalDay: !isRequiredDay(reportDay),
-          excerpt: report?.content.slice(0, 200) ?? null,
+          content: report?.content ?? null,
         };
       });
   }
@@ -662,7 +668,7 @@ export default async function DashboardPage({
         </div>
       </header>
 
-      <PeriodToggle view={view} />
+      <PeriodToggle view={view} showDaily={dailyReporter || reportRecipient} />
 
       {dailyReporter && (
         <div className="mb-5">

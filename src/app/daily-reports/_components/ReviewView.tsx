@@ -11,10 +11,14 @@ import {
   tashkentTodayYmd,
   type DailyReportStatus,
 } from "@/lib/dailyReportTypes";
-import { dailyReporterEmails } from "@/lib/dailyReports";
+import {
+  dailyReporterEmails,
+  dailyReporterFirstName,
+} from "@/lib/dailyReports";
 import { resolveAvatar } from "@/lib/avatar";
 import { BackLink } from "@/app/_components/BackLink";
 import { ChevronIcon } from "@/app/dashboard/_components/icons";
+import { DayReportRow } from "./DayReportRow";
 
 const DAY_MS = 86_400_000;
 const MONTH_NAMES = [
@@ -179,8 +183,10 @@ export async function ReviewView({
                     {Number(ymd.slice(8))}
                   </span>
                 );
+                // Six reporters don't fit one row in a cell — wrap into rows
+                // of three inside the cell instead of spilling past its edge.
                 const dotRow = (
-                  <span className="flex h-1.5 items-center justify-center gap-[3px]">
+                  <span className="flex min-h-1.5 max-w-6 flex-wrap items-center justify-center gap-[3px]">
                     {dots.map((s, j) => (
                       <span
                         key={j}
@@ -255,56 +261,27 @@ export async function ReviewView({
                 report.lastSentAt.getTime() - report.submittedAt.getTime() >
                   60_000;
               return (
-                <article
+                <DayReportRow
                   key={r.id}
-                  className={`px-4 py-4 sm:px-5 ${i > 0 ? "border-t border-line" : ""}`}
-                >
-                  <div className="flex items-center gap-3">
-                    <span
-                      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line text-base ${avatar.bg}`}
-                      aria-hidden="true"
-                    >
-                      {avatar.emoji}
-                    </span>
-                    <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">
-                      {r.name ?? r.email}
-                    </span>
-                    <span className="shrink-0 text-xs">
-                      {report ? (
-                        <>
-                          <span
-                            className={
-                              status === "late"
-                                ? "font-medium text-chart-warn"
-                                : "text-muted-fg"
-                            }
-                          >
-                            {formatTimeTz(report.submittedAt)}
-                            {status === "late" && " · after midnight"}
-                          </span>
-                          {edited && (
-                            <span className="text-muted-fg">
-                              {` · edited ${formatTimeTz(report.lastSentAt)}`}
-                            </span>
-                          )}
-                        </>
-                      ) : status === "missed" ? (
-                        <span className="font-medium text-chart-bad">
-                          Not sent
-                        </span>
-                      ) : status === "pending" ? (
-                        <span className="text-muted-fg">Not sent yet</span>
-                      ) : (
-                        <span className="text-muted-fg">—</span>
-                      )}
-                    </span>
-                  </div>
-                  {report && (
-                    <p className="mt-2.5 whitespace-pre-wrap break-words pl-11 text-sm leading-relaxed text-ink">
-                      {report.content}
-                    </p>
-                  )}
-                </article>
+                  first={i === 0}
+                  row={{
+                    id: r.id,
+                    name: dailyReporterFirstName(r.email, r.name),
+                    emoji: avatar.emoji,
+                    bg: avatar.bg,
+                    status:
+                      status === "sent" ||
+                      status === "late" ||
+                      status === "missed" ||
+                      status === "pending"
+                        ? status
+                        : "none",
+                    timeLabel: report ? formatTimeTz(report.submittedAt) : null,
+                    editedLabel:
+                      report && edited ? formatTimeTz(report.lastSentAt) : null,
+                    content: report?.content ?? null,
+                  }}
+                />
               );
             })}
             {reporters.length === 0 && (
