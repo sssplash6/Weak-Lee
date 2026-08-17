@@ -9,6 +9,8 @@ const BUILT_IN_REPORTERS = [
   "sega@freshman.academy",
   "classes@freshman.academy",
   "khusanboy@freshman.academy",
+  "banu@freshman.academy",
+  "tech@freshman.academy",
 ];
 
 const BUILT_IN_RECIPIENT = "valera@freshman.academy";

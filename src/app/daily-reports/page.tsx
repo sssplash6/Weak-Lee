@@ -21,18 +21,28 @@ export default async function DailyReportsPage({
   const session = await auth();
   if (!session?.user?.id) redirect("/signin");
   const email = session.user.email;
+  const reporter = isDailyReporter(email);
+  const admin = isAdmin(email);
+  const sp = await searchParams;
 
-  if (isDailyReporter(email)) {
-    return <ReporterView userId={session.user.id} />;
-  }
-  if (isAdmin(email)) {
-    const sp = await searchParams;
+  // An admin who also reports (e.g. tech@) lands on their composer; the team
+  // view stays one click away (?view=review) and any calendar navigation
+  // (?m/?d) keeps them on it.
+  const wantsReview =
+    sp.view === "review" ||
+    typeof sp.m === "string" ||
+    typeof sp.d === "string";
+
+  if (admin && (wantsReview || !reporter)) {
     return (
       <ReviewView
         monthParam={typeof sp.m === "string" ? sp.m : undefined}
         dayParam={typeof sp.d === "string" ? sp.d : undefined}
       />
     );
+  }
+  if (reporter) {
+    return <ReporterView userId={session.user.id} showReviewLink={admin} />;
   }
   redirect("/dashboard");
 }

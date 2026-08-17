@@ -24,7 +24,7 @@ export function TodaysReports({ rows }: { rows: TodaysReportRow[] }) {
         Today&rsquo;s reports
       </h2>
       <Link
-        href="/daily-reports"
+        href="/daily-reports?view=review"
         className="mt-3 block rounded-xl border border-line bg-surface px-4 py-1 transition hover:bg-canvas"
       >
         {rows.map((r) => (

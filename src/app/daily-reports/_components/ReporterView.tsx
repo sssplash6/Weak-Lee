@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { fromYmd, toYmd } from "@/lib/dates";
 import {
@@ -20,7 +21,15 @@ const HISTORY_DAYS = 14;
  * this week's rhythm beside it, and the recent record below — every day
  * editable and resendable, including writing a missed one late.
  */
-export async function ReporterView({ userId }: { userId: string }) {
+export async function ReporterView({
+  userId,
+  showReviewLink = false,
+}: {
+  userId: string;
+  // For reporter-admins: a way over to the team calendar they'd otherwise
+  // lose to the composer-first routing.
+  showReviewLink?: boolean;
+}) {
   const now = new Date();
   const todayYmd = tashkentTodayYmd(now);
   const today = fromYmd(todayYmd);
@@ -87,7 +96,15 @@ export async function ReporterView({ userId }: { userId: string }) {
             straight to Valera.
           </p>
         </div>
-        <div className="shrink-0">
+        <div className="flex shrink-0 items-center gap-2">
+          {showReviewLink && (
+            <Link
+              href="/daily-reports?view=review"
+              className="inline-flex items-center rounded-xl border border-line bg-surface px-4 py-2 text-sm font-semibold text-brand shadow-sm transition hover:bg-canvas"
+            >
+              Team view
+            </Link>
+          )}
           <BackLink href="/dashboard" label="Dashboard" />
         </div>
       </header>
