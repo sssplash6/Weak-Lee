@@ -543,6 +543,16 @@ export default async function DashboardPage({
   const inboxGoals = goals.filter((g) => g.receivedFrom);
   const ownGoals = goals.filter((g) => !g.receivedFrom);
 
+  // Sharing a single subtask auto-creates (or reuses) a same-titled goal on
+  // the recipient's list (see shareSubtask), which otherwise blends in with
+  // goals they wrote themselves. Anything carrying a teammate's subtask gets
+  // its own "Shared goals" section below the main list; goals that are wholly
+  // the user's stay up top.
+  const hasSharedIn = (g: (typeof goals)[number]) =>
+    g.subtasks.some((s) => s.receivedFrom);
+  const sharedGoals = ownGoals.filter(hasSharedIn);
+  const myGoals = ownGoals.filter((g) => !hasSharedIn(g));
+
   const team = members.map((m) => ({ id: m.id, name: displayName(m) }));
 
   const archive = archivedPeriods.map((p) => ({
@@ -725,7 +735,7 @@ export default async function DashboardPage({
       />
 
       <section className="flex flex-col gap-4">
-        {ownGoals.map((goal, i) => (
+        {myGoals.map((goal, i) => (
           <GoalCard
             key={goal.id}
             goal={goal}
@@ -739,18 +749,45 @@ export default async function DashboardPage({
 
         {!locked && (
           <AddGoalCard
-            nextIndex={ownGoals.length + 1}
+            nextIndex={myGoals.length + 1}
             todayYmd={todayYmd}
             scope={view}
           />
         )}
 
-        {ownGoals.length === 0 && (
+        {myGoals.length === 0 && (
           <p className="px-1 text-sm text-muted-fg">
             Add your goals for the {view}, then break each one into subtasks.
           </p>
         )}
       </section>
+
+      {sharedGoals.length > 0 && (
+        <section className="mt-8">
+          <div className="mb-3 flex items-center gap-2">
+            <h2 className="text-sm font-semibold text-ink">Shared goals</h2>
+            <span className="rounded-full bg-canvas px-2 py-0.5 text-[11px] font-bold tabular-nums text-muted-fg">
+              {sharedGoals.length}
+            </span>
+            <span className="text-xs text-muted-fg">
+              with subtasks from your team
+            </span>
+          </div>
+          <div className="flex flex-col gap-4">
+            {sharedGoals.map((goal, i) => (
+              <GoalCard
+                key={goal.id}
+                goal={goal}
+                index={i + 1}
+                team={team}
+                todayYmd={todayYmd}
+                nowStamp={nowStamp}
+                locked={locked}
+              />
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Both sidebars are hidden on narrow screens (archive below lg, calendar
           below xl); surface their content inline so nothing is lost on mobile. */}
