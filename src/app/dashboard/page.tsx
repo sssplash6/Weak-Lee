@@ -619,6 +619,9 @@ export default async function DashboardPage({
               <TodaysReports rows={todaysReportRows} />
             </div>
           )}
+          {moneyNotices && (
+            <div className="mb-6 flex flex-col gap-3">{moneyNotices}</div>
+          )}
           <WeekArchive
             weeks={archive}
             periodNoun={view}
@@ -631,9 +634,6 @@ export default async function DashboardPage({
             todayYmd={todayYmd}
             nowStamp={nowStamp}
           />
-          {moneyNotices && (
-            <div className="mt-6 flex flex-col gap-3">{moneyNotices}</div>
-          )}
         </div>
       </aside>
 
