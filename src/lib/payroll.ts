@@ -67,6 +67,28 @@ export function canViewPayrollStats(email: string | null | undefined): boolean {
   return isAdmin(email) || isPayrollAdmin(email) || isFinance(email);
 }
 
+type SessionLike = {
+  user?: { id?: string; email?: string | null };
+} | null;
+
+/** Throw unless the signed-in user is an admin-stage reviewer; returns their id. */
+export async function requirePayrollAdmin(session: SessionLike): Promise<string> {
+  const id = session?.user?.id;
+  if (!id || !isPayrollAdmin(session?.user?.email)) {
+    throw new Error("Not authorized");
+  }
+  return id;
+}
+
+/** Throw unless the signed-in user is a finance-stage reviewer; returns their id. */
+export async function requireFinance(session: SessionLike): Promise<string> {
+  const id = session?.user?.id;
+  if (!id || !isFinance(session?.user?.email)) {
+    throw new Error("Not authorized");
+  }
+  return id;
+}
+
 /** User rows for a list of reviewer emails (those never signed in are skipped). */
 export async function reviewerUsers(
   db: Db,

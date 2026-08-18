@@ -66,6 +66,25 @@ export function paymentSummary(
   return "Cash";
 }
 
+/** The unmasked form, for the people who actually move the money:
+ * "UzCard · 8600 1234 1234 1234 · NAME", "Wise · a@b.c", or "Cash". */
+export function paymentFull(
+  method: PayrollMethod,
+  details: PaymentDetails,
+): string {
+  if (method === "UZCARD") {
+    const grouped = (details.cardNumber ?? "")
+      .replace(/\D/g, "")
+      .replace(/(.{4})/g, "$1 ")
+      .trim();
+    return ["UzCard", grouped, details.cardHolder].filter(Boolean).join(" · ");
+  }
+  if (method === "WISE") {
+    return ["Wise", details.wiseEmail].filter(Boolean).join(" · ");
+  }
+  return "Cash";
+}
+
 /** The one formula: base + bonuses − fines + expenses. Shown, not just stored. */
 export function computeNet(t: {
   baseSalary: number;

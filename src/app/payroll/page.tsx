@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { assertApproved } from "@/lib/approval";
@@ -11,6 +12,7 @@ import {
   expireLapsedSubmissions,
   formatTashkent,
   inFlightSubmission,
+  isPayrollAdmin,
   pullLedgerSnapshot,
   reconcilePayrollReminders,
 } from "@/lib/payroll";
@@ -244,6 +246,17 @@ export default async function PayrollPage() {
         </div>
         <BackLink href="/dashboard" label="Dashboard" />
       </header>
+
+      {isPayrollAdmin(me.email) && (
+        <div className="-mt-2 mb-5 flex flex-wrap gap-2">
+          <Link
+            href="/payroll/review"
+            className="whitespace-nowrap rounded-xl border border-line bg-surface px-4 py-2 text-sm font-semibold text-brand shadow-sm transition hover:bg-canvas"
+          >
+            Review queue
+          </Link>
+        </div>
+      )}
 
       {canResubmit && snapshot && current && current.resubmitDeadline && (
         <PayrollForm
