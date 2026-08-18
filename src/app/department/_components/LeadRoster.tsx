@@ -151,7 +151,6 @@ function AssignForm({
 }) {
   const [title, setTitle] = useState("");
   const [deadline, setDeadline] = useState("");
-  const [scope, setScope] = useState<"WEEKLY" | "MONTHLY">("WEEKLY");
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -164,7 +163,9 @@ function AssignForm({
     setError(null);
     startTransition(async () => {
       try {
-        await assignTask([member.id], title, deadline || null, note, scope);
+        // Always a weekly goal — leads run the week; monthly assignments
+        // stay an admin thing.
+        await assignTask([member.id], title, deadline || null, note, "WEEKLY");
         onDone();
       } catch {
         setError("Couldn't assign it.");
@@ -189,15 +190,6 @@ function AssignForm({
           maxLength={300}
           className="min-w-0 flex-1 rounded-lg border border-line px-3 py-1.5 text-sm text-ink placeholder:text-muted-fg focus:border-brand focus:outline-none"
         />
-        <select
-          value={scope}
-          onChange={(e) => setScope(e.target.value === "MONTHLY" ? "MONTHLY" : "WEEKLY")}
-          aria-label="Weekly or monthly goal"
-          className="shrink-0 rounded-lg border border-line bg-surface px-2 py-1.5 text-sm text-ink focus:border-brand focus:outline-none"
-        >
-          <option value="WEEKLY">Weekly</option>
-          <option value="MONTHLY">Monthly</option>
-        </select>
         <label className="flex shrink-0 items-center gap-1.5 text-sm">
           <span className="text-xs text-muted-fg">Due</span>
           <input
