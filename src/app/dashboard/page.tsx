@@ -37,6 +37,7 @@ import {
 } from "@/lib/dates";
 import { weekOpensAt } from "@/lib/lateness";
 import { reconcileSubmissionFines } from "@/lib/submissionFines";
+import { reconcilePayrollReminders } from "@/lib/payroll";
 import {
   dailyReporterEmails,
   dailyReporterFirstName,
@@ -133,6 +134,11 @@ export default async function DashboardPage({
   // issues/updates their fine so it shows on this very load. Idempotent and
   // best-effort — never block the dashboard on it.
   await reconcileSubmissionFines({ userId }).catch(() => {});
+
+  // Fire the monthly payroll filing reminder when its 09:00 slot has passed —
+  // the same lazy no-cron pattern; claims once per period, so this is a cheap
+  // read on every load after that. Best-effort like the sweep above.
+  await reconcilePayrollReminders().catch(() => {});
 
   // Backfill a unique avatar for users created before avatars existed.
   const avatar =

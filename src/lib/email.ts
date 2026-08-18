@@ -15,6 +15,9 @@ export async function sendEmail(opts: {
   to: string;
   subject: string;
   text: string;
+  /** Optional file attachments (e.g. the payroll invoice PDF). Bytes are
+   * base64-encoded into the JSON body, per Resend's HTTP API. */
+  attachments?: { filename: string; bytes: Uint8Array }[];
 }): Promise<void> {
   const key = process.env.RESEND_API_KEY;
   if (!key) return; // keys not configured yet — feature stays dormant
@@ -31,6 +34,14 @@ export async function sendEmail(opts: {
         to: [opts.to],
         subject: opts.subject,
         text: opts.text,
+        ...(opts.attachments && opts.attachments.length > 0
+          ? {
+              attachments: opts.attachments.map((a) => ({
+                filename: a.filename,
+                content: Buffer.from(a.bytes).toString("base64"),
+              })),
+            }
+          : {}),
       }),
     });
     if (!res.ok) {

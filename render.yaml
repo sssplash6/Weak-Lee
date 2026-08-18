@@ -51,3 +51,11 @@ services:
         sync: false
       - key: RESEND_FROM
         sync: false
+      # Optional: ADD extra payroll reviewers (comma-separated emails) on top
+      # of the built-ins — admin stage tech@ + shakhzod@, finance stage
+      # valera@ (see lib/payroll.ts). Mostly for exercising the queues as a
+      # test account; production runs fine with neither set.
+      - key: PAYROLL_ADMIN_EMAILS
+        sync: false
+      - key: PAYROLL_FINANCE_EMAILS
+        sync: false
