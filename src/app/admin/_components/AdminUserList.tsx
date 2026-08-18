@@ -835,7 +835,7 @@ function FixWeekButton({
               setConfirming(false);
             })
           }
-          className="rounded bg-brand px-2 py-1 font-medium text-white transition hover:bg-brand-dark disabled:opacity-50"
+          className="whitespace-nowrap rounded bg-brand px-2 py-1 font-medium text-white transition hover:bg-brand-dark disabled:opacity-50"
           title={`Bring them back from ${aheadLabel} to the current week (goals kept)`}
         >
           {isPending ? "Moving…" : "Move to this week"}
@@ -856,7 +856,7 @@ function FixWeekButton({
     <button
       type="button"
       onClick={() => setConfirming(true)}
-      className="shrink-0 rounded-lg border border-orange-200 px-2.5 py-1 text-xs font-medium text-orange-700 transition hover:bg-orange-50"
+      className="shrink-0 whitespace-nowrap rounded-lg border border-orange-200 px-2.5 py-1 text-xs font-medium text-orange-700 transition hover:bg-orange-50"
       title={`They're on ${aheadLabel} — move them back to the current week (goals kept)`}
     >
       Fix week

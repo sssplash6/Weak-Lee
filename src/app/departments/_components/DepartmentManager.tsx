@@ -115,7 +115,7 @@ function CreateDepartmentForm() {
           type="button"
           disabled={isPending || name.trim() === ""}
           onClick={submit}
-          className="shrink-0 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-50"
+          className="shrink-0 whitespace-nowrap rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isPending ? "Adding…" : "Add department"}
         </button>
@@ -284,7 +284,7 @@ function DeleteDepartmentButton({ department: d }: { department: DepartmentView 
           onClick={() =>
             startTransition(async () => void (await deleteDepartment(d.id)))
           }
-          className="rounded bg-red-500 px-2 py-1 font-medium text-white transition hover:bg-red-600 disabled:opacity-50"
+          className="whitespace-nowrap rounded bg-red-500 px-2 py-1 font-medium text-white transition hover:bg-red-600 disabled:opacity-50"
           title={
             d.people.length > 0
               ? `${d.people.length} ${d.people.length === 1 ? "seat goes" : "seats go"} away — the people keep their accounts and other departments`
@@ -385,7 +385,7 @@ function MembershipRow({
             ? "Member here: no expectations from this seat"
             : "Lead here: expected at Monday meetings and to submit weekly/monthly goals"
         }
-        className="shrink-0 rounded-lg border border-line px-2.5 py-1 text-xs font-medium text-muted-fg transition hover:bg-canvas hover:text-ink disabled:opacity-50"
+        className="shrink-0 whitespace-nowrap rounded-lg border border-line px-2.5 py-1 text-xs font-medium text-muted-fg transition hover:bg-canvas hover:text-ink disabled:opacity-50"
       >
         {isPending ? "…" : p.lead ? "Make member" : "Make lead"}
       </button>
@@ -395,7 +395,7 @@ function MembershipRow({
         disabled={isPending}
         onClick={() => run(() => removeMembership(p.id, departmentId))}
         title="Remove from this department (their other departments stay)"
-        className="shrink-0 rounded-lg border border-line px-2.5 py-1 text-xs font-medium text-muted-fg transition hover:bg-canvas hover:text-ink disabled:opacity-50"
+        className="shrink-0 whitespace-nowrap rounded-lg border border-line px-2.5 py-1 text-xs font-medium text-muted-fg transition hover:bg-canvas hover:text-ink disabled:opacity-50"
       >
         Remove
       </button>

@@ -100,7 +100,7 @@ export async function ReporterView({
           {showReviewLink && (
             <Link
               href="/daily-reports?view=review"
-              className="inline-flex items-center rounded-xl border border-line bg-surface px-4 py-2 text-sm font-semibold text-brand shadow-sm transition hover:bg-canvas"
+              className="inline-flex items-center whitespace-nowrap rounded-xl border border-line bg-surface px-4 py-2 text-sm font-semibold text-brand shadow-sm transition hover:bg-canvas"
             >
               Team view
             </Link>

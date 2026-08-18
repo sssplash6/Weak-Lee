@@ -42,7 +42,7 @@ export function WeekSubmit({
           type="button"
           disabled={isPending}
           onClick={() => startTransition(async () => void (await reopen()))}
-          className="shrink-0 rounded-lg border border-line bg-surface px-2.5 py-1 text-sm font-medium text-ink transition hover:border-brand/40 hover:text-brand disabled:opacity-50"
+          className="shrink-0 whitespace-nowrap rounded-lg border border-line bg-surface px-2.5 py-1 text-sm font-medium text-ink transition hover:border-brand/40 hover:text-brand disabled:opacity-50"
         >
           {isPending ? "Opening…" : "Edit goals"}
         </button>
@@ -70,7 +70,7 @@ export function WeekSubmit({
         disabled={!canSubmit}
         onClick={() => startTransition(async () => void (await submit()))}
         title={goalCount === 0 ? "Add a goal first" : undefined}
-        className="shrink-0 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-50"
+        className="shrink-0 whitespace-nowrap rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-50"
       >
         {isPending ? "Submitting…" : resubmitting ? "Re-submit" : "Submit goals"}
       </button>

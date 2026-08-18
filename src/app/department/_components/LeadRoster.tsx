@@ -213,7 +213,7 @@ function AssignForm({
           type="button"
           disabled={isPending}
           onClick={submit}
-          className="shrink-0 rounded-lg bg-brand px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-dark disabled:opacity-50"
+          className="shrink-0 whitespace-nowrap rounded-lg bg-brand px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-dark disabled:opacity-50"
         >
           {isPending ? "Assigning…" : "Assign goal"}
         </button>
