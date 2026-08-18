@@ -581,6 +581,19 @@ export async function deleteBonus(bonusId: string) {
   if (!isAdmin(session?.user?.email)) {
     throw new Error("Not authorized");
   }
+  const bonus = await prisma.bonus.findUnique({
+    where: { id: bonusId },
+    select: { payrollSubmissionId: true },
+  });
+  if (!bonus) return; // already gone — nothing to undo
+  // Money that already moved: a processed pay request paid this bonus out, so
+  // deleting it would erase a payment that really happened (the part-paid
+  // fine rule, mirrored).
+  if (bonus.payrollSubmissionId) {
+    throw new Error(
+      "This bonus was already paid out through payroll — it can't be deleted.",
+    );
+  }
   await prisma.bonus.delete({ where: { id: bonusId } });
   revalidatePath("/admin");
   revalidatePath("/dashboard");

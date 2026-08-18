@@ -123,6 +123,7 @@ export default async function PenaltiesPage() {
                   id: true,
                   amount: true,
                   batchId: true,
+                  source: true,
                   createdAt: true,
                 },
               },
@@ -161,7 +162,7 @@ export default async function PenaltiesPage() {
     // writes one batch, however many fines it touched, so a batch is a receipt.
     const byBatch = new Map<
       string,
-      { batchId: string; at: number; dateLabel: string; amount: number; lines: ReceiptLine[] }
+      { batchId: string; at: number; dateLabel: string; amount: number; viaPayroll: boolean; lines: ReceiptLine[] }
     >();
     for (const p of u.penalties) {
       // A fine is closed by its final payment — that's the one that reads
@@ -173,9 +174,13 @@ export default async function PenaltiesPage() {
           at: pay.createdAt.getTime(),
           dateLabel: formatDateTimeTz(pay.createdAt),
           amount: 0,
+          viaPayroll: false,
           lines: [] as ReceiptLine[],
         };
         receipt.amount += pay.amount;
+        // One settle action = one batch = one source; any PAYROLL row marks
+        // the whole receipt as the automatic payroll deduction.
+        receipt.viaPayroll ||= pay.source === "PAYROLL";
         receipt.lines.push({
           id: pay.id,
           reasonIndex: reasonIndexOf(p.type),
@@ -194,6 +199,7 @@ export default async function PenaltiesPage() {
         batchId: r.batchId,
         dateLabel: r.dateLabel,
         amount: r.amount,
+        viaPayroll: r.viaPayroll,
         lines: r.lines,
       }));
 

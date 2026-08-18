@@ -23,6 +23,8 @@ export type Receipt = {
   batchId: string;
   dateLabel: string;
   amount: number;
+  /** True when this was the automatic deduction of a processed pay request. */
+  viaPayroll: boolean;
   lines: ReceiptLine[];
 };
 
@@ -151,6 +153,11 @@ function ReceiptLines({
         </span>
         <span className="min-w-0 flex-1 truncate text-xs font-semibold text-ink">
           {formatMoney(receipt.amount)} deducted
+          {receipt.viaPayroll && (
+            <span className="ml-1.5 rounded-full bg-accent-soft px-1.5 py-px text-[10px] font-semibold text-accent-ink">
+              via payroll
+            </span>
+          )}
         </span>
         <span className="shrink-0 text-[11px] text-muted-fg">
           {receipt.dateLabel}

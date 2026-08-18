@@ -12,6 +12,7 @@ import {
   expireLapsedSubmissions,
   formatTashkent,
   inFlightSubmission,
+  isFinance,
   isPayrollAdmin,
   pullLedgerSnapshot,
   reconcilePayrollReminders,
@@ -247,14 +248,24 @@ export default async function PayrollPage() {
         <BackLink href="/dashboard" label="Dashboard" />
       </header>
 
-      {isPayrollAdmin(me.email) && (
+      {(isPayrollAdmin(me.email) || isFinance(me.email)) && (
         <div className="-mt-2 mb-5 flex flex-wrap gap-2">
-          <Link
-            href="/payroll/review"
-            className="whitespace-nowrap rounded-xl border border-line bg-surface px-4 py-2 text-sm font-semibold text-brand shadow-sm transition hover:bg-canvas"
-          >
-            Review queue
-          </Link>
+          {isPayrollAdmin(me.email) && (
+            <Link
+              href="/payroll/review"
+              className="whitespace-nowrap rounded-xl border border-line bg-surface px-4 py-2 text-sm font-semibold text-brand shadow-sm transition hover:bg-canvas"
+            >
+              Review queue
+            </Link>
+          )}
+          {isFinance(me.email) && (
+            <Link
+              href="/payroll/finance"
+              className="whitespace-nowrap rounded-xl border border-line bg-surface px-4 py-2 text-sm font-semibold text-brand shadow-sm transition hover:bg-canvas"
+            >
+              Finance queue
+            </Link>
+          )}
         </div>
       )}
 
