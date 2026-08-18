@@ -15,7 +15,7 @@ import {
   weekSubmissionDeadline,
 } from "@/lib/lateness";
 import type { AttendanceStatus, PenaltyType } from "@/lib/penalties";
-import type { TeamRole } from "@/lib/team";
+import { departmentLine, type TeamRole } from "@/lib/team";
 
 // ---------------------------------------------------------------- input shapes
 
@@ -36,8 +36,7 @@ export type PerformanceSource = {
   id: string;
   name: string | null;
   email: string | null;
-  role: TeamRole;
-  department: { name: string } | null;
+  memberships: { role: TeamRole; department: { name: string } }[];
   avatar: string | null;
   createdAt: Date;
   weeks: {
@@ -91,8 +90,11 @@ export type EmployeePerformance = {
   id: string;
   name: string;
   email: string | null;
-  /** Department leads owe meetings and weekly reports; members owe neither. */
+  /** Leads at least one department — owes meetings and weekly reports. */
   lead: boolean;
+  /** Every department they belong to, led ones first (see departmentNames). */
+  departments: string[];
+  /** The one-line display form of `departments`, or null with none. */
   department: string | null;
   avatar: string | null;
   /** Weeks since the account was created — a fairness note next to thin data. */
@@ -388,10 +390,10 @@ function computeOne(
   // department leads owe cycles at all: a member's reporting block stays empty
   // (expected 0, rate null) and its weight folds back out of their score.
   const submitted = weeks.filter((w) => w.submittedAt != null);
-  const owed =
-    u.role === "LEAD"
-      ? cycles.filter((c) => u.createdAt.getTime() <= c.deadline.getTime())
-      : [];
+  const lead = u.memberships.some((m) => m.role === "LEAD");
+  const owed = lead
+    ? cycles.filter((c) => u.createdAt.getTime() <= c.deadline.getTime())
+    : [];
   let onTimeCount = 0;
   let lateCount = 0;
   let missedCount = 0;
@@ -479,12 +481,23 @@ function computeOne(
     onTime: pct(onTimeCount, owed.length),
   };
 
+  // Raw names for grouping (led departments first); the display line carries
+  // the "(lead)" markers on top of the same order.
+  const departments = [...u.memberships]
+    .sort(
+      (a, b) =>
+        Number(b.role === "LEAD") - Number(a.role === "LEAD") ||
+        a.department.name.localeCompare(b.department.name),
+    )
+    .map((m) => m.department.name);
+
   return {
     id: u.id,
     name: u.name ?? u.email ?? "—",
     email: u.email,
-    lead: u.role === "LEAD",
-    department: u.department?.name ?? null,
+    lead,
+    departments,
+    department: departmentLine(u.memberships),
     avatar: u.avatar,
     tenureWeeks: Math.max(
       0,
@@ -633,14 +646,15 @@ function buildRange(
         (b.score ?? -1) - (a.score ?? -1) || a.name.localeCompare(b.name),
     );
 
-  // Ranks: overall and within the department. Unscored people keep null so the
-  // UI can say "not scored yet" instead of implying a last place.
+  // Ranks: overall and within the person's primary department (the first one
+  // they lead, else their first). Unscored people keep null so the UI can say
+  // "not scored yet" instead of implying a last place.
   let seen = 0;
   const perDept = new Map<string, number>();
   for (const e of employees) {
     if (e.score == null) continue;
     e.rank = ++seen;
-    const dept = e.department ?? "—";
+    const dept = e.departments[0] ?? "—";
     const next = (perDept.get(dept) ?? 0) + 1;
     perDept.set(dept, next);
     e.deptRank = next;
@@ -693,12 +707,15 @@ function buildRange(
       .map(({ label, percent }) => ({ label, percent }));
   }
 
-  // Department rollups, biggest first. People with no department are grouped
-  // under "Unassigned" so nobody silently drops out of the comparison.
+  // Department rollups, biggest first. A person in several departments counts
+  // in each of them (their whole record — goals aren't split per seat); people
+  // with none are grouped under "Unassigned" so nobody drops out.
   const groups = new Map<string, EmployeePerformance[]>();
   for (const e of employees) {
-    const key = e.department?.trim() || "Unassigned";
-    groups.set(key, [...(groups.get(key) ?? []), e]);
+    const keys = e.departments.length > 0 ? e.departments : ["Unassigned"];
+    for (const key of keys) {
+      groups.set(key, [...(groups.get(key) ?? []), e]);
+    }
   }
   const sum = (list: EmployeePerformance[], f: (e: EmployeePerformance) => number) =>
     list.reduce((s, e) => s + f(e), 0);

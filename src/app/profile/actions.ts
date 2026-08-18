@@ -9,8 +9,105 @@ import {
   normalizeTelegram,
 } from "@/lib/profile";
 import { fromYmd } from "@/lib/dates";
+import { notify } from "@/lib/notifications";
 
 export type ProfileState = { error: string | null; saved: boolean };
+
+/** Everywhere a membership change shows up. */
+function revalidateMembershipViews() {
+  revalidatePath("/profile");
+  revalidatePath("/team");
+  revalidatePath("/departments");
+  revalidatePath("/department");
+  revalidatePath("/admin");
+  revalidatePath("/dashboard");
+}
+
+/** Tell a department's lead(s) something, if it has any. */
+async function notifyDepartmentLeads(departmentId: string, message: string) {
+  const leads = await prisma.departmentMembership.findMany({
+    where: { departmentId, role: "LEAD" },
+    select: { userId: true },
+  });
+  if (leads.length === 0) return;
+  await notify(
+    prisma,
+    leads.map((l) => l.userId),
+    "OTHER",
+    message,
+  );
+}
+
+/**
+ * Join a department as a member — self-service, from the profile page. Lead
+ * roles are never self-assigned (admins hand those out on /departments), and
+ * an existing membership is left exactly as it is. The department's lead(s)
+ * are told someone joined.
+ */
+export async function joinDepartment(departmentId: string) {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Not authenticated");
+
+  const department = await prisma.department.findUnique({
+    where: { id: departmentId },
+    select: { id: true, name: true },
+  });
+  if (!department) throw new Error("Department not found");
+
+  const existing = await prisma.departmentMembership.findUnique({
+    where: {
+      userId_departmentId: { userId: session.user.id, departmentId },
+    },
+    select: { id: true },
+  });
+  if (existing) return; // already in it — nothing to do
+
+  await prisma.departmentMembership.create({
+    data: { userId: session.user.id, departmentId },
+  });
+  await notifyDepartmentLeads(
+    departmentId,
+    `${session.user.name ?? session.user.email ?? "Someone"} joined ${department.name} as a member.`,
+  );
+  revalidateMembershipViews();
+}
+
+/**
+ * Leave a department — self-service, member seats only. A lead seat is a
+ * responsibility an admin gave out, so shedding it goes through an admin; and
+ * the last membership can't be dropped (the dashboard requires at least one,
+ * see lib/profile.ts).
+ */
+export async function leaveDepartment(departmentId: string) {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Not authenticated");
+
+  const membership = await prisma.departmentMembership.findUnique({
+    where: {
+      userId_departmentId: { userId: session.user.id, departmentId },
+    },
+    select: { id: true, role: true, department: { select: { name: true } } },
+  });
+  if (!membership) return; // already out
+  if (membership.role === "LEAD") {
+    throw new Error(
+      "You lead this department — ask an admin to hand the lead role over first.",
+    );
+  }
+  const seats = await prisma.departmentMembership.count({
+    where: { userId: session.user.id },
+  });
+  if (seats <= 1) {
+    throw new Error("You need at least one department — join another first.");
+  }
+
+  await prisma.departmentMembership.delete({ where: { id: membership.id } });
+  await notifyDepartmentLeads(
+    departmentId,
+    `${session.user.name ?? session.user.email ?? "Someone"} left ${membership.department.name}.`,
+  );
+  revalidateMembershipViews();
+}
 
 /**
  * Save the editable profile fields for the signed-in user. Name, work phone,

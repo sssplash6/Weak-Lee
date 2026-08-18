@@ -1,7 +1,6 @@
 "use client";
 
 import { useActionState } from "react";
-import { ROLE_LABEL, type TeamRole } from "@/lib/team";
 import { updateProfile, type ProfileState } from "./actions";
 
 const initial: ProfileState = { error: null, saved: false };
@@ -11,8 +10,6 @@ type Defaults = {
   email: string;
   workPhone: string;
   telegramUsername: string;
-  department: string;
-  role: TeamRole;
   birthday: string;
   linkedin: string;
   instagram: string;
@@ -62,20 +59,8 @@ export function ProfileForm({ defaults }: { defaults: Defaults }) {
         hint="We’ll store it without the @."
         required
       />
-      {/* Department and role are org structure, not personal details — they're
-          managed by admins on /departments, so they read-only here. */}
-      <label className="block">
-        <span className="text-sm font-semibold text-ink">Department</span>
-        <div className="mt-1.5 flex w-full cursor-not-allowed items-center justify-between gap-2 rounded-lg border border-line bg-canvas px-3 py-2 text-sm text-muted-fg">
-          <span>{defaults.department || "—"}</span>
-          <span className="shrink-0 rounded-full bg-brand-soft px-2 py-0.5 text-[11px] font-semibold text-brand">
-            {ROLE_LABEL[defaults.role]}
-          </span>
-        </div>
-        <span className="mt-1 block text-xs text-muted-fg">
-          Set by the admins — ask them if you&rsquo;ve moved departments.
-        </span>
-      </label>
+      {/* Departments live in their own card below the form — they're
+          memberships now, not a text field. */}
       <Field
         label="Birthday"
         name="birthday"

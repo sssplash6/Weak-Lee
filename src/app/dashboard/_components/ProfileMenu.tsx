@@ -15,6 +15,8 @@ type Props = {
   avatar?: string | null;
   takenAvatars?: string[];
   isAdmin?: boolean;
+  /** Leads at least one department — unlocks the department panel entry. */
+  isLead?: boolean;
 };
 
 export function ProfileMenu({
@@ -23,6 +25,7 @@ export function ProfileMenu({
   avatar: assigned,
   takenAvatars = [],
   isAdmin,
+  isLead,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [current, setCurrent] = useState<string | null>(assigned ?? null);
@@ -167,6 +170,15 @@ export function ProfileMenu({
 
           <div className="my-1 border-t border-line" />
 
+          {isLead && (
+            <Link
+              href="/department"
+              onClick={() => setOpen(false)}
+              className="block rounded-lg px-3 py-2 text-left text-sm font-medium text-brand transition hover:bg-canvas"
+            >
+              My department
+            </Link>
+          )}
           {isAdmin && (
             <Link
               href="/admin"

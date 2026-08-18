@@ -12,27 +12,45 @@ datasource db {
 
 // ----- Auth.js (NextAuth) models -----
 
-// Whether a person leads their department or belongs to one. Department leads
-// (the ops director counts as one) are the only people expected at the Monday
-// meeting and expected to submit weekly/monthly goals — every expectation
-// surface (fines, attendance roster, admin flags, reporting stats) keys off
-// this label. Everyone else is a member: they can still set and submit goals,
-// but nothing is owed and nothing is fined.
+// The role a person holds IN ONE DEPARTMENT. It lives on the membership, not
+// the user, because one person can wear both hats — lead their own department
+// while sitting as a plain member of another. Anyone who LEADs at least one
+// department (the ops director counts) is expected at the Monday meeting and
+// expected to submit weekly/monthly goals — every expectation surface (fines,
+// attendance roster, admin flags, reporting stats) keys off that. Everyone
+// else can still set and submit goals, but nothing is owed and nothing fined.
 enum TeamRole {
   LEAD
   MEMBER
 }
 
 // A department of the academy — a first-class row rather than free text, so
-// onboarding can offer a fixed list and reporting can group reliably. A
-// department's lead is the user in it with role LEAD (usually exactly one).
+// onboarding can offer a fixed list and reporting can group reliably. Its
+// lead is whoever holds a LEAD membership in it (usually exactly one).
 // Managed by admins on /departments.
 model Department {
   id        String   @id @default(cuid())
   name      String   @unique
   createdAt DateTime @default(now())
 
-  members User[]
+  memberships DepartmentMembership[]
+}
+
+// One person's seat in one department, with the hat they wear there. A user
+// may hold several (at most one per department), so belonging to Tech and
+// leading Sales are two independent rows.
+model DepartmentMembership {
+  id           String   @id @default(cuid())
+  userId       String
+  departmentId String
+  role         TeamRole @default(MEMBER)
+  createdAt    DateTime @default(now())
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, departmentId])
+  @@index([departmentId])
 }
 
 model User {
@@ -45,13 +63,12 @@ model User {
 
   // Collected during onboarding after the first Google sign-in. These are
   // required before a user reaches the dashboard (see lib/profile.ts).
-  // The department is chosen from the existing Department rows; the role is
-  // never self-chosen — admins assign it (new joiners start as MEMBER).
+  // The first department is chosen from the existing Department rows at
+  // onboarding (as a MEMBER); admins add further memberships and hand out
+  // lead roles on /departments.
   workPhone        String?
   telegramUsername String?
-  role             TeamRole    @default(MEMBER)
-  departmentId     String?
-  department       Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  memberships      DepartmentMembership[]
   birthday         DateTime? // stored at UTC midnight, treated as a calendar day
 
   // Optional social handles, editable from the profile page. Shown on /team.
@@ -87,8 +104,6 @@ model User {
   tasksAssigned   AssignedTask[] @relation("AssignedIssued")
   attendances     Attendance[]
   notifications   Notification[]
-
-  @@index([departmentId])
 }
 
 model Account {

@@ -108,7 +108,9 @@ export function EmployeeReport({
               {[
                 report.window,
                 e.rank != null ? `#${e.rank} of ${team.scored}` : "unscored",
-                e.deptRank != null ? `#${e.deptRank} in ${dept}` : null,
+                e.deptRank != null
+                  ? `#${e.deptRank} in ${e.departments[0] ?? dept}`
+                  : null,
                 `${e.tenureWeeks}w on the team`,
               ]
                 .filter(Boolean)

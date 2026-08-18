@@ -19,7 +19,7 @@ export default async function OnboardingPage() {
         name: true,
         workPhone: true,
         telegramUsername: true,
-        departmentId: true,
+        memberships: { select: { departmentId: true } },
         birthday: true,
       },
     }),
@@ -53,7 +53,7 @@ export default async function OnboardingPage() {
             name: user?.name ?? session.user.name ?? "",
             workPhone: user?.workPhone ?? "",
             telegramUsername: user?.telegramUsername ?? "",
-            departmentId: user?.departmentId ?? "",
+            departmentId: user?.memberships[0]?.departmentId ?? "",
             birthday: user?.birthday ? toYmd(user.birthday) : "",
           }}
         />

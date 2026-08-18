@@ -72,12 +72,11 @@ export async function reconcileSubmissionFines(opts?: {
 
   const users = await prisma.user.findMany({
     where: {
-      // Only department leads are expected to submit, and only ones who were
-      // around before the deadline (new joiners get a pass this cycle) and
-      // have onboarded (a department is picked on completing it).
-      role: "LEAD",
+      // Only department leads — anyone holding a LEAD membership somewhere —
+      // are expected to submit, and only ones who were around before the
+      // deadline (new joiners get a pass this cycle).
+      memberships: { some: { role: "LEAD" } },
       createdAt: { lt: submissionDeadline },
-      departmentId: { not: null },
       ...(opts?.userId ? { id: opts.userId } : {}),
     },
     select: {
@@ -252,7 +251,8 @@ async function releaseUnexpectedSubmissionFines(userId?: string): Promise<void> 
     where: {
       OR: [
         { email: { in: submissionExemptEmails(), mode: "insensitive" } },
-        { role: "MEMBER" },
+        // Leads no department at all — a member everywhere they belong.
+        { memberships: { none: { role: "LEAD" } } },
       ],
       ...(userId ? { id: userId } : {}),
     },

@@ -17,6 +17,7 @@ import {
   type AttendanceStatus,
 } from "@/lib/penalties";
 import { allocateSettlement } from "@/lib/settlement";
+import { requireCanManage } from "@/lib/manage";
 import { formatYmd, toYmd } from "@/lib/dates";
 import { notify } from "@/lib/notifications";
 import type { Prisma } from "@/generated/prisma/client";
@@ -181,12 +182,14 @@ export async function moveUserWeekToCurrent(userId: string) {
   }
   revalidatePath("/admin");
   revalidatePath("/dashboard");
+  revalidatePath("/department");
 }
 
 /**
  * Issue a manual fine to a user (type OTHER) — for anything other than a missed
  * meeting (those flow from attendance). Links to the user's current week so it
- * surfaces there. Admin-only.
+ * surfaces there. Admins may fine anyone; a department lead may fine the
+ * members under the departments they lead (see lib/manage.ts).
  */
 export async function addManualPenalty(
   userId: string,
@@ -194,9 +197,7 @@ export async function addManualPenalty(
   note: string,
 ) {
   const session = await auth();
-  if (!isAdmin(session?.user?.email)) {
-    throw new Error("Not authorized");
-  }
+  await requireCanManage(session, [userId]);
   const value = Math.round(Number(amount));
   if (!Number.isFinite(value) || value <= 0 || value > MAX_PENALTY) {
     throw new Error("Enter a valid fine amount.");
@@ -229,6 +230,7 @@ export async function addManualPenalty(
   );
   revalidatePath("/admin");
   revalidatePath("/dashboard");
+  revalidatePath("/department");
 }
 
 /** Remove a penalty (e.g. issued by mistake). Admin-only. */
@@ -317,6 +319,7 @@ export async function deletePenalty(penaltyId: string) {
   revalidatePath("/penalties");
   revalidatePath("/admin");
   revalidatePath("/dashboard");
+  revalidatePath("/department");
 }
 
 /** Sum of what a user still owes — every fine's unpaid remainder. */
@@ -448,6 +451,7 @@ function revalidateFines() {
   revalidatePath("/penalties");
   revalidatePath("/admin");
   revalidatePath("/dashboard");
+  revalidatePath("/department");
 }
 
 /**
@@ -538,13 +542,11 @@ export async function undoSettlement(batchId: string) {
 /**
  * Award a bonus to a user — the positive counterpart of a manual fine, tracked
  * separately (no netting). Amount is a whole number in the app currency.
- * Admin-only.
+ * Admins may award anyone; a department lead, the members under them.
  */
 export async function addBonus(userId: string, amount: number, note: string) {
   const session = await auth();
-  if (!isAdmin(session?.user?.email)) {
-    throw new Error("Not authorized");
-  }
+  await requireCanManage(session, [userId]);
   const value = Math.round(Number(amount));
   if (!Number.isFinite(value) || value <= 0 || value > MAX_PENALTY) {
     throw new Error("Enter a valid bonus amount.");
@@ -570,6 +572,7 @@ export async function addBonus(userId: string, amount: number, note: string) {
   );
   revalidatePath("/admin");
   revalidatePath("/dashboard");
+  revalidatePath("/department");
 }
 
 /** Remove a bonus (e.g. awarded by mistake). Admin-only. */
@@ -581,6 +584,7 @@ export async function deleteBonus(bonusId: string) {
   await prisma.bonus.delete({ where: { id: bonusId } });
   revalidatePath("/admin");
   revalidatePath("/dashboard");
+  revalidatePath("/department");
 }
 
 /**
@@ -620,6 +624,7 @@ export async function setAttendance(userId: string, status: AttendanceStatus) {
 
   revalidatePath("/admin");
   revalidatePath("/dashboard");
+  revalidatePath("/department");
 }
 
 /**
@@ -732,9 +737,10 @@ async function recomputeMeetingPenalties(
 /**
  * Create a goal and assign it to one or more people. Lives outside the weekly
  * goal flow (see the AssignedTask model) — a standalone task each assignee
- * tracks. Admin-only. `scope` picks which dashboard view (week/month) surfaces
- * it. Deadline is an optional YYYY-MM-DD (stored at UTC midnight, treated as
- * date-only like goal deadlines).
+ * tracks. Admins may assign to anyone; a department lead to the members under
+ * the departments they lead. `scope` picks which dashboard view (week/month)
+ * surfaces it. Deadline is an optional YYYY-MM-DD (stored at UTC midnight,
+ * treated as date-only like goal deadlines).
  *
  * Each assignee gets their own row, so completing, editing, or deleting one
  * person's copy leaves everybody else's alone. The batch is written in a single
@@ -749,9 +755,6 @@ export async function assignTask(
   scope: "WEEKLY" | "MONTHLY" = "WEEKLY",
 ) {
   const session = await auth();
-  if (!isAdmin(session?.user?.email)) {
-    throw new Error("Not authorized");
-  }
   // One title or a batch — several goals can go to the same people in one
   // assignment (they share the deadline, note, and scope).
   const cleanTitles = (Array.isArray(title) ? title : [title])
@@ -762,6 +765,7 @@ export async function assignTask(
   // Selecting "Everyone" and a name individually must not assign twice.
   const ids = [...new Set(userIds.filter(Boolean))];
   if (ids.length === 0) throw new Error("Pick at least one person.");
+  await requireCanManage(session, ids);
 
   const found = await prisma.user.findMany({
     where: { id: { in: ids } },
@@ -814,6 +818,7 @@ export async function assignTask(
   });
   revalidatePath("/admin");
   revalidatePath("/dashboard");
+  revalidatePath("/department");
 }
 
 /**
@@ -877,6 +882,7 @@ export async function editAssignedTask(
   );
   revalidatePath("/admin");
   revalidatePath("/dashboard");
+  revalidatePath("/department");
 }
 
 /** Remove an assigned task (e.g. created by mistake or no longer needed). Admin-only. */
@@ -888,4 +894,5 @@ export async function deleteAssignedTask(taskId: string) {
   await prisma.assignedTask.delete({ where: { id: taskId } });
   revalidatePath("/admin");
   revalidatePath("/dashboard");
+  revalidatePath("/department");
 }

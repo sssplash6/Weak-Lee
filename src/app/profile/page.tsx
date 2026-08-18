@@ -8,26 +8,52 @@ import { prisma } from "@/lib/prisma";
 import { toYmd } from "@/lib/dates";
 import { BackLink } from "@/app/_components/BackLink";
 import { ProfileForm } from "./ProfileForm";
+import { ProfileDepartments } from "./ProfileDepartments";
 
 export default async function ProfilePage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/signin");
 
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: {
-      name: true,
-      email: true,
-      workPhone: true,
-      telegramUsername: true,
-      role: true,
-      department: { select: { name: true } },
-      birthday: true,
-      linkedin: true,
-      instagram: true,
-    },
-  });
+  const [user, departments] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: {
+        name: true,
+        email: true,
+        workPhone: true,
+        telegramUsername: true,
+        memberships: {
+          select: {
+            role: true,
+            department: { select: { id: true, name: true } },
+          },
+        },
+        birthday: true,
+        linkedin: true,
+        instagram: true,
+      },
+    }),
+    prisma.department.findMany({
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
+  ]);
   if (!user) redirect("/signin");
+
+  // Seats they hold (led ones first), and departments still open to join.
+  const memberships = [...user.memberships]
+    .sort(
+      (a, b) =>
+        Number(b.role === "LEAD") - Number(a.role === "LEAD") ||
+        a.department.name.localeCompare(b.department.name),
+    )
+    .map((m) => ({
+      departmentId: m.department.id,
+      name: m.department.name,
+      role: m.role,
+    }));
+  const mine = new Set(memberships.map((m) => m.departmentId));
+  const joinable = departments.filter((d) => !mine.has(d.id));
 
   return (
     <main className="flex flex-1 justify-center bg-canvas px-6 py-10">
@@ -50,14 +76,14 @@ export default async function ProfilePage() {
               email: user.email ?? "",
               workPhone: user.workPhone ?? "",
               telegramUsername: user.telegramUsername ?? "",
-              department: user.department?.name ?? "",
-              role: user.role,
               birthday: user.birthday ? toYmd(user.birthday) : "",
               linkedin: user.linkedin ?? "",
               instagram: user.instagram ?? "",
             }}
           />
         </div>
+
+        <ProfileDepartments memberships={memberships} joinable={joinable} />
       </div>
     </main>
   );

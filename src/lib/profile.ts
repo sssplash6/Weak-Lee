@@ -5,9 +5,9 @@ export type ProfileFields = {
   name: string | null;
   workPhone: string | null;
   telegramUsername: string | null;
-  // Chosen from the existing Department rows at onboarding (see /onboarding);
-  // free text is gone. Null until they've picked one.
-  departmentId: string | null;
+  // At least one department membership is picked at onboarding (see
+  // /onboarding); more can be added later on the profile or by admins.
+  memberships: unknown[];
   birthday: Date | string | null;
 };
 
@@ -16,7 +16,7 @@ export function isProfileComplete(u: ProfileFields): boolean {
   const textOk = [u.name, u.workPhone, u.telegramUsername].every(
     (v) => typeof v === "string" && v.trim().length > 0,
   );
-  return textOk && u.departmentId != null && u.birthday != null;
+  return textOk && u.memberships.length > 0 && u.birthday != null;
 }
 
 /** Normalize a Telegram handle: trim and drop a single leading "@". */

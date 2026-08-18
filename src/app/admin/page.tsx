@@ -20,6 +20,7 @@ import {
 } from "@/lib/dates";
 import { formatMoney, PENALTY_LABEL } from "@/lib/penalties";
 import { resolveAvatar } from "@/lib/avatar";
+import { departmentLine, isLead } from "@/lib/team";
 import { monthLabel } from "@/lib/months";
 import { AdminTabs, type AdminTab } from "./_components/AdminTabs";
 import { AssignedTasksPanel } from "./_components/AssignedTasksPanel";
@@ -112,8 +113,9 @@ export default async function AdminPage({
         id: true,
         name: true,
         email: true,
-        role: true,
-        department: { select: { name: true } },
+        memberships: {
+          select: { role: true, department: { select: { name: true } } },
+        },
         avatar: true,
         // The most recent weeks, newest first — enough to pick out the current
         // and previous cycle weeks even when someone has reported ahead.
@@ -173,7 +175,10 @@ export default async function AdminPage({
     prisma.week.findMany({
       // Only leads owe the deadline; a member's historical Late flag (from
       // before roles existed) shouldn't keep them on this list.
-      where: { submittedLate: true, user: { role: "LEAD" } },
+      where: {
+        submittedLate: true,
+        user: { memberships: { some: { role: "LEAD" } } },
+      },
       orderBy: { createdAt: "desc" },
       take: 25,
       select: {
@@ -261,8 +266,9 @@ export default async function AdminPage({
             id: true,
             name: true,
             email: true,
-            role: true,
-            department: { select: { name: true } },
+            memberships: {
+              select: { role: true, department: { select: { name: true } } },
+            },
             avatar: true,
             createdAt: true,
             weeks: {
@@ -356,8 +362,8 @@ export default async function AdminPage({
       id: u.id,
       name: u.name,
       email: u.email,
-      lead: u.role === "LEAD",
-      department: u.department?.name ?? null,
+      lead: isLead(u.memberships),
+      department: departmentLine(u.memberships),
       avatar: u.avatar,
       weekLabel: fields.label,
       notClosed: fields.notClosed ?? false,
@@ -460,7 +466,7 @@ export default async function AdminPage({
     return baseUser(u, {
       label: wk ? fmtRange(wk.startDate, wk.endDate) : null,
       // Members owe no deadline, so nothing of theirs reads as late.
-      late: u.role === "LEAD" && (wk?.submittedLate ?? false),
+      late: isLead(u.memberships) && (wk?.submittedLate ?? false),
       submittedAt: wk?.submittedAt ?? null,
       aheadLabel: ahead,
       goals: wk?.goals ?? [],
@@ -474,10 +480,10 @@ export default async function AdminPage({
     const closed = currentWeekOf(u.weeks) != null;
     return baseUser(u, {
       label: wk ? fmtRange(wk.startDate, wk.endDate) : null,
-      late: u.role === "LEAD" && (wk?.submittedLate ?? false),
+      late: isLead(u.memberships) && (wk?.submittedLate ?? false),
       submittedAt: wk?.submittedAt ?? null,
       // "Didn't close" is a broken expectation, so it's a lead-only flag too.
-      notClosed: u.role === "LEAD" && wk != null && !closed,
+      notClosed: isLead(u.memberships) && wk != null && !closed,
       goals: wk?.goals ?? [],
     });
   });
@@ -495,7 +501,7 @@ export default async function AdminPage({
   // This week's meeting attendance roster. Only department leads (the ops
   // director included) are expected at the Monday meeting, so only they are
   // marked — members never appear here and so can never be fined for it.
-  const meetingRoster = rawUsers.filter((u) => u.role === "LEAD");
+  const meetingRoster = rawUsers.filter((u) => isLead(u.memberships));
   const attStatus = new Map(
     currentMeeting?.attendances.map((a) => [a.userId, a.status]) ?? [],
   );
@@ -562,7 +568,7 @@ export default async function AdminPage({
 
   // How many leads are still stuck on the previous week (never closed it) —
   // members aren't expected to run the weekly cycle, so they don't count.
-  const leadCount = rawUsers.filter((u) => u.role === "LEAD").length;
+  const leadCount = rawUsers.filter((u) => isLead(u.memberships)).length;
   const notClosedCount = usersPreviousWeek.filter((u) => u.notClosed).length;
 
   // Assigned-goal tracking rows for the monitoring list.

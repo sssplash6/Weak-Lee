@@ -5,7 +5,7 @@ export const metadata: Metadata = { title: "The Team" };
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { resolveAvatar } from "@/lib/avatar";
-import { ROLE_LABEL } from "@/lib/team";
+import { departmentLine, isLead, ROLE_LABEL } from "@/lib/team";
 import { formatYmd, toYmd } from "@/lib/dates";
 import { BackLink } from "@/app/_components/BackLink";
 
@@ -27,8 +27,9 @@ export default async function TeamPage() {
       name: true,
       email: true,
       avatar: true,
-      role: true,
-      department: { select: { name: true } },
+      memberships: {
+        select: { role: true, department: { select: { name: true } } },
+      },
       workPhone: true,
       telegramUsername: true,
       linkedin: true,
@@ -45,7 +46,7 @@ export default async function TeamPage() {
           <h1 className="mt-1 text-2xl font-bold text-ink">The Team</h1>
           <p className="mt-1 text-sm text-muted-fg">
             {`${members.length} ${members.length === 1 ? "person" : "people"} · ${
-              members.filter((m) => m.role === "LEAD").length
+              members.filter((m) => isLead(m.memberships)).length
             } department leads`}
           </p>
         </div>
@@ -135,12 +136,12 @@ export default async function TeamPage() {
                         </span>
                       </span>
                     </th>
-                    <Cell>{m.department?.name}</Cell>
+                    <Cell>{departmentLine(m.memberships)}</Cell>
                     <Cell>
                       {/* The label the whole expectations system keys off:
                           leads owe meetings and weekly/monthly goals, members
                           don't — so leads get the chip, members stay quiet. */}
-                      {m.role === "LEAD" ? (
+                      {isLead(m.memberships) ? (
                         <span className="rounded-full bg-brand-soft px-2 py-0.5 text-[11px] font-semibold text-brand">
                           {ROLE_LABEL.LEAD}
                         </span>

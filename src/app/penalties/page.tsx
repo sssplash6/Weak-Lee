@@ -6,6 +6,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/admin";
 import { resolveAvatar } from "@/lib/avatar";
+import { departmentLine } from "@/lib/team";
 import { formatDateTimeTz } from "@/lib/dates";
 import { formatMoney } from "@/lib/penalties";
 import { BackLink } from "@/app/_components/BackLink";
@@ -98,7 +99,9 @@ export default async function PenaltiesPage() {
           id: true,
           name: true,
           email: true,
-          department: { select: { name: true } },
+          memberships: {
+            select: { role: true, department: { select: { name: true } } },
+          },
           avatar: true,
           penalties: {
             // Oldest first — the order a settlement is applied in, so every
@@ -195,7 +198,7 @@ export default async function PenaltiesPage() {
     return {
       id: u.id,
       name: u.name ?? u.email ?? "—",
-      department: u.department?.name ?? null,
+      department: departmentLine(u.memberships),
       emoji: av.emoji,
       bg: av.bg,
       outstanding,

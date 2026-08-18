@@ -352,19 +352,20 @@ export function guideDepartmentLabel(guide: Guide): string | null {
 
 /**
  * Whether this person may open the guide. Unrestricted guides are open to
- * everyone signed in; restricted ones need a matching department. Admins always
- * pass — they publish these documents and answer for them.
+ * everyone signed in; restricted ones need a matching department — any of the
+ * viewer's memberships will do. Admins always pass — they publish these
+ * documents and answer for them.
  *
  * Enforced in the download route, not just used to dim a card: hiding the button
  * while leaving the URL open would be no protection at all.
  */
 export function canReadGuide(
   guide: Guide,
-  viewer: { department?: string | null; isAdmin?: boolean },
+  viewer: { departments?: readonly string[]; isAdmin?: boolean },
 ): boolean {
   if (guide.departments == null) return true;
   if (viewer.isAdmin) return true;
-  if (!viewer.department) return false;
-  const mine = normalizeDepartment(viewer.department);
-  return guide.departments.some((d) => normalizeDepartment(d) === mine);
+  if (!viewer.departments || viewer.departments.length === 0) return false;
+  const mine = new Set(viewer.departments.map(normalizeDepartment));
+  return guide.departments.some((d) => mine.has(normalizeDepartment(d)));
 }

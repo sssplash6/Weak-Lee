@@ -6,6 +6,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { isProfileComplete } from "@/lib/profile";
 import { isAdmin } from "@/lib/admin";
+import { manageableUserIds } from "@/lib/manage";
 import { ensureAvatar } from "@/lib/assignAvatar";
 import {
   getArchivedWeeks,
@@ -115,13 +116,14 @@ export default async function DashboardPage({
       name: true,
       workPhone: true,
       telegramUsername: true,
-      departmentId: true,
-      role: true,
+      memberships: { select: { role: true } },
       birthday: true,
       avatar: true,
     },
   });
   if (!profile || !isProfileComplete(profile)) redirect("/onboarding");
+  // Leads at least one department — the only people the weekly deadline nags.
+  const viewerIsLead = profile.memberships.some((m) => m.role === "LEAD");
 
   // Enforce the weekly submission deadline for this person: if they've missed
   // Sunday 12:00 (or the Monday 11:00 escalation) without submitting, this
@@ -567,6 +569,15 @@ export default async function DashboardPage({
 
   const team = members.map((m) => ({ id: m.id, name: displayName(m) }));
 
+  // Who the viewer may assign goals to: everyone for admins, the members under
+  // their departments for leads, nobody otherwise (the FAB hides itself).
+  const manageScope = await manageableUserIds({
+    id: userId,
+    email: session!.user.email,
+  });
+  const assignablePeople =
+    manageScope === "all" ? team : team.filter((m) => manageScope.has(m.id));
+
   const archive = archivedPeriods.map((p) => ({
     id: p.id,
     label: isMonth ? monthLabel(p.startDate) : formatRange(p.startDate, p.endDate),
@@ -612,7 +623,7 @@ export default async function DashboardPage({
       {/* Entry alert: nags until this period's goals are submitted once.
           Submissions are only expected from department leads — members can
           still submit, they're just never nagged about it. */}
-      {period.submittedAt == null && profile.role === "LEAD" && (
+      {period.submittedAt == null && viewerIsLead && (
         <SubmitReminder scope={view} />
       )}
 
@@ -668,6 +679,7 @@ export default async function DashboardPage({
               avatar={avatar}
               takenAvatars={takenAvatars}
               isAdmin={isAdmin(session!.user.email)}
+              isLead={viewerIsLead}
             />
           </div>
         </div>
@@ -863,7 +875,11 @@ export default async function DashboardPage({
         </div>
       </aside>
 
-      {isAdmin(session!.user.email) && <AssignGoalButton people={team} />}
+      {/* Admins can assign to anyone; a department lead to the members under
+          them (the action re-checks the same scope server-side). */}
+      {assignablePeople.length > 0 && (
+        <AssignGoalButton people={assignablePeople} />
+      )}
       <FeedbackButton />
       </div>
     </>

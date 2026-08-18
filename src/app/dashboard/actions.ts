@@ -782,12 +782,12 @@ export async function startNewWeek(
   // submitted there). Both count as a late submission for the flag/fine — but
   // only for department leads: members owe no deadline, so their weeks are
   // never stamped late (and the fine sweep skips them anyway).
-  const me = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { role: true },
+  const leadSeat = await prisma.departmentMembership.findFirst({
+    where: { userId, role: "LEAD" },
+    select: { id: true },
   });
   const timing = submissionTiming(now, start);
-  const submittedLate = me?.role === "LEAD" && timing !== "on-time";
+  const submittedLate = leadSeat != null && timing !== "on-time";
 
   await prisma.$transaction(async (tx) => {
     await Promise.all(

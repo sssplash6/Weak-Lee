@@ -35,7 +35,7 @@ export async function completeProfile(
   }
 
   // The select only offers real departments, but the value is caller-supplied —
-  // verify it names one before pointing the profile at it.
+  // verify it names one before joining it.
   const department = await prisma.department.findUnique({
     where: { id: departmentId },
     select: { id: true },
@@ -50,8 +50,20 @@ export async function completeProfile(
       name,
       workPhone,
       telegramUsername,
-      departmentId: department.id,
       birthday: fromYmd(birthday),
+      // Their first seat, always as a member. Upsert-shaped so re-running
+      // onboarding can never demote a lead membership an admin granted.
+      memberships: {
+        connectOrCreate: {
+          where: {
+            userId_departmentId: {
+              userId: session.user.id,
+              departmentId: department.id,
+            },
+          },
+          create: { departmentId: department.id },
+        },
+      },
     },
   });
 

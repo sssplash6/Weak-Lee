@@ -33,10 +33,12 @@ export async function GET(
   if (guide.departments != null) {
     const viewer = await prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { department: { select: { name: true } } },
+      select: {
+        memberships: { select: { department: { select: { name: true } } } },
+      },
     });
     const allowed = canReadGuide(guide, {
-      department: viewer?.department?.name,
+      departments: viewer?.memberships.map((m) => m.department.name),
       isAdmin: isAdmin(session.user.email),
     });
     if (!allowed) {

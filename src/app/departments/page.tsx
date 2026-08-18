@@ -14,29 +14,46 @@ export default async function DepartmentsPage() {
   if (!session?.user?.id) redirect("/signin");
   if (!isAdmin(session.user.email)) redirect("/dashboard");
 
-  const [departments, unassigned] = await Promise.all([
+  const [departments, users] = await Promise.all([
     prisma.department.findMany({
       orderBy: { name: "asc" },
       select: {
         id: true,
         name: true,
-        members: {
+        memberships: {
           // Leads first (enum order), then alphabetically.
-          orderBy: [{ role: "asc" }, { name: "asc" }, { email: "asc" }],
-          select: { id: true, name: true, email: true, avatar: true, role: true },
+          orderBy: [
+            { role: "asc" },
+            { user: { name: "asc" } },
+            { user: { email: "asc" } },
+          ],
+          select: {
+            role: true,
+            user: {
+              select: { id: true, name: true, email: true, avatar: true },
+            },
+          },
         },
       },
     }),
-    // People with no department: mid-onboarding, or their department was
-    // deleted. Surfaced here so nobody silently falls out of the structure.
+    // Everyone, for the add-person selects — and to find who holds no seat at
+    // all (mid-onboarding, or their departments were deleted).
     prisma.user.findMany({
-      where: { departmentId: null },
       orderBy: [{ name: "asc" }, { email: "asc" }],
-      select: { id: true, name: true, email: true, avatar: true, role: true },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        avatar: true,
+        memberships: { select: { departmentId: true } },
+      },
     }),
   ]);
 
-  const toPerson = (u: (typeof unassigned)[number]): Person => {
+  const toPerson = (
+    u: { id: string; name: string | null; email: string | null; avatar: string | null },
+    lead: boolean,
+  ): Person => {
     const av = resolveAvatar(u.avatar, u.email ?? u.id);
     return {
       id: u.id,
@@ -44,22 +61,30 @@ export default async function DepartmentsPage() {
       email: u.email,
       emoji: av.emoji,
       bg: av.bg,
-      lead: u.role === "LEAD",
+      lead,
     };
   };
 
   const deptViews = departments.map((d) => ({
     id: d.id,
     name: d.name,
-    people: d.members.map(toPerson),
+    people: d.memberships.map((m) => toPerson(m.user, m.role === "LEAD")),
+  }));
+
+  const unassigned = users
+    .filter((u) => u.memberships.length === 0)
+    .map((u) => toPerson(u, false));
+
+  const allPeople = users.map((u) => ({
+    id: u.id,
+    name: u.name ?? u.email ?? "—",
   }));
 
   const leadCount = departments.reduce(
-    (s, d) => s + d.members.filter((m) => m.role === "LEAD").length,
+    (s, d) => s + d.memberships.filter((m) => m.role === "LEAD").length,
     0,
   );
-  const peopleCount =
-    departments.reduce((s, d) => s + d.members.length, 0) + unassigned.length;
+  const seatCount = departments.reduce((s, d) => s + d.memberships.length, 0);
 
   return (
     <div className="mx-auto w-full max-w-5xl flex-1 px-4 py-8">
@@ -70,10 +95,12 @@ export default async function DepartmentsPage() {
           </div>
           <h1 className="mt-1 text-2xl font-bold text-ink">Departments</h1>
           <p className="mt-1 text-sm text-muted-fg">
-            {`${departments.length} departments · ${leadCount} leads · ${peopleCount} people. `}
-            Leads are expected at Monday meetings and to submit weekly and
-            monthly goals; members aren&rsquo;t. New joiners pick a department
-            from this list during onboarding.
+            {`${departments.length} departments · ${leadCount} lead seats · ${seatCount} seats across ${users.length} people. `}
+            One person can sit in several departments — lead of one, member of
+            another — and each seat carries its own role. Leads owe Monday
+            meetings and weekly/monthly submissions; members owe neither. New
+            joiners pick their first department at onboarding and can join more
+            from their profile.
           </p>
         </div>
         <BackLink href="/admin" label="Team overview" />
@@ -81,7 +108,8 @@ export default async function DepartmentsPage() {
 
       <DepartmentManager
         departments={deptViews}
-        unassigned={unassigned.map(toPerson)}
+        unassigned={unassigned}
+        allPeople={allPeople}
         currentUserId={session.user.id}
       />
     </div>

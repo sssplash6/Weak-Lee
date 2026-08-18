@@ -3,11 +3,12 @@
 import { useState, useTransition } from "react";
 import { TrashIcon } from "../../dashboard/_components/icons";
 import {
+  addMembership,
   createDepartment,
   deleteDepartment,
+  removeMembership,
   renameDepartment,
-  setUserDepartment,
-  setUserRole,
+  setMembershipRole,
 } from "../actions";
 
 export type Person = {
@@ -16,6 +17,7 @@ export type Person = {
   email: string | null;
   emoji: string;
   bg: string;
+  /** The hat worn in THIS department — the same person can lead elsewhere. */
   lead: boolean;
 };
 
@@ -28,13 +30,14 @@ export type DepartmentView = {
 export function DepartmentManager({
   departments,
   unassigned,
+  allPeople,
   currentUserId,
 }: {
   departments: DepartmentView[];
   unassigned: Person[];
+  allPeople: { id: string; name: string }[];
   currentUserId: string;
 }) {
-  // The move-select on every row needs the full list of destinations.
   const destinations = departments.map((d) => ({ id: d.id, name: d.name }));
 
   return (
@@ -51,7 +54,7 @@ export function DepartmentManager({
             <DepartmentCard
               key={d.id}
               department={d}
-              destinations={destinations}
+              allPeople={allPeople}
               currentUserId={currentUserId}
             />
           ))}
@@ -63,18 +66,12 @@ export function DepartmentManager({
           <div className="flex items-baseline gap-2">
             <h2 className="text-sm font-bold text-ink">No department</h2>
             <span className="text-xs text-muted-fg">
-              mid-onboarding, or their department was deleted — place them
+              mid-onboarding, or their departments were deleted — place them
             </span>
           </div>
           <ul className="mt-2 flex flex-col">
             {unassigned.map((p) => (
-              <PersonRow
-                key={p.id}
-                person={p}
-                departmentId={null}
-                destinations={destinations}
-                isSelf={p.id === currentUserId}
-              />
+              <UnassignedRow key={p.id} person={p} destinations={destinations} />
             ))}
           </ul>
         </section>
@@ -130,11 +127,11 @@ function CreateDepartmentForm() {
 
 function DepartmentCard({
   department: d,
-  destinations,
+  allPeople,
   currentUserId,
 }: {
   department: DepartmentView;
-  destinations: { id: string; name: string }[];
+  allPeople: { id: string; name: string }[];
   currentUserId: string;
 }) {
   const [renaming, setRenaming] = useState(false);
@@ -143,6 +140,19 @@ function DepartmentCard({
   const [isPending, startTransition] = useTransition();
 
   const leads = d.people.filter((p) => p.lead);
+  const seated = new Set(d.people.map((p) => p.id));
+  const addable = allPeople.filter((p) => !seated.has(p.id));
+
+  function run(fn: () => Promise<void>) {
+    setError(null);
+    startTransition(async () => {
+      try {
+        await fn();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "That didn't work.");
+      }
+    });
+  }
 
   function saveRename() {
     const value = name.trim();
@@ -151,14 +161,9 @@ function DepartmentCard({
       setName(d.name);
       return;
     }
-    setError(null);
-    startTransition(async () => {
-      try {
-        await renameDepartment(d.id, value);
-        setRenaming(false);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Couldn't rename it.");
-      }
+    run(async () => {
+      await renameDepartment(d.id, value);
+      setRenaming(false);
     });
   }
 
@@ -225,20 +230,42 @@ function DepartmentCard({
       {d.people.length > 0 ? (
         <ul className="mt-2 flex flex-col border-t border-line pt-1">
           {d.people.map((p) => (
-            <PersonRow
+            <MembershipRow
               key={p.id}
               person={p}
               departmentId={d.id}
-              destinations={destinations}
               isSelf={p.id === currentUserId}
             />
           ))}
         </ul>
       ) : (
         <p className="mt-2 border-t border-line pt-2.5 text-xs text-muted-fg">
-          Nobody here yet — move people in, or let new joiners pick it at
+          Nobody here yet — add people below, or let new joiners pick it at
           onboarding.
         </p>
+      )}
+
+      {addable.length > 0 && (
+        <div className="mt-2 border-t border-line pt-2">
+          <select
+            value=""
+            disabled={isPending}
+            onChange={(e) =>
+              e.target.value && run(() => addMembership(e.target.value, d.id))
+            }
+            aria-label={`Add a person to ${d.name}`}
+            className="rounded-lg border border-line bg-surface px-2 py-1 text-xs font-medium text-muted-fg transition hover:text-ink focus:border-brand focus:outline-none disabled:opacity-50"
+          >
+            <option value="" disabled>
+              {isPending ? "Working…" : "Add a person as a member…"}
+            </option>
+            {addable.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </div>
       )}
     </li>
   );
@@ -260,14 +287,14 @@ function DeleteDepartmentButton({ department: d }: { department: DepartmentView 
           className="rounded bg-red-500 px-2 py-1 font-medium text-white transition hover:bg-red-600 disabled:opacity-50"
           title={
             d.people.length > 0
-              ? `${d.people.length} ${d.people.length === 1 ? "person keeps" : "people keep"} their account but lose the department`
+              ? `${d.people.length} ${d.people.length === 1 ? "seat goes" : "seats go"} away — the people keep their accounts and other departments`
               : undefined
           }
         >
           {isPending
             ? "Deleting…"
             : d.people.length > 0
-              ? `Delete (${d.people.length} lose it)`
+              ? `Delete (${d.people.length} ${d.people.length === 1 ? "seat" : "seats"})`
               : "Delete"}
         </button>
         <button
@@ -295,16 +322,14 @@ function DeleteDepartmentButton({ department: d }: { department: DepartmentView 
   );
 }
 
-function PersonRow({
+/** One seat: a person inside one department card, with per-seat controls. */
+function MembershipRow({
   person: p,
   departmentId,
-  destinations,
   isSelf,
 }: {
   person: Person;
-  /** The department this row is rendered inside, or null for "No department". */
-  departmentId: string | null;
-  destinations: { id: string; name: string }[];
+  departmentId: string;
   isSelf: boolean;
 }) {
   const [error, setError] = useState<string | null>(null);
@@ -346,36 +371,89 @@ function PersonRow({
         {error && <span className="block text-xs text-red-600">{error}</span>}
       </span>
 
-      {/* Promote/demote — the label the whole expectations system keys off. */}
+      {/* Flip the hat worn in THIS department only. */}
       <button
         type="button"
         disabled={isPending}
-        onClick={() => run(() => setUserRole(p.id, p.lead ? "MEMBER" : "LEAD"))}
+        onClick={() =>
+          run(() =>
+            setMembershipRole(p.id, departmentId, p.lead ? "MEMBER" : "LEAD"),
+          )
+        }
         title={
           p.lead
-            ? "Member: no meeting or weekly-submission expectations"
-            : "Lead: expected at Monday meetings and to submit weekly/monthly goals"
+            ? "Member here: no expectations from this seat"
+            : "Lead here: expected at Monday meetings and to submit weekly/monthly goals"
         }
         className="shrink-0 rounded-lg border border-line px-2.5 py-1 text-xs font-medium text-muted-fg transition hover:bg-canvas hover:text-ink disabled:opacity-50"
       >
         {isPending ? "…" : p.lead ? "Make member" : "Make lead"}
       </button>
 
-      <select
-        value={departmentId ?? ""}
+      <button
+        type="button"
         disabled={isPending}
-        onChange={(e) =>
-          run(() => setUserDepartment(p.id, e.target.value || null))
-        }
-        aria-label={`Move ${p.name} to another department`}
+        onClick={() => run(() => removeMembership(p.id, departmentId))}
+        title="Remove from this department (their other departments stay)"
+        className="shrink-0 rounded-lg border border-line px-2.5 py-1 text-xs font-medium text-muted-fg transition hover:bg-canvas hover:text-ink disabled:opacity-50"
+      >
+        Remove
+      </button>
+    </li>
+  );
+}
+
+/** Someone holding no seat anywhere — a select to give them their first one. */
+function UnassignedRow({
+  person: p,
+  destinations,
+}: {
+  person: Person;
+  destinations: { id: string; name: string }[];
+}) {
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  return (
+    <li className="flex flex-wrap items-center gap-2 border-b border-line/60 py-2 last:border-0">
+      <span
+        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-base ${p.bg}`}
+        aria-hidden="true"
+      >
+        {p.emoji}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-medium text-ink">
+          {p.name}
+        </span>
+        {error && <span className="block text-xs text-red-600">{error}</span>}
+      </span>
+      <select
+        value=""
+        disabled={isPending}
+        onChange={(e) => {
+          const dept = e.target.value;
+          if (!dept) return;
+          setError(null);
+          startTransition(async () => {
+            try {
+              await addMembership(p.id, dept);
+            } catch (err) {
+              setError(err instanceof Error ? err.message : "That didn't work.");
+            }
+          });
+        }}
+        aria-label={`Add ${p.name} to a department`}
         className="shrink-0 rounded-lg border border-line bg-surface px-2 py-1 text-xs font-medium text-muted-fg transition hover:text-ink focus:border-brand focus:outline-none disabled:opacity-50"
       >
+        <option value="" disabled>
+          {isPending ? "Working…" : "Add to department…"}
+        </option>
         {destinations.map((dest) => (
           <option key={dest.id} value={dest.id}>
             {dest.name}
           </option>
         ))}
-        <option value="">No department</option>
       </select>
     </li>
   );

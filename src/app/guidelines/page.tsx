@@ -88,12 +88,14 @@ export default async function GuidelinesPage() {
   const [viewer, sizes] = await Promise.all([
     prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { department: { select: { name: true } } },
+      select: {
+        memberships: { select: { department: { select: { name: true } } } },
+      },
     }),
     guideSizes(),
   ]);
   const me = {
-    department: viewer?.department?.name,
+    departments: viewer?.memberships.map((m) => m.department.name) ?? [],
     isAdmin: isAdmin(session.user.email),
   };
   const totalPages = ALL_GUIDES.reduce((s, g) => s + g.pages, 0);
@@ -114,7 +116,7 @@ export default async function GuidelinesPage() {
                 : `${openToMe} are open to you; the rest belong to another department.`
             }`}
           </p>
-          {!me.department && (
+          {me.departments.length === 0 && (
             <p className="mt-1 text-sm text-accent-ink">
               You&rsquo;re not in a department yet, so department guides stay
               locked — finish onboarding or ask an admin to place you.

@@ -148,7 +148,12 @@ export function PerformancePanel({ report }: { report: PerformanceReport }) {
                 />
                 <ul>
                   {active.employees
-                    .filter((e) => (e.department?.trim() || "Unassigned") === d.name)
+                    .filter((e) =>
+                      (e.departments.length > 0
+                        ? e.departments
+                        : ["Unassigned"]
+                      ).includes(d.name),
+                    )
                     .map((e) => (
                       <li key={e.id} className="border-t border-line/60">
                         <PersonRow employee={e} onOpen={setPersonId} />
