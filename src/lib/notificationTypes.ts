@@ -7,15 +7,17 @@ export type NotificationType =
   | "BONUS"
   | "TASK_ASSIGNED"
   | "REPORT"
+  | "PAYROLL"
   | "OTHER";
 
 // Dot color per type, shared by the bell dropdown and the notifications page:
 // red fine, green bonus, amber task (matches the "Assigned to you" card),
-// navy report.
+// navy report, orange payroll (money moving = progress, per the palette).
 export const NOTIFICATION_DOT: Record<NotificationType, string> = {
   FINE: "bg-red-500",
   BONUS: "bg-green-500",
   TASK_ASSIGNED: "bg-amber-500",
   REPORT: "bg-brand",
+  PAYROLL: "bg-accent",
   OTHER: "bg-line",
 };

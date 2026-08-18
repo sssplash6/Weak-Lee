@@ -112,6 +112,8 @@ model User {
   tasksAssigned   AssignedTask[] @relation("AssignedIssued")
   attendances     Attendance[]
   notifications   Notification[]
+  payrollSubmissions PayrollSubmission[]
+  payrollEvents      PayrollEvent[] @relation("PayrollEventsActed")
 }
 
 model Account {
@@ -206,6 +208,7 @@ model Penalty {
   week     Week?    @relation(fields: [weekId], references: [id], onDelete: SetNull)
   meeting  Meeting? @relation(fields: [meetingId], references: [id], onDelete: Cascade)
   payments FinePayment[]
+  payrollLines PayrollFineLine[]
 
   @@index([userId])
   @@index([weekId])
@@ -218,11 +221,20 @@ model Penalty {
 // a `batchId` and read back as a single receipt. Undoing a receipt deletes its
 // rows and gives the fines their balance back, which is why the ledger is kept
 // here rather than only as a running total on Penalty.
+// Where a fine payment came from: MANUAL is an admin settling on /penalties,
+// PAYROLL is the automatic deduction written when a pay request is processed
+// (see lib/payroll.ts). Same ledger either way — undoing a batch works for both.
+enum FinePaymentSource {
+  MANUAL
+  PAYROLL
+}
+
 model FinePayment {
   id           String   @id @default(cuid())
   penaltyId    String
   amount       Int
   batchId      String
+  source       FinePaymentSource @default(MANUAL)
   recordedById String?
   createdAt    DateTime @default(now())
 
@@ -243,9 +255,15 @@ model Bonus {
   note       String?
   issuedById String?
   createdAt  DateTime @default(now())
+  // Set when a PROCESSED pay request paid this bonus out. A consumed bonus can
+  // never enter another payroll snapshot and can't be deleted — it's money
+  // that already moved (mirrors the part-paid rule on Penalty).
+  payrollSubmissionId String?
 
-  user     User  @relation("BonusesReceived", fields: [userId], references: [id], onDelete: Cascade)
-  issuedBy User? @relation("BonusesIssued", fields: [issuedById], references: [id], onDelete: SetNull)
+  user      User  @relation("BonusesReceived", fields: [userId], references: [id], onDelete: Cascade)
+  issuedBy  User? @relation("BonusesIssued", fields: [issuedById], references: [id], onDelete: SetNull)
+  paidOutBy PayrollSubmission? @relation("BonusesPaidOut", fields: [payrollSubmissionId], references: [id], onDelete: SetNull)
+  payrollLines PayrollBonusLine[]
 
   @@index([userId])
 }
@@ -283,6 +301,7 @@ enum NotificationType {
   BONUS
   TASK_ASSIGNED
   REPORT
+  PAYROLL
   OTHER
 }
 
@@ -571,4 +590,212 @@ model Feedback {
   user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([createdAt])
+}
+
+// ----- Payroll -----
+
+// Lifecycle of a monthly pay request:
+//
+//   DRAFT → SUBMITTED → (DECLINED → SUBMITTED)* → APPROVED_BY_ADMIN → PROCESSED
+//                            └───────────────▶ EXPIRED  (resubmit window lapsed)
+//
+// SUBMITTED sits in the admin queue (tech@ / shakhzod@); APPROVED_BY_ADMIN in
+// the finance queue (valera@), whose send-back returns it to SUBMITTED.
+// PROCESSED and EXPIRED are terminal — an expired filing simply rolls into the
+// next month's cycle (its snapshot there sweeps up whatever is still unpaid).
+// Guards and side effects live in lib/payroll.ts; the UI never sets a status
+// directly.
+enum PayrollStatus {
+  DRAFT
+  SUBMITTED
+  DECLINED
+  EXPIRED
+  APPROVED_BY_ADMIN
+  PROCESSED
+}
+
+// How the person wants to be paid. UZCARD carries card number + holder name in
+// paymentDetails, WISE the account email, CASH nothing.
+enum PayrollMethod {
+  CASH
+  UZCARD
+  WISE
+}
+
+// One calendar month of payroll, boundaries in Asia/Tashkent (stored as UTC
+// instants). The cutoff is DATA (`filingClosesAt`), not arithmetic repeated at
+// call sites: 23:59:59 on the month's last day. `remindAt` is 09:00 three days
+// before the last day; `reminderSentAt` is the lazy reminder sweep's
+// once-per-period claim (same no-cron pattern as lib/submissionFines.ts).
+// Rows exist only from the feature's launch month onward, created on demand.
+model PayrollPeriod {
+  id             String    @id @default(cuid())
+  year           Int
+  month          Int // 1–12
+  startsAt       DateTime
+  endsAt         DateTime
+  filingClosesAt DateTime
+  remindAt       DateTime
+  reminderSentAt DateTime?
+  createdAt      DateTime  @default(now())
+
+  submissions PayrollSubmission[]
+
+  @@unique([year, month])
+}
+
+// One person's pay request for one period. Bonus and fine amounts are a
+// SNAPSHOT taken at (re)submit time — never read live — so an approved invoice
+// can't change because the ledger moved later; the line tables below keep the
+// per-source breakdown auditable. All money is whole-dollar USD (the app-wide
+// convention, see lib/penalties.ts). netTotal = baseSalary + bonusesTotal −
+// finesTotal + expensesTotal.
+//
+// At most one NON-terminal submission per person across all periods (enforced
+// in lib/payroll.ts): filing next month while last month's request is still in
+// flight would double-count the bonuses and fines both snapshots saw.
+model PayrollSubmission {
+  id       String        @id @default(cuid())
+  userId   String
+  periodId String
+  status   PayrollStatus @default(DRAFT)
+
+  baseSalary    Int
+  bonusesTotal  Int @default(0)
+  finesTotal    Int @default(0)
+  expensesTotal Int @default(0)
+  netTotal      Int
+
+  paymentMethod  PayrollMethod
+  paymentDetails Json          @default("{}")
+
+  // First submit, never overwritten (the Week.submittedAt convention);
+  // lastSubmittedAt moves with every resubmit and is the snapshot instant.
+  submittedAt     DateTime?
+  lastSubmittedAt DateTime?
+
+  // Set on decline: min(declinedAt + 24h, filingClosesAt + 24h). The past-cutoff
+  // day is granted once per period (`graceDayUsed`), so a re-decline after the
+  // cutoff never extends the window further.
+  resubmitDeadline DateTime?
+  graceDayUsed     Boolean   @default(false)
+
+  // Written at PROCESSED: the FinePayment batch of the fine deduction (one
+  // receipt on /penalties, undoable there like any settlement).
+  fineBatchId String?
+  processedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user   User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  period PayrollPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
+
+  bonusLines     PayrollBonusLine[]
+  fineLines      PayrollFineLine[]
+  expenses       PayrollExpense[]
+  events         PayrollEvent[]
+  pdf            PayrollPdf?
+  bonusesPaidOut Bonus[]            @relation("BonusesPaidOut")
+
+  @@unique([userId, periodId])
+  @@index([periodId, status])
+  @@index([userId, status])
+}
+
+// Snapshot of one bonus at submit time. `amount`/`note`/`awardedAt` are copies,
+// so the invoice breakdown survives the source row being edited or deleted
+// later (bonusId then goes null, the line stays).
+model PayrollBonusLine {
+  id           String   @id @default(cuid())
+  submissionId String
+  bonusId      String?
+  amount       Int
+  note         String?
+  awardedAt    DateTime
+
+  submission PayrollSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  bonus      Bonus?            @relation(fields: [bonusId], references: [id], onDelete: SetNull)
+
+  @@index([submissionId])
+}
+
+// Snapshot of one fine at submit time. `amount` is the OUTSTANDING balance then
+// (amount − paidAmount — partial payments already exist), not the face value.
+// On PROCESSED exactly this amount is written back against exactly this fine.
+model PayrollFineLine {
+  id           String      @id @default(cuid())
+  submissionId String
+  penaltyId    String?
+  amount       Int
+  type         PenaltyType
+  note         String?
+  issuedAt     DateTime
+
+  submission PayrollSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  penalty    Penalty?          @relation(fields: [penaltyId], references: [id], onDelete: SetNull)
+
+  @@index([submissionId])
+}
+
+// A self-reported miscellaneous expense line on a submission, with an optional
+// uploaded receipt (bytes live in PayrollReceipt so lists never drag blobs).
+model PayrollExpense {
+  id           String @id @default(cuid())
+  submissionId String
+  label        String
+  amount       Int
+  position     Int
+
+  submission PayrollSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  receipt    PayrollReceipt?
+
+  @@index([submissionId])
+}
+
+// Receipt file for one expense, stored in Postgres — Render's filesystem is
+// ephemeral, so bytes never touch disk. Size/type are capped at upload
+// (lib/payrollTypes.ts). Fetched only by the download route, never in lists.
+model PayrollReceipt {
+  id        String   @id @default(cuid())
+  expenseId String   @unique
+  filename  String
+  mimeType  String
+  size      Int
+  bytes     Bytes
+  createdAt DateTime @default(now())
+
+  expense PayrollExpense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+}
+
+// The generated invoice PDF for a submission's CURRENT snapshot — regenerated
+// (replaced) on every resubmission. Kept out of PayrollSubmission for the same
+// reason receipts have their own table: Prisma selects all scalars by default,
+// and queue queries must not haul PDF bytes.
+model PayrollPdf {
+  id           String   @id @default(cuid())
+  submissionId String   @unique
+  bytes        Bytes
+  updatedAt    DateTime @updatedAt
+
+  submission PayrollSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+}
+
+// Append-only audit log: one row per status transition, written in the same
+// transaction as the transition itself. Decline and send-back notes live here.
+// Nothing anywhere updates or deletes a row (a null actor is the system, e.g.
+// the lazy expiry sweep).
+model PayrollEvent {
+  id           String         @id @default(cuid())
+  submissionId String
+  actorId      String?
+  fromStatus   PayrollStatus?
+  toStatus     PayrollStatus
+  note         String?
+  createdAt    DateTime       @default(now())
+
+  submission PayrollSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  actor      User?             @relation("PayrollEventsActed", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([submissionId, createdAt])
 }
