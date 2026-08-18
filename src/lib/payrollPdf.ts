@@ -12,7 +12,7 @@
 
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { PDFDocument, type PDFFont, type PDFPage, rgb } from "pdf-lib";
+import { PDFDocument, type PDFFont, rgb } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import { PENALTY_LABEL, type PenaltyType } from "@/lib/penalties";
 import {
@@ -119,7 +119,9 @@ function loadAssets() {
   return assetsPromise;
 }
 
-export async function renderPayrollInvoice(data: InvoiceData): Promise<Uint8Array> {
+export async function renderPayrollInvoice(
+  data: InvoiceData,
+): Promise<Uint8Array<ArrayBuffer>> {
   const assets = await loadAssets();
   const doc = await PDFDocument.create();
   doc.registerFontkit(fontkit);
@@ -277,5 +279,7 @@ export async function renderPayrollInvoice(data: InvoiceData): Promise<Uint8Arra
     y -= 14;
   }
 
-  return doc.save();
+  // pdf-lib allocates over a plain ArrayBuffer; the assertion pins the
+  // generic so the bytes feed Prisma's Bytes input without widening.
+  return (await doc.save()) as Uint8Array<ArrayBuffer>;
 }

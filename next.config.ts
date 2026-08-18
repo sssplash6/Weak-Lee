@@ -5,6 +5,14 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: __dirname,
   },
+  experimental: {
+    serverActions: {
+      // The payroll filing form uploads expense receipts (≤4MB each, capped in
+      // lib/payrollTypes.ts) inside one action body; the 1MB default would
+      // reject them. Multipart overhead needs headroom on top.
+      bodySizeLimit: "16mb",
+    },
+  },
   images: {
     remotePatterns: [
       {

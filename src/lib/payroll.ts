@@ -470,7 +470,10 @@ export async function processSubmission(opts: {
 
 // ----- Reminder sweep -----
 
-const APP_URL = () => process.env.AUTH_URL ?? "https://www.freshweek.org";
+/** Absolute base for links in payroll emails (same var Auth.js builds from). */
+export function appUrl(): string {
+  return process.env.AUTH_URL ?? "https://www.freshweek.org";
+}
 
 /**
  * The filing reminder: 09:00 Tashkent three days before the month's last day,
@@ -524,7 +527,7 @@ export async function reconcilePayrollReminders(now = new Date()): Promise<void>
             `Hi${e.name ? ` ${e.name}` : ""},\n\n` +
             `You haven't filed your ${label} pay request yet. Filing closes ` +
             `${formatTashkent(period.filingClosesAt)}.\n\n` +
-            `File it here: ${APP_URL()}/payroll\n\n— FreshWeek`,
+            `File it here: ${appUrl()}/payroll\n\n— FreshWeek`,
         }),
       ),
   );

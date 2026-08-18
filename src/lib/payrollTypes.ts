@@ -39,6 +39,17 @@ export type PaymentDetails = {
   wiseEmail?: string;
 };
 
+/** Safely read a Prisma Json column back into the details shape. */
+export function parsePaymentDetails(v: unknown): PaymentDetails {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return {};
+  const o = v as Record<string, unknown>;
+  return {
+    cardNumber: typeof o.cardNumber === "string" ? o.cardNumber : undefined,
+    cardHolder: typeof o.cardHolder === "string" ? o.cardHolder : undefined,
+    wiseEmail: typeof o.wiseEmail === "string" ? o.wiseEmail : undefined,
+  };
+}
+
 /** One line: "UzCard · 8600 …1234 · NAME", "Wise · a@b.c", or "Cash". */
 export function paymentSummary(
   method: PayrollMethod,
@@ -82,6 +93,34 @@ export const RECEIPT_MIME_TYPES = [
   "image/heic",
   "application/pdf",
 ];
+
+/** Status pill classes — semantic tokens flip for dark; raw hues follow the
+ * app's existing chip convention (policy cards, notices). */
+export const PAYROLL_STATUS_BADGE: Record<PayrollStatus, string> = {
+  DRAFT: "bg-canvas text-muted-fg",
+  SUBMITTED: "bg-brand-soft text-brand",
+  DECLINED: "bg-red-50 text-red-700",
+  EXPIRED: "bg-canvas text-muted-fg",
+  APPROVED_BY_ADMIN: "bg-accent-soft text-accent-ink",
+  PROCESSED: "bg-green-50 text-green-700",
+};
+
+/** One audit-trail row's verb, disambiguated by where it came from. */
+export function payrollEventLabel(
+  from: PayrollStatus | null,
+  to: PayrollStatus,
+): string {
+  if (to === "SUBMITTED") {
+    if (from === "DECLINED") return "Resubmitted";
+    if (from === "APPROVED_BY_ADMIN") return "Sent back by finance";
+    return "Filed";
+  }
+  if (to === "DECLINED") return "Declined";
+  if (to === "APPROVED_BY_ADMIN") return "Approved — sent to finance";
+  if (to === "PROCESSED") return "Paid out";
+  if (to === "EXPIRED") return "Expired — resubmit window lapsed";
+  return PAYROLL_STATUS_LABEL[to];
+}
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",

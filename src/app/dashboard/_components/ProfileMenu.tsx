@@ -167,6 +167,13 @@ export function ProfileMenu({
           >
             Penalties
           </Link>
+          <Link
+            href="/payroll"
+            onClick={() => setOpen(false)}
+            className="block rounded-lg px-3 py-2 text-left text-sm font-medium text-ink transition hover:bg-canvas"
+          >
+            Payroll
+          </Link>
 
           <div className="my-1 border-t border-line" />
 
