@@ -5,6 +5,7 @@ export const metadata: Metadata = { title: "The Team" };
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { resolveAvatar } from "@/lib/avatar";
+import { ROLE_LABEL } from "@/lib/team";
 import { formatYmd, toYmd } from "@/lib/dates";
 import { BackLink } from "@/app/_components/BackLink";
 
@@ -26,7 +27,8 @@ export default async function TeamPage() {
       name: true,
       email: true,
       avatar: true,
-      department: true,
+      role: true,
+      department: { select: { name: true } },
       workPhone: true,
       telegramUsername: true,
       linkedin: true,
@@ -59,7 +61,7 @@ export default async function TeamPage() {
            box rather than wrapping every cell into a tall, unreadable row —
            and the name column pins itself so it stays visible while it does. */
         <div className="overflow-x-auto rounded-2xl border border-line bg-surface shadow-sm">
-          <table className="w-full min-w-[54rem] text-left text-sm">
+          <table className="w-full min-w-[58rem] text-left text-sm">
             <thead>
               <tr className="border-b border-line text-xs font-medium uppercase tracking-wide text-muted-fg">
                 <th
@@ -70,6 +72,9 @@ export default async function TeamPage() {
                 </th>
                 <th scope="col" className="px-4 py-3">
                   Department
+                </th>
+                <th scope="col" className="px-4 py-3">
+                  Role
                 </th>
                 <th scope="col" className="px-4 py-3">
                   Email
@@ -128,7 +133,19 @@ export default async function TeamPage() {
                         </span>
                       </span>
                     </th>
-                    <Cell>{m.department}</Cell>
+                    <Cell>{m.department?.name}</Cell>
+                    <Cell>
+                      {/* The label the whole expectations system keys off:
+                          leads owe meetings and weekly/monthly goals, members
+                          don't — so leads get the chip, members stay quiet. */}
+                      {m.role === "LEAD" ? (
+                        <span className="rounded-full bg-brand-soft px-2 py-0.5 text-[11px] font-semibold text-brand">
+                          {ROLE_LABEL.LEAD}
+                        </span>
+                      ) : (
+                        <span className="text-muted-fg">{ROLE_LABEL.MEMBER}</span>
+                      )}
+                    </Cell>
                     <Cell>
                       {m.email && (
                         <a

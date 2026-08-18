@@ -14,9 +14,10 @@ export type ProfileState = { error: string | null; saved: boolean };
 
 /**
  * Save the editable profile fields for the signed-in user. Name, work phone,
- * Telegram, department and birthday stay required (they gate the dashboard);
- * LinkedIn and Instagram are optional. Email is not editable — it's the Google
- * sign-in identity.
+ * Telegram and birthday stay required (they gate the dashboard); LinkedIn and
+ * Instagram are optional. Email is not editable — it's the Google sign-in
+ * identity — and the department/role pair is org structure, managed by admins
+ * on /departments rather than self-served here.
  */
 export async function updateProfile(
   _prev: ProfileState,
@@ -30,13 +31,12 @@ export async function updateProfile(
   const telegramUsername = normalizeTelegram(
     String(formData.get("telegramUsername") ?? ""),
   );
-  const department = String(formData.get("department") ?? "").trim();
   const birthday = String(formData.get("birthday") ?? "").trim();
   const linkedin = normalizeLinkedin(String(formData.get("linkedin") ?? ""));
   const instagram = normalizeInstagram(String(formData.get("instagram") ?? ""));
 
-  if (!name || !workPhone || !telegramUsername || !department || !birthday) {
-    return { error: "Name, phone, Telegram, department and birthday are required.", saved: false };
+  if (!name || !workPhone || !telegramUsername || !birthday) {
+    return { error: "Name, phone, Telegram and birthday are required.", saved: false };
   }
 
   await prisma.user.update({
@@ -45,7 +45,6 @@ export async function updateProfile(
       name,
       workPhone,
       telegramUsername,
-      department,
       birthday: fromYmd(birthday),
       linkedin: linkedin || null,
       instagram: instagram || null,

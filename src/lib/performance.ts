@@ -35,7 +35,7 @@ export type PerformanceSource = {
   id: string;
   name: string | null;
   email: string | null;
-  department: string | null;
+  department: { name: string } | null;
   avatar: string | null;
   createdAt: Date;
   weeks: {
@@ -476,7 +476,7 @@ function computeOne(
     id: u.id,
     name: u.name ?? u.email ?? "—",
     email: u.email,
-    department: u.department,
+    department: u.department?.name ?? null,
     avatar: u.avatar,
     tenureWeeks: Math.max(
       0,

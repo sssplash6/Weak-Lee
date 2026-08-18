@@ -67,9 +67,9 @@ export async function reconcileSubmissionFines(opts?: {
   const users = await prisma.user.findMany({
     where: {
       // Only people who were around before the deadline (new joiners get a pass
-      // this cycle) and have onboarded (department is set on completing it).
+      // this cycle) and have onboarded (a department is picked on completing it).
       createdAt: { lt: submissionDeadline },
-      department: { not: null },
+      departmentId: { not: null },
       ...(opts?.userId ? { id: opts.userId } : {}),
     },
     select: {

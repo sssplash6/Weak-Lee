@@ -98,7 +98,7 @@ export default async function PenaltiesPage() {
           id: true,
           name: true,
           email: true,
-          department: true,
+          department: { select: { name: true } },
           avatar: true,
           penalties: {
             // Oldest first — the order a settlement is applied in, so every
@@ -195,7 +195,7 @@ export default async function PenaltiesPage() {
     return {
       id: u.id,
       name: u.name ?? u.email ?? "—",
-      department: u.department,
+      department: u.department?.name ?? null,
       emoji: av.emoji,
       bg: av.bg,
       outstanding,

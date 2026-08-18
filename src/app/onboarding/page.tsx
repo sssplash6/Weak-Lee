@@ -12,16 +12,24 @@ export default async function OnboardingPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/signin");
 
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: {
-      name: true,
-      workPhone: true,
-      telegramUsername: true,
-      department: true,
-      birthday: true,
-    },
-  });
+  const [user, departments] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: {
+        name: true,
+        workPhone: true,
+        telegramUsername: true,
+        departmentId: true,
+        birthday: true,
+      },
+    }),
+    // The fixed list a new joiner picks their department from. Admins manage
+    // it on /departments; there's no free-text fallback.
+    prisma.department.findMany({
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
+  ]);
 
   // Already onboarded — no reason to be here.
   if (user && isProfileComplete(user)) redirect("/dashboard");
@@ -40,11 +48,12 @@ export default async function OnboardingPage() {
         </div>
 
         <OnboardingForm
+          departments={departments}
           defaults={{
             name: user?.name ?? session.user.name ?? "",
             workPhone: user?.workPhone ?? "",
             telegramUsername: user?.telegramUsername ?? "",
-            department: user?.department ?? "",
+            departmentId: user?.departmentId ?? "",
             birthday: user?.birthday ? toYmd(user.birthday) : "",
           }}
         />

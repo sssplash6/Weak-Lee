@@ -112,7 +112,8 @@ export default async function AdminPage({
         id: true,
         name: true,
         email: true,
-        department: true,
+        role: true,
+        department: { select: { name: true } },
         avatar: true,
         // The most recent weeks, newest first — enough to pick out the current
         // and previous cycle weeks even when someone has reported ahead.
@@ -258,7 +259,8 @@ export default async function AdminPage({
             id: true,
             name: true,
             email: true,
-            department: true,
+            role: true,
+            department: { select: { name: true } },
             avatar: true,
             createdAt: true,
             weeks: {
@@ -352,7 +354,7 @@ export default async function AdminPage({
       id: u.id,
       name: u.name,
       email: u.email,
-      department: u.department,
+      department: u.department?.name ?? null,
       avatar: u.avatar,
       weekLabel: fields.label,
       notClosed: fields.notClosed ?? false,

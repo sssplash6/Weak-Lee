@@ -11,8 +11,9 @@ export type OnboardingState = { error: string | null };
 
 /**
  * Save the onboarding profile (full name, work phone, Telegram handle,
- * department) for the signed-in user, then send them to the dashboard. All
- * four fields are required.
+ * department picked from the existing list) for the signed-in user, then send
+ * them to the dashboard. Every field is required. New joiners always start as
+ * a MEMBER — an admin promotes department leads on /departments.
  */
 export async function completeProfile(
   _prev: OnboardingState,
@@ -26,11 +27,21 @@ export async function completeProfile(
   const telegramUsername = normalizeTelegram(
     String(formData.get("telegramUsername") ?? ""),
   );
-  const department = String(formData.get("department") ?? "").trim();
+  const departmentId = String(formData.get("departmentId") ?? "").trim();
   const birthday = String(formData.get("birthday") ?? "").trim();
 
-  if (!name || !workPhone || !telegramUsername || !department || !birthday) {
+  if (!name || !workPhone || !telegramUsername || !departmentId || !birthday) {
     return { error: "Please fill in every field." };
+  }
+
+  // The select only offers real departments, but the value is caller-supplied —
+  // verify it names one before pointing the profile at it.
+  const department = await prisma.department.findUnique({
+    where: { id: departmentId },
+    select: { id: true },
+  });
+  if (!department) {
+    return { error: "Pick a department from the list." };
   }
 
   await prisma.user.update({
@@ -39,7 +50,7 @@ export async function completeProfile(
       name,
       workPhone,
       telegramUsername,
-      department,
+      departmentId: department.id,
       birthday: fromYmd(birthday),
     },
   });

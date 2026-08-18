@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { stat } from "node:fs/promises";
 import path from "node:path";
@@ -84,17 +83,17 @@ export default async function GuidelinesPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/signin");
 
-  // The viewer's department decides which guides unlock. It's free text people
-  // type in their profile, so it can be missing entirely.
+  // The viewer's department decides which guides unlock. It's a real Department
+  // row now, but someone mid-onboarding can still be without one.
   const [viewer, sizes] = await Promise.all([
     prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { department: true },
+      select: { department: { select: { name: true } } },
     }),
     guideSizes(),
   ]);
   const me = {
-    department: viewer?.department,
+    department: viewer?.department?.name,
     isAdmin: isAdmin(session.user.email),
   };
   const totalPages = ALL_GUIDES.reduce((s, g) => s + g.pages, 0);
@@ -117,12 +116,8 @@ export default async function GuidelinesPage() {
           </p>
           {!me.department && (
             <p className="mt-1 text-sm text-accent-ink">
-              Your profile has no department yet, so department guides stay
-              locked.{" "}
-              <Link href="/profile" className="font-semibold underline">
-                Add it
-              </Link>
-              .
+              You&rsquo;re not in a department yet, so department guides stay
+              locked — finish onboarding or ask an admin to place you.
             </p>
           )}
         </div>

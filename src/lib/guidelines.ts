@@ -31,9 +31,9 @@ export type Guide = {
   pdf: string;
   /**
    * Departments allowed to open it, or null for everyone. The first entry is the
-   * canonical name shown on the badge; the rest are accepted spellings, because
-   * `User.department` is free text people type themselves. Matching is
-   * case-insensitive and apostrophe-insensitive — see `canReadGuide`.
+   * canonical name shown on the badge; the rest are accepted spellings, so a
+   * guide keeps unlocking even if an admin renames the Department row slightly.
+   * Matching is case-insensitive and apostrophe-insensitive — see `canReadGuide`.
    */
   departments: readonly string[] | null;
   /** Numbered sections, in the order the document lists them. */

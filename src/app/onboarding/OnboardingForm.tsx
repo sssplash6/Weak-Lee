@@ -9,11 +9,17 @@ type Defaults = {
   name: string;
   workPhone: string;
   telegramUsername: string;
-  department: string;
+  departmentId: string;
   birthday: string;
 };
 
-export function OnboardingForm({ defaults }: { defaults: Defaults }) {
+export function OnboardingForm({
+  departments,
+  defaults,
+}: {
+  departments: { id: string; name: string }[];
+  defaults: Defaults;
+}) {
   const [state, action, isPending] = useActionState(completeProfile, initial);
 
   return (
@@ -40,12 +46,35 @@ export function OnboardingForm({ defaults }: { defaults: Defaults }) {
         placeholder="@gapyearingdoesntsuck"
         prefixHint="We'll store it without the @."
       />
-      <Field
-        label="Department"
-        name="department"
-        defaultValue={defaults.department}
-        placeholder="Tech"
-      />
+
+      {/* Departments are a fixed list managed by admins — new joiners pick the
+          one they're joining rather than typing free text. */}
+      <label className="block">
+        <span className="text-sm font-semibold text-ink">Department</span>
+        {departments.length > 0 ? (
+          <select
+            name="departmentId"
+            required
+            defaultValue={defaults.departmentId}
+            className="mt-1.5 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink focus:border-brand focus:outline-none"
+          >
+            <option value="" disabled>
+              Choose your department…
+            </option>
+            {departments.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.name}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <p className="mt-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            No departments exist yet — ask an admin to create yours on the
+            Departments page, then come back here.
+          </p>
+        )}
+      </label>
+
       <Field
         label="Birthday"
         name="birthday"
@@ -61,7 +90,7 @@ export function OnboardingForm({ defaults }: { defaults: Defaults }) {
 
       <button
         type="submit"
-        disabled={isPending}
+        disabled={isPending || departments.length === 0}
         className="mt-2 rounded-lg bg-brand px-4 py-3 text-sm font-semibold text-white transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-50"
       >
         {isPending ? "Saving…" : "Continue to dashboard"}
