@@ -203,6 +203,29 @@ export async function reconcileSubmissionFines(opts?: {
           `Your late-submission fine was raised to ${formatMoney(amount)} — goals still not submitted at the Monday 11:00 meeting.`,
         );
       });
+    } else if (
+      existing.paidAt == null &&
+      existing.amount > amount &&
+      existing.paidAmount <= amount
+    ) {
+      // Re-price DOWN too: a $40 "missed the meeting" fine issued while the
+      // person looked like a no-show drops back to $20 once their submission
+      // turns out to have landed before the meeting (the sweep runs between
+      // page loads, so it can escalate before it has seen a submit). What's
+      // been paid stays paid — shrink only while paid ≤ the new amount;
+      // anything odder is admin territory on /penalties.
+      await prisma.$transaction(async (tx) => {
+        await tx.penalty.update({
+          where: { id: existing.id },
+          data: { amount, note, ...(weekId ? { weekId } : {}) },
+        });
+        await notify(
+          tx,
+          u.id,
+          "FINE",
+          `Your late-submission fine was reduced to ${formatMoney(amount)} — your goals were in before the Monday 11:00 meeting.`,
+        );
+      });
     }
   }
 }
