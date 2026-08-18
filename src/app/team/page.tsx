@@ -44,7 +44,9 @@ export default async function TeamPage() {
         <div>
           <h1 className="mt-1 text-2xl font-bold text-ink">The Team</h1>
           <p className="mt-1 text-sm text-muted-fg">
-            {members.length} {members.length === 1 ? "member" : "members"}
+            {`${members.length} ${members.length === 1 ? "person" : "people"} · ${
+              members.filter((m) => m.role === "LEAD").length
+            } department leads`}
           </p>
         </div>
         <BackLink href="/dashboard" label="My dashboard" />
