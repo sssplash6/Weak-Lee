@@ -60,6 +60,9 @@ export type AdminUser = {
   id: string;
   name: string | null;
   email: string | null;
+  // Department leads owe the weekly cycle (and the Monday meeting); members
+  // don't, so every expectation flag below only ever lights up for a lead.
+  lead: boolean;
   department: string | null;
   avatar: string | null;
   weekLabel: string | null;
@@ -116,16 +119,19 @@ export function AdminUserList({
     return <p className="px-1 text-sm text-muted-fg">No users yet.</p>;
   }
 
-  // "Submitted" = they've submitted their goals for the current period.
+  // "Submitted" = they've submitted their goals for the current period (anyone
+  // can, voluntarily). "Not submitted" is the nag list, so it holds only the
+  // department leads who actually owe a submission.
   const submittedCount = users.filter((u) => u.submittedAtLabel != null).length;
   const counts = {
     all: users.length,
     submitted: submittedCount,
-    "not-submitted": users.length - submittedCount,
+    "not-submitted": users.filter((u) => u.lead && u.submittedAtLabel == null)
+      .length,
   };
   const visible = users.filter((u) => {
     if (filter === "submitted") return u.submittedAtLabel != null;
-    if (filter === "not-submitted") return u.submittedAtLabel == null;
+    if (filter === "not-submitted") return u.lead && u.submittedAtLabel == null;
     return true;
   });
 
@@ -134,6 +140,33 @@ export function AdminUserList({
     { key: "submitted", label: labels.done },
     { key: "not-submitted", label: labels.notDone },
   ];
+
+  // Leads first, members after, each under a small header (shown only when
+  // both groups are present, so a filtered view doesn't carry a lone label).
+  const leads = visible.filter((u) => u.lead);
+  const members = visible.filter((u) => !u.lead);
+  const showHeaders = leads.length > 0 && members.length > 0;
+
+  const renderGroup = (list: AdminUser[], header: string) =>
+    list.length > 0 && (
+      <div>
+        {showHeaders && (
+          <p className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-muted-fg">
+            {header} ({list.length})
+          </p>
+        )}
+        <ul className="flex flex-col gap-2">
+          {list.map((u) => (
+            <UserRow
+              key={u.id}
+              user={u}
+              isSelf={u.id === currentUserId}
+              labels={labels}
+            />
+          ))}
+        </ul>
+      </div>
+    );
 
   return (
     <>
@@ -158,16 +191,10 @@ export function AdminUserList({
       {visible.length === 0 ? (
         <p className="px-1 text-sm text-muted-fg">No people match this filter.</p>
       ) : (
-        <ul className="flex flex-col gap-2">
-          {visible.map((u) => (
-            <UserRow
-              key={u.id}
-              user={u}
-              isSelf={u.id === currentUserId}
-              labels={labels}
-            />
-          ))}
-        </ul>
+        <div className="flex flex-col gap-4">
+          {renderGroup(leads, "Department leads")}
+          {renderGroup(members, "Members")}
+        </div>
       )}
     </>
   );
@@ -231,7 +258,7 @@ function UserRow({
                 Week ahead
               </span>
             )}
-            {u.goalCount === 0 && (
+            {u.lead && u.goalCount === 0 && (
               <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700">
                 No goals
               </span>
@@ -246,15 +273,17 @@ function UserRow({
                 +{formatMoney(u.bonusTotal)}
               </span>
             )}
+            {/* The red flag is an unmet expectation, so members never get one —
+                a member's voluntary submission still earns the green chip. */}
             {u.submittedAtLabel ? (
               <span className="shrink-0 rounded-full bg-green-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-green-700">
                 {labels.done}
               </span>
-            ) : (
+            ) : u.lead ? (
               <span className="shrink-0 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-600">
                 {labels.notDone}
               </span>
-            )}
+            ) : null}
           </p>
           <p className="truncate text-xs text-muted-fg">
             {u.email ?? "no email"}
@@ -268,7 +297,9 @@ function UserRow({
               u.weekLabel,
               u.submittedAtLabel
                 ? `${labels.goalsWord} submitted ${u.submittedAtLabel}`
-                : `${labels.goalsWord} not submitted yet`,
+                : u.lead
+                  ? `${labels.goalsWord} not submitted yet`
+                  : "No submission expected",
             ]
               .filter(Boolean)
               .join(" · ")}

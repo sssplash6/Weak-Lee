@@ -15,6 +15,7 @@ import {
   weekSubmissionDeadline,
 } from "@/lib/lateness";
 import type { AttendanceStatus, PenaltyType } from "@/lib/penalties";
+import type { TeamRole } from "@/lib/team";
 
 // ---------------------------------------------------------------- input shapes
 
@@ -35,6 +36,7 @@ export type PerformanceSource = {
   id: string;
   name: string | null;
   email: string | null;
+  role: TeamRole;
   department: { name: string } | null;
   avatar: string | null;
   createdAt: Date;
@@ -89,6 +91,8 @@ export type EmployeePerformance = {
   id: string;
   name: string;
   email: string | null;
+  /** Department leads owe meetings and weekly reports; members owe neither. */
+  lead: boolean;
   department: string | null;
   avatar: string | null;
   /** Weeks since the account was created — a fairness note next to thin data. */
@@ -380,11 +384,14 @@ function computeOne(
   // The fine ledger IS the app's record of a missed deadline, so an admin
   // deleting one — forgiving it, or clearing a fine issued in error — clears
   // the person's late mark with it. Cycles before the deadline was enforced
-  // aren't judged at all rather than being scored retroactively.
+  // aren't judged at all rather than being scored retroactively. Only
+  // department leads owe cycles at all: a member's reporting block stays empty
+  // (expected 0, rate null) and its weight folds back out of their score.
   const submitted = weeks.filter((w) => w.submittedAt != null);
-  const owed = cycles.filter(
-    (c) => u.createdAt.getTime() <= c.deadline.getTime(),
-  );
+  const owed =
+    u.role === "LEAD"
+      ? cycles.filter((c) => u.createdAt.getTime() <= c.deadline.getTime())
+      : [];
   let onTimeCount = 0;
   let lateCount = 0;
   let missedCount = 0;
@@ -476,6 +483,7 @@ function computeOne(
     id: u.id,
     name: u.name ?? u.email ?? "—",
     email: u.email,
+    lead: u.role === "LEAD",
     department: u.department?.name ?? null,
     avatar: u.avatar,
     tenureWeeks: Math.max(

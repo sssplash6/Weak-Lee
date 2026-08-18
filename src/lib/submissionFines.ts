@@ -5,9 +5,14 @@
 //   • after Monday 11:00           — escalate an unpaid $20 to $40
 // It's idempotent (at most one late-submission fine per person per cycle) so it
 // can safely run on any page load or a cron ping. People who submitted on time
-// are never fined; people who submitted late keep the $20 they earned. Accounts
-// on the submission-exempt list (see lib/submissionExempt.ts) are skipped
-// entirely — they may still set goals, they're just never fined for not doing it.
+// are never fined; people who submitted late keep the $20 they earned.
+//
+// The deadline only governs department leads (role LEAD — the ops director is
+// one). Members may set and submit goals like anyone else, but nothing is owed,
+// so they're never fined; any late-submission fine a member is still carrying
+// (from before roles existed) is released on the next sweep. Accounts on the
+// submission-exempt list (see lib/submissionExempt.ts) are skipped the same
+// way regardless of role.
 
 import { prisma } from "@/lib/prisma";
 import { notify } from "@/lib/notifications";
@@ -45,10 +50,11 @@ export async function reconcileSubmissionFines(opts?: {
   const now = new Date();
   const cycle = currentSubmissionCycle(now);
 
-  // Clear anything an exempt account is still carrying first — this runs on
-  // every phase, so adding an exemption takes effect on the next page load
-  // rather than waiting for a deadline to come round.
-  await releaseExemptSubmissionFines(opts?.userId);
+  // Clear anything an exempt account or a member is still carrying first —
+  // this runs on every phase, so adding an exemption (or demoting someone to
+  // member) takes effect on the next page load rather than waiting for a
+  // deadline to come round.
+  await releaseUnexpectedSubmissionFines(opts?.userId);
 
   // Undo what the noon sweep wrote before the 2026-08-16 deadline moved to
   // midnight (see TRIP_SHIFTED_DEADLINE_* in lib/lateness.ts).
@@ -66,8 +72,10 @@ export async function reconcileSubmissionFines(opts?: {
 
   const users = await prisma.user.findMany({
     where: {
-      // Only people who were around before the deadline (new joiners get a pass
-      // this cycle) and have onboarded (a department is picked on completing it).
+      // Only department leads are expected to submit, and only ones who were
+      // around before the deadline (new joiners get a pass this cycle) and
+      // have onboarded (a department is picked on completing it).
+      role: "LEAD",
       createdAt: { lt: submissionDeadline },
       departmentId: { not: null },
       ...(opts?.userId ? { id: opts.userId } : {}),
@@ -111,7 +119,8 @@ export async function reconcileSubmissionFines(opts?: {
 
   for (const u of users) {
     // Accounts not expected to report weekly (e.g. alumni) are never fined for
-    // it — releaseExemptSubmissionFines above has already cleaned up after them.
+    // it — releaseUnexpectedSubmissionFines above has already cleaned up after
+    // them.
     if (isSubmissionExempt(u.email)) continue;
     if (waived.has(u.id)) continue;
 
@@ -231,20 +240,25 @@ export async function reconcileSubmissionFines(opts?: {
 }
 
 /**
- * Drop any untouched late-submission fine held by an exempt account — whether
- * it predates the exemption or slipped through some other path. Fines with
- * money against them are left alone (it already moved; an admin can reopen one
- * on /penalties if it was wrong). Pass a `userId` to limit this to one person,
- * matching the sweep above.
+ * Drop any untouched late-submission fine held by someone the deadline doesn't
+ * govern: an exempt account, or a member (only department leads owe weekly
+ * submissions — a member's fine either predates the roles or predates their
+ * demotion). Fines with money against them are left alone (it already moved;
+ * an admin can reopen one on /penalties if it was wrong). Pass a `userId` to
+ * limit this to one person, matching the sweep above.
  */
-async function releaseExemptSubmissionFines(userId?: string): Promise<void> {
-  const exempt = await prisma.user.findMany({
+async function releaseUnexpectedSubmissionFines(userId?: string): Promise<void> {
+  const unexpected = await prisma.user.findMany({
     where: {
-      email: { in: submissionExemptEmails(), mode: "insensitive" },
+      OR: [
+        { email: { in: submissionExemptEmails(), mode: "insensitive" } },
+        { role: "MEMBER" },
+      ],
       ...(userId ? { id: userId } : {}),
     },
     select: {
       id: true,
+      email: true,
       penalties: {
         where: { type: "LATE_SUBMISSION", paidAt: null, paidAmount: 0 },
         select: { id: true, amount: true },
@@ -252,23 +266,21 @@ async function releaseExemptSubmissionFines(userId?: string): Promise<void> {
     },
   });
 
-  for (const u of exempt) {
+  for (const u of unexpected) {
     if (u.penalties.length === 0) continue;
     const total = u.penalties.reduce((sum, p) => sum + p.amount, 0);
     const label =
       u.penalties.length > 1
         ? `late-submission fines totalling ${formatMoney(total)}`
         : `${formatMoney(total)} late-submission fine`;
+    const reason = isSubmissionExempt(u.email)
+      ? "this account isn't fined for late weekly submissions"
+      : "only department leads are expected to submit weekly goals";
     await prisma.$transaction(async (tx) => {
       await tx.penalty.deleteMany({
         where: { id: { in: u.penalties.map((p) => p.id) } },
       });
-      await notify(
-        tx,
-        u.id,
-        "FINE",
-        `Your ${label} was removed — this account isn't fined for late weekly submissions.`,
-      );
+      await notify(tx, u.id, "FINE", `Your ${label} was removed — ${reason}.`);
     });
   }
 }

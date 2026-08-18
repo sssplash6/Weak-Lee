@@ -99,6 +99,9 @@ export function EmployeeReport({
               <span className="shrink-0 rounded-full bg-brand-soft px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand">
                 {dept}
               </span>
+              <span className="shrink-0 rounded-full border border-line px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted-fg">
+                {e.lead ? "Dep. lead" : "Member"}
+              </span>
               {band && <ToneChip tone={band.tone}>{band.label}</ToneChip>}
             </div>
             <p className="mt-1.5 truncate text-xs text-muted-fg">
@@ -252,7 +255,11 @@ export function EmployeeReport({
         note="Every week owed counts; one never submitted is a miss."
       >
         {e.reporting.expected === 0 ? (
-          <Empty>No report was due in this range.</Empty>
+          <Empty>
+            {e.lead
+              ? "No report was due in this range."
+              : "Members don't owe weekly reports — only department leads do."}
+          </Empty>
         ) : (
           <>
             <div className="flex items-baseline gap-2">

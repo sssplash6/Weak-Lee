@@ -609,8 +609,12 @@ export default async function DashboardPage({
 
   return (
     <>
-      {/* Entry alert: nags until this period's goals are submitted once. */}
-      {period.submittedAt == null && <SubmitReminder scope={view} />}
+      {/* Entry alert: nags until this period's goals are submitted once.
+          Submissions are only expected from department leads — members can
+          still submit, they're just never nagged about it. */}
+      {period.submittedAt == null && profile.role === "LEAD" && (
+        <SubmitReminder scope={view} />
+      )}
 
       <div className="mx-auto flex w-full max-w-6xl flex-1 gap-6 px-4 py-8">
       <aside className="hidden w-64 shrink-0 lg:block">

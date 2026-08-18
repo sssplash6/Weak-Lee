@@ -779,9 +779,15 @@ export async function startNewWeek(
 
   // How late this submission is against the new week's deadlines. "late" =
   // after Sunday 12:00; "missed" = after the Monday 11:00 meeting (flagged not
-  // submitted there). Both count as a late submission for the flag/fine.
+  // submitted there). Both count as a late submission for the flag/fine — but
+  // only for department leads: members owe no deadline, so their weeks are
+  // never stamped late (and the fine sweep skips them anyway).
+  const me = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { role: true },
+  });
   const timing = submissionTiming(now, start);
-  const submittedLate = timing !== "on-time";
+  const submittedLate = me?.role === "LEAD" && timing !== "on-time";
 
   await prisma.$transaction(async (tx) => {
     await Promise.all(

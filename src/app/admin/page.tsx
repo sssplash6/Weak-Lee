@@ -171,7 +171,9 @@ export default async function AdminPage({
       select: { id: true, message: true, userEmail: true, createdAt: true },
     }),
     prisma.week.findMany({
-      where: { submittedLate: true },
+      // Only leads owe the deadline; a member's historical Late flag (from
+      // before roles existed) shouldn't keep them on this list.
+      where: { submittedLate: true, user: { role: "LEAD" } },
       orderBy: { createdAt: "desc" },
       take: 25,
       select: {
@@ -354,6 +356,7 @@ export default async function AdminPage({
       id: u.id,
       name: u.name,
       email: u.email,
+      lead: u.role === "LEAD",
       department: u.department?.name ?? null,
       avatar: u.avatar,
       weekLabel: fields.label,
@@ -456,7 +459,8 @@ export default async function AdminPage({
         : null;
     return baseUser(u, {
       label: wk ? fmtRange(wk.startDate, wk.endDate) : null,
-      late: wk?.submittedLate ?? false,
+      // Members owe no deadline, so nothing of theirs reads as late.
+      late: u.role === "LEAD" && (wk?.submittedLate ?? false),
       submittedAt: wk?.submittedAt ?? null,
       aheadLabel: ahead,
       goals: wk?.goals ?? [],
@@ -470,9 +474,10 @@ export default async function AdminPage({
     const closed = currentWeekOf(u.weeks) != null;
     return baseUser(u, {
       label: wk ? fmtRange(wk.startDate, wk.endDate) : null,
-      late: wk?.submittedLate ?? false,
+      late: u.role === "LEAD" && (wk?.submittedLate ?? false),
       submittedAt: wk?.submittedAt ?? null,
-      notClosed: wk != null && !closed,
+      // "Didn't close" is a broken expectation, so it's a lead-only flag too.
+      notClosed: u.role === "LEAD" && wk != null && !closed,
       goals: wk?.goals ?? [],
     });
   });
@@ -487,14 +492,17 @@ export default async function AdminPage({
     });
   });
 
-  // This week's meeting attendance roster (everyone, with their current mark).
+  // This week's meeting attendance roster. Only department leads (the ops
+  // director included) are expected at the Monday meeting, so only they are
+  // marked — members never appear here and so can never be fined for it.
+  const meetingRoster = rawUsers.filter((u) => u.role === "LEAD");
   const attStatus = new Map(
     currentMeeting?.attendances.map((a) => [a.userId, a.status]) ?? [],
   );
   const meetingFine = new Map(
     currentMeeting?.penalties.map((p) => [p.userId, p.amount]) ?? [],
   );
-  const roster = rawUsers.map((u) => {
+  const roster = meetingRoster.map((u) => {
     const av = resolveAvatar(u.avatar, u.email ?? u.id);
     return {
       id: u.id,
@@ -507,7 +515,9 @@ export default async function AdminPage({
   });
   const meetingLabel = formatDateTimeTz(currentMeetingSlot());
 
-  // Attendance history: newest meeting on the left.
+  // Attendance history: newest meeting on the left, leads only (same roster
+  // as above — history from before someone became a member stays in the DB
+  // and in their performance card, just not in this expectation view).
   const historyColumns = recentMeetings.map((m) =>
     formatYmd(toYmd(m.scheduledAt)),
   );
@@ -516,7 +526,7 @@ export default async function AdminPage({
       m.attendances.map((a) => [`${i}:${a.userId}`, a.status] as const),
     ),
   );
-  const historyRows = rawUsers.map((u) => {
+  const historyRows = meetingRoster.map((u) => {
     const av = resolveAvatar(u.avatar, u.email ?? u.id);
     return {
       id: u.id,
@@ -550,7 +560,9 @@ export default async function AdminPage({
     };
   }
 
-  // How many people are still stuck on the previous week (never closed it).
+  // How many leads are still stuck on the previous week (never closed it) —
+  // members aren't expected to run the weekly cycle, so they don't count.
+  const leadCount = rawUsers.filter((u) => u.role === "LEAD").length;
   const notClosedCount = usersPreviousWeek.filter((u) => u.notClosed).length;
 
   // Assigned-goal tracking rows for the monitoring list.
@@ -635,8 +647,9 @@ export default async function AdminPage({
               Monday meeting
             </h2>
             <p className="mb-3 px-1 text-xs text-muted-fg">
-              {meetingLabel} · mark who skipped. Skips are fined automatically
-              ($40, then +$20 for each meeting missed in a row).
+              {meetingLabel} · department leads only — mark who skipped. Skips
+              are fined automatically ($40, then +$20 for each meeting missed
+              in a row).
             </p>
             <AttendancePanel meetingLabel={meetingLabel} roster={roster} />
             <div className="mt-3">
@@ -779,8 +792,8 @@ export default async function AdminPage({
             stats={[
               { label: "Users", value: rawUsers.length },
               {
-                label: "Didn't close",
-                value: `${notClosedCount}/${rawUsers.length}`,
+                label: "Leads who didn't close",
+                value: `${notClosedCount}/${leadCount}`,
               },
               { label: "Goals set", value: statsOf(usersPreviousWeek).totalGoals },
               {
