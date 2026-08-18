@@ -43,3 +43,11 @@ services:
         sync: false
       - key: AUTH_GOOGLE_SECRET
         sync: false
+      # Optional: enables email notifications (daily reports → the recipient)
+      # via Resend. Without the key, sends are skipped quietly. RESEND_FROM
+      # must be a sender on a domain verified in Resend; defaults to
+      # "FreshWeek <reports@freshweek.org>".
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM
+        sync: false

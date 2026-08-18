@@ -16,6 +16,7 @@ import {
   tashkentTodayYmd,
 } from "@/lib/dailyReportTypes";
 import { fromYmd } from "@/lib/dates";
+import { sendEmail } from "@/lib/email";
 
 const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -62,11 +63,13 @@ export async function sendDailyReport(
     select: { id: true },
   });
 
+  let wasUpdate = false;
   await prisma.$transaction(async (tx) => {
     const existing = await tx.dailyReport.findUnique({
       where: { userId_day: { userId, day } },
       select: { id: true },
     });
+    wasUpdate = existing != null;
     if (existing) {
       await tx.dailyReport.update({
         where: { id: existing.id },
@@ -89,6 +92,20 @@ export async function sendDailyReport(
       );
     }
   });
+
+  // Email the recipient as well — the in-app bell only helps once he's in the
+  // app. Dormant until the Resend keys are configured (lib/email.ts), and a
+  // mail failure never fails the submit. Kept minimal: the report itself, who
+  // and which day, and a link to the day's review.
+  if (email?.toLowerCase() !== dailyReportRecipient()) {
+    const label = dayLabel(dayYmd);
+    const appUrl = process.env.AUTH_URL ?? "https://www.freshweek.org";
+    await sendEmail({
+      to: dailyReportRecipient(),
+      subject: `Daily report: ${reporterName} — ${label}${wasUpdate ? " (updated)" : ""}`,
+      text: `${text}\n\n— ${reporterName}, ${label}\n${appUrl}/daily-reports?d=${dayYmd}`,
+    });
+  }
 
   revalidatePath("/daily-reports");
   revalidatePath("/dashboard");
