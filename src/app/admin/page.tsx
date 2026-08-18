@@ -603,6 +603,26 @@ export default async function AdminPage({
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <Link
+            href="/departments"
+            className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-line bg-surface px-4 py-2 text-sm font-medium text-ink transition hover:border-brand/40 hover:bg-canvas hover:text-brand"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-4 w-4"
+              aria-hidden="true"
+            >
+              <path d="M3 21h18" />
+              <path d="M5 21V7l7-4v18" />
+              <path d="M19 21V11l-7-4" />
+            </svg>
+            Departments
+          </Link>
+          <Link
             href="/dashboard"
             className="group inline-flex shrink-0 items-center gap-2 rounded-lg border border-line bg-surface px-4 py-2 text-sm font-medium text-ink transition hover:border-brand/40 hover:bg-canvas hover:text-brand"
           >
