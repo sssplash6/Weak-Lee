@@ -61,6 +61,14 @@ model User {
   image         String?
   createdAt     DateTime  @default(now())
 
+  // Sign-up approval. Company accounts are stamped approved the moment they're
+  // created; anyone else waits on /pending until a department lead or an admin
+  // lets them in (see lib/approval.ts). Null = still waiting.
+  approvedAt   DateTime?
+  approvedById String?
+  approvedBy   User?     @relation("UsersApproved", fields: [approvedById], references: [id], onDelete: SetNull)
+  usersApproved User[]   @relation("UsersApproved")
+
   // Collected during onboarding after the first Google sign-in. These are
   // required before a user reaches the dashboard (see lib/profile.ts).
   // The first department is chosen from the existing Department rows at

@@ -3,12 +3,14 @@ import { redirect } from "next/navigation";
 
 export const metadata: Metadata = { title: "Your department" };
 import { auth } from "@/auth";
+import { assertApproved } from "@/lib/approval";
 import { prisma } from "@/lib/prisma";
 import { resolveAvatar } from "@/lib/avatar";
 import { weekPercent } from "@/lib/progress";
 import { formatDateTimeTz } from "@/lib/dates";
 import { BackLink } from "@/app/_components/BackLink";
 import { LeadRoster, type LeadDepartment } from "./_components/LeadRoster";
+import { PendingSignups } from "./_components/PendingSignups";
 
 /**
  * The department panel for leads: everyone holding a MEMBER seat in a
@@ -20,9 +22,11 @@ import { LeadRoster, type LeadDepartment } from "./_components/LeadRoster";
 export default async function DepartmentPanelPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/signin");
+  await assertApproved(session.user);
   const userId = session.user.id;
 
-  const led = await prisma.departmentMembership.findMany({
+  const [led, pendingUsers] = await Promise.all([
+    prisma.departmentMembership.findMany({
     where: { userId, role: "LEAD" },
     orderBy: { department: { name: "asc" } },
     select: {
@@ -70,10 +74,35 @@ export default async function DepartmentPanelPage() {
         },
       },
     },
-  });
+    }),
+    // Sign-ups waiting to be let in — reviewing them is a lead power too.
+    prisma.user.findMany({
+      where: { approvedAt: null },
+      orderBy: { createdAt: "asc" },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        avatar: true,
+        createdAt: true,
+      },
+    }),
+  ]);
 
   // Not a lead anywhere — this panel isn't theirs.
   if (led.length === 0) redirect("/dashboard");
+
+  const pending = pendingUsers.map((u) => {
+    const av = resolveAvatar(u.avatar, u.email ?? u.id);
+    return {
+      id: u.id,
+      name: u.name ?? u.email ?? "—",
+      email: u.email,
+      emoji: av.emoji,
+      bg: av.bg,
+      joinedLabel: formatDateTimeTz(u.createdAt),
+    };
+  });
 
   const departments: LeadDepartment[] = led.map(({ department: d }) => ({
     id: d.id,
@@ -132,6 +161,12 @@ export default async function DepartmentPanelPage() {
         </div>
         <BackLink href="/dashboard" label="My dashboard" />
       </header>
+
+      {pending.length > 0 && (
+        <div className="mb-4">
+          <PendingSignups signups={pending} />
+        </div>
+      )}
 
       <LeadRoster departments={departments} />
     </div>

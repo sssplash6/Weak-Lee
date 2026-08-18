@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 export const metadata: Metadata = { title: "The Team" };
 import { auth } from "@/auth";
+import { assertApproved } from "@/lib/approval";
 import { prisma } from "@/lib/prisma";
 import { resolveAvatar } from "@/lib/avatar";
 import { departmentLine, isLead, ROLE_LABEL } from "@/lib/team";
@@ -19,6 +20,7 @@ function linkedinUrl(v: string): string {
 export default async function TeamPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/signin");
+  await assertApproved(session.user);
 
   const members = await prisma.user.findMany({
     where: { name: { not: null } },

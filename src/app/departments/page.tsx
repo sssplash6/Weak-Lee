@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 export const metadata: Metadata = { title: "Departments" };
 import { auth } from "@/auth";
+import { assertApproved } from "@/lib/approval";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/admin";
 import { resolveAvatar } from "@/lib/avatar";
@@ -12,6 +13,7 @@ import { DepartmentManager, type Person } from "./_components/DepartmentManager"
 export default async function DepartmentsPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/signin");
+  await assertApproved(session.user);
   if (!isAdmin(session.user.email)) redirect("/dashboard");
 
   const [departments, users] = await Promise.all([

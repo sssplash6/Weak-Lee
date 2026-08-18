@@ -5,6 +5,7 @@ import path from "node:path";
 
 export const metadata: Metadata = { title: "Guidelines" };
 import { auth } from "@/auth";
+import { assertApproved } from "@/lib/approval";
 import { isAdmin } from "@/lib/admin";
 import { prisma } from "@/lib/prisma";
 import { BackLink } from "@/app/_components/BackLink";
@@ -82,6 +83,7 @@ async function guideSizes(): Promise<Map<string, string>> {
 export default async function GuidelinesPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/signin");
+  await assertApproved(session.user);
 
   // The viewer's department decides which guides unlock. It's a real Department
   // row now, but someone mid-onboarding can still be without one.

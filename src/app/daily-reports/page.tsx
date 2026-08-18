@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
+import { assertApproved } from "@/lib/approval";
 import { isDailyReporter, isDailyReportRecipient } from "@/lib/dailyReports";
 import { ReporterView } from "./_components/ReporterView";
 import { ReviewView } from "./_components/ReviewView";
@@ -19,6 +20,7 @@ export default async function DailyReportsPage({
 }) {
   const session = await auth();
   if (!session?.user?.id) redirect("/signin");
+  await assertApproved(session.user);
   const email = session.user.email;
   const reporter = isDailyReporter(email);
   // The reports are for one reader: the recipient. Other admins have no

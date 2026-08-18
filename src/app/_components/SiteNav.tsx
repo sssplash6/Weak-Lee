@@ -13,7 +13,7 @@ const LINKS = [
 
 // Pages with their own chrome — the dashboard's full header (bell + profile)
 // and the bare auth/onboarding screens — don't get the nav bar.
-const HIDDEN = new Set(["/", "/dashboard", "/signin", "/onboarding"]);
+const HIDDEN = new Set(["/", "/dashboard", "/signin", "/onboarding", "/pending"]);
 
 /**
  * A slim persistent nav for every page that isn't the dashboard. Until now

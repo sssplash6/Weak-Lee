@@ -5,6 +5,7 @@ export const metadata: Metadata = { title: "Dashboard" };
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { isProfileComplete } from "@/lib/profile";
+import { assertApproved } from "@/lib/approval";
 import { isAdmin } from "@/lib/admin";
 import { manageableUserIds } from "@/lib/manage";
 import { ensureAvatar } from "@/lib/assignAvatar";
@@ -104,6 +105,8 @@ export default async function DashboardPage({
 }) {
   const session = await auth();
   const userId = session!.user.id;
+  // Non-company sign-ups wait in /pending until a lead or admin lets them in.
+  await assertApproved(session!.user);
 
   // Which period the dashboard shows: weekly goals (default) or monthly ones.
   const view = (await searchParams).view === "month" ? "month" : "week";

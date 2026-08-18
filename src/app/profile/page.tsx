@@ -4,6 +4,7 @@ import Link from "next/link";
 export const metadata: Metadata = { title: "Your profile" };
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
+import { assertApproved } from "@/lib/approval";
 import { prisma } from "@/lib/prisma";
 import { toYmd } from "@/lib/dates";
 import { BackLink } from "@/app/_components/BackLink";
@@ -13,6 +14,7 @@ import { ProfileDepartments } from "./ProfileDepartments";
 export default async function ProfilePage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/signin");
+  await assertApproved(session.user);
 
   const [user, departments] = await Promise.all([
     prisma.user.findUnique({

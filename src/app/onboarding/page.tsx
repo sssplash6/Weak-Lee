@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 export const metadata: Metadata = { title: "Finish your profile" };
 import { auth } from "@/auth";
+import { assertApproved } from "@/lib/approval";
 import { prisma } from "@/lib/prisma";
 import { isProfileComplete } from "@/lib/profile";
 import { toYmd } from "@/lib/dates";
@@ -11,6 +12,7 @@ import { OnboardingForm } from "./OnboardingForm";
 export default async function OnboardingPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/signin");
+  await assertApproved(session.user);
 
   const [user, departments] = await Promise.all([
     prisma.user.findUnique({

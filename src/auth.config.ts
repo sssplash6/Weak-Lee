@@ -5,14 +5,6 @@ import Google from "next-auth/providers/google";
 // relies on dev login doesn't surface a broken button.
 export const googleEnabled = !!process.env.AUTH_GOOGLE_ID;
 
-// Only company accounts may sign in. Enforced server-side in the signIn
-// callback below; the `hd` param on the provider is just a UI hint to Google.
-export const ALLOWED_EMAIL_DOMAIN = "freshman.academy";
-
-function emailInDomain(email: string | null | undefined): boolean {
-  return !!email && email.toLowerCase().endsWith(`@${ALLOWED_EMAIL_DOMAIN}`);
-}
-
 // Edge-safe Auth.js config (no database adapter). Shared between the proxy
 // (route protection) and the full server config in `src/auth.ts`.
 export const authConfig = {
@@ -22,11 +14,11 @@ export const authConfig = {
   providers: googleEnabled
     ? [
         Google({
-          // Hint Google Workspace to default to the company domain. Not a
-          // security control — the real check is the signIn callback.
-          authorization: {
-            params: { hd: ALLOWED_EMAIL_DOMAIN, prompt: "select_account" },
-          },
+          // Any Google account may sign up (no `hd` domain hint any more).
+          // Non-company accounts don't get in for free, though: they wait on
+          // /pending until a department lead or admin approves them — see
+          // lib/approval.ts and the createUser event in src/auth.ts.
+          authorization: { params: { prompt: "select_account" } },
         }),
       ]
     : [],
@@ -38,11 +30,11 @@ export const authConfig = {
     error: "/signin",
   },
   callbacks: {
-    // Gate every sign-in to company accounts. Returning false sends the user
-    // back to /signin?error=AccessDenied. The dev login uses a freshman.academy
-    // address, so it passes this check too.
+    // Anyone with an email may sign in — approval, not the domain, is the
+    // gate now (unapproved accounts only ever see /pending). An account with
+    // no email at all still can't get in.
     signIn({ user }) {
-      return emailInDomain(user.email);
+      return !!user.email;
     },
     // Route protection. Runs in middleware for every matched request.
     authorized({ auth, request: { nextUrl } }) {

@@ -4,6 +4,7 @@ import Link from "next/link";
 export const metadata: Metadata = { title: "Admin" };
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
+import { assertApproved } from "@/lib/approval";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/admin";
 import { goalPercent, isGoalComplete, weekPercent } from "@/lib/progress";
@@ -32,6 +33,7 @@ import { RecentBonuses } from "./_components/RecentBonuses";
 import { RecentPenalties } from "./_components/RecentPenalties";
 import { AttendancePanel } from "./_components/AttendancePanel";
 import { AttendanceHistory } from "./_components/AttendanceHistory";
+import { PendingSignups } from "@/app/department/_components/PendingSignups";
 
 // Render week ranges by their UTC calendar date (matching how week bounds are
 // stored) so the dates don't drift by the viewer's timezone.
@@ -75,6 +77,7 @@ export default async function AdminPage({
   const session = await auth();
   // Gate: must be signed in AND an admin. Everyone else goes to the dashboard.
   if (!session?.user?.id) redirect("/signin");
+  await assertApproved(session.user);
   if (!isAdmin(session.user.email)) redirect("/dashboard");
 
   // Sweep the team's weekly submission fines up to date before rendering, so the
@@ -105,6 +108,7 @@ export default async function AdminPage({
     recentMeetings,
     assignedTasks,
     allPenalties,
+    pendingUsers,
     perfUsers,
   ] = await Promise.all([
     prisma.user.findMany({
@@ -254,6 +258,19 @@ export default async function AdminPage({
       where: { paidAt: null },
       select: { amount: true, paidAmount: true },
     }),
+    // Sign-ups waiting for approval (non-company accounts) — shown above the
+    // tabs so they can't be missed on any of them.
+    prisma.user.findMany({
+      where: { approvedAt: null },
+      orderBy: { createdAt: "asc" },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        avatar: true,
+        createdAt: true,
+      },
+    }),
     // Full per-user history for the Performance tab — every week and month with
     // goals, plus attendance, fines, bonuses, assigned tasks and the daily focus
     // list. Heavy, so only loaded when that tab is actually open; the three
@@ -332,6 +349,18 @@ export default async function AdminPage({
   ]);
 
   const perf = perfUsers ? buildPerformance(perfUsers, now) : null;
+
+  const pendingRows = pendingUsers.map((u) => {
+    const av = resolveAvatar(u.avatar, u.email ?? u.id);
+    return {
+      id: u.id,
+      name: u.name ?? u.email ?? "—",
+      email: u.email,
+      emoji: av.emoji,
+      bg: av.bg,
+      joinedLabel: formatDateTimeTz(u.createdAt),
+    };
+  });
 
   const { start: weekStart, end: weekEnd } = getWeekBounds(now);
 
@@ -610,7 +639,7 @@ export default async function AdminPage({
         <div className="flex shrink-0 items-center gap-2">
           <Link
             href="/departments"
-            className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-line bg-surface px-4 py-2 text-sm font-medium text-ink transition hover:border-brand/40 hover:bg-canvas hover:text-brand"
+            className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg border border-line bg-surface px-4 py-2 text-sm font-medium text-ink transition hover:border-brand/40 hover:bg-canvas hover:text-brand"
           >
             <svg
               viewBox="0 0 24 24"
@@ -630,7 +659,7 @@ export default async function AdminPage({
           </Link>
           <Link
             href="/dashboard"
-            className="group inline-flex shrink-0 items-center gap-2 rounded-lg border border-line bg-surface px-4 py-2 text-sm font-medium text-ink transition hover:border-brand/40 hover:bg-canvas hover:text-brand"
+            className="group inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg border border-line bg-surface px-4 py-2 text-sm font-medium text-ink transition hover:border-brand/40 hover:bg-canvas hover:text-brand"
           >
             <svg
               viewBox="0 0 24 24"
@@ -651,6 +680,12 @@ export default async function AdminPage({
       </header>
 
       <AdminTabs tab={tab} />
+
+      {pendingRows.length > 0 && (
+        <div className="mt-6">
+          <PendingSignups signups={pendingRows} />
+        </div>
+      )}
 
       {tab === "current" && (
         <>

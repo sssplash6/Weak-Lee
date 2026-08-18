@@ -4,6 +4,7 @@ import type { NextRequest } from "next/server";
 import { auth } from "@/auth";
 import { isAdmin } from "@/lib/admin";
 import { prisma } from "@/lib/prisma";
+import { isApprovedUser } from "@/lib/approval";
 import { canReadGuide, GUIDELINES_DIR, guideBySlug } from "@/lib/guidelines";
 
 /**
@@ -22,6 +23,12 @@ export async function GET(
   const session = await auth();
   if (!session?.user?.id) {
     return new Response("Sign in to read the guidelines.", { status: 401 });
+  }
+  // Pending sign-ups aren't on the team yet — internal documents stay closed.
+  if (!(await isApprovedUser(session.user))) {
+    return new Response("Your account is waiting for approval.", {
+      status: 403,
+    });
   }
 
   const { slug } = await ctx.params;

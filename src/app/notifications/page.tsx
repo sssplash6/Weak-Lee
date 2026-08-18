@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 export const metadata: Metadata = { title: "Notifications" };
 import { auth } from "@/auth";
+import { assertApproved } from "@/lib/approval";
 import { prisma } from "@/lib/prisma";
 import { formatDateTimeTz } from "@/lib/dates";
 import { NOTIFICATION_DOT } from "@/lib/notificationTypes";
@@ -25,6 +26,7 @@ type Row = {
 export default async function NotificationsPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/signin");
+  await assertApproved(session.user);
 
   const notifications = await prisma.notification.findMany({
     where: { userId: session.user.id },

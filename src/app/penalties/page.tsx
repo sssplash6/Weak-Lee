@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 export const metadata: Metadata = { title: "Penalties" };
 import { auth } from "@/auth";
+import { assertApproved } from "@/lib/approval";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/admin";
 import { resolveAvatar } from "@/lib/avatar";
@@ -82,6 +83,7 @@ const POLICY: {
 export default async function PenaltiesPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/signin");
+  await assertApproved(session.user);
 
   const viewerIsAdmin = isAdmin(session.user.email);
 

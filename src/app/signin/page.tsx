@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { signIn, devLoginEnabled } from "@/auth";
-import { googleEnabled, ALLOWED_EMAIL_DOMAIN } from "@/auth.config";
+import { googleEnabled } from "@/auth.config";
 
 export const metadata: Metadata = { title: "Sign in" };
 
@@ -27,8 +27,8 @@ export default async function SignInPage({
 
         {error === "AccessDenied" && (
           <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
-            Use your <span className="font-semibold">@{ALLOWED_EMAIL_DOMAIN}</span>{" "}
-            account to sign in.
+            That account couldn&rsquo;t be signed in — it needs an email
+            address. Try another Google account.
           </div>
         )}
 
