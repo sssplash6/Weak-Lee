@@ -33,6 +33,14 @@
   --color-chart-bad: #b91c1c; /* red 700 */
   --color-chart-mute: #94a3b8; /* slate 400 — the one intentionally grey slot */
 
+  /* Payroll money series — the brand orange as a chart mark ("positive
+     series", per the palette semantics; fines reuse chart-bad). Validated as
+     a pair with chart-bad per mode (dataviz six checks): light accent sits at
+     2.4:1 on white, so every chart using it carries direct labels + a data
+     table as relief. The dark step is re-mixed into the dark lightness band
+     (L 0.48–0.67), not a flip. */
+  --color-chart-flow: #f18d05;
+
   /* Guideline document accents — one hue per guide on /guidelines, so each
      document's banner is recognisable at a glance. Deliberately outside the
      brand navy (actions), accent orange (progress) and red (delete): these
@@ -115,6 +123,7 @@
   --color-chart-warn: #d97706; /* amber 600 */
   --color-chart-bad: #e11d48; /* rose 600 */
   --color-chart-mute: #8595a8;
+  --color-chart-flow: #c97a10; /* payroll orange, inside the dark L band */
 }
 
 body {

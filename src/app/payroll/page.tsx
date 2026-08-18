@@ -8,6 +8,7 @@ import { BackLink } from "@/app/_components/BackLink";
 import { formatDateTimeTz, formatYmd, toYmd } from "@/lib/dates";
 import { PENALTY_LABEL } from "@/lib/penalties";
 import {
+  canViewPayrollStats,
   ensureCurrentPeriod,
   expireLapsedSubmissions,
   formatTashkent,
@@ -248,7 +249,7 @@ export default async function PayrollPage() {
         <BackLink href="/dashboard" label="Dashboard" />
       </header>
 
-      {(isPayrollAdmin(me.email) || isFinance(me.email)) && (
+      {canViewPayrollStats(me.email) && (
         <div className="-mt-2 mb-5 flex flex-wrap gap-2">
           {isPayrollAdmin(me.email) && (
             <Link
@@ -266,6 +267,12 @@ export default async function PayrollPage() {
               Finance queue
             </Link>
           )}
+          <Link
+            href="/payroll/stats"
+            className="whitespace-nowrap rounded-xl border border-line bg-surface px-4 py-2 text-sm font-semibold text-brand shadow-sm transition hover:bg-canvas"
+          >
+            Stats
+          </Link>
         </div>
       )}
 
