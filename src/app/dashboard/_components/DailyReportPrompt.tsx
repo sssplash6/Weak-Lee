@@ -39,7 +39,7 @@ export function DailyReportPrompt({
           ) : optionalDay ? (
             <span className="text-muted-fg">Weekend — optional</span>
           ) : (
-            <span className="text-muted-fg">Not sent yet — due by midnight</span>
+            <span className="text-muted-fg">Not sent yet — due by 5 AM</span>
           )}
         </span>
       </span>

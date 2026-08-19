@@ -1,9 +1,12 @@
 // Server-only: who writes daily reports and who reads them. A fixed set of
-// accounts owes a short report every weekday, due by midnight Tashkent (day
-// math and statuses live in lib/dailyReportTypes.ts). Every send — and every
-// resend after an edit — notifies the recipient (Valera); today's reports sit
-// on his dashboard and /daily-reports gives him the month at a glance.
+// accounts owes a short report every weekday, due by 5 AM Tashkent the next
+// morning (day math and statuses live in lib/dailyReportTypes.ts). Every send
+// — and every resend after an edit — notifies the recipient (Valera); today's
+// reports sit on his dashboard and /daily-reports gives him the month at a
+// glance.
 
+// Adding someone mid-stream? Give them a DAILY_REPORTER_SINCE entry below so
+// the fine sweep doesn't back-fine days from before they owed anything.
 const BUILT_IN_REPORTERS = [
   "sanjar@freshman.academy",
   "sega@freshman.academy",
@@ -11,6 +14,7 @@ const BUILT_IN_REPORTERS = [
   "khusanboy@freshman.academy",
   "banu@freshman.academy",
   "tech@freshman.academy",
+  "shakhzod@freshman.academy",
 ];
 
 const BUILT_IN_RECIPIENT = "valera@freshman.academy";
@@ -33,6 +37,19 @@ export function isDailyReporter(email: string | null | undefined): boolean {
   return !!email && dailyReporterEmails().includes(email.toLowerCase());
 }
 
+// The first day a reporter can be fined for. Defaults to the fines epoch (the
+// day the rule started, lib/dailyReportTypes.ts) — anyone who joins the list
+// later gets an entry here so the sweep's lookback can't reach days from
+// before they owed reports.
+const DAILY_REPORTER_SINCE: Record<string, string> = {};
+
+/** The first Tashkent day (YMD) this reporter's fines can apply to. */
+export function dailyReporterSinceYmd(
+  email: string | null | undefined,
+): string | null {
+  return DAILY_REPORTER_SINCE[email?.toLowerCase() ?? ""] ?? null;
+}
+
 /** Who receives the reports; override with DAILY_REPORT_RECIPIENT. */
 export function dailyReportRecipient(): string {
   return (
@@ -51,6 +68,7 @@ const REPORTER_FIRST_NAMES: Record<string, string> = {
   "khusanboy@freshman.academy": "Khusanboy",
   "banu@freshman.academy": "Banu",
   "tech@freshman.academy": "Samandar",
+  "shakhzod@freshman.academy": "Shakhzod",
 };
 
 /** The name daily-report surfaces call this person by. */

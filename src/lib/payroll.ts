@@ -13,7 +13,11 @@
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/admin";
-import { formatMoney, PENALTY_LABEL } from "@/lib/penalties";
+import {
+  formatMoney,
+  PENALTY_LABEL,
+  type PenaltyType,
+} from "@/lib/penalties";
 import { payrollPeriodLabel, PAYROLL_STATUS_LABEL } from "@/lib/payrollTypes";
 import { notify } from "@/lib/notifications";
 import { sendEmail } from "@/lib/email";
@@ -301,7 +305,7 @@ export type LedgerSnapshot = {
   fineLines: {
     penaltyId: string;
     amount: number; // outstanding at snapshot, not face value
-    type: "MEETING_SKIPPED" | "MEETING_LATE" | "LATE_SUBMISSION" | "OTHER";
+    type: PenaltyType;
     note: string | null;
     issuedAt: Date;
   }[];

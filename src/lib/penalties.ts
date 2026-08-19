@@ -21,6 +21,12 @@ export const LATE_SUBMISSION_PENALTY = 20;
  * i.e. the person was flagged "not submitted" there and submitted even later. */
 export const MISSED_SUBMISSION_PENALTY = 40;
 
+/** Fine when a daily report misses its 5 AM (next-morning, Tashkent) deadline. */
+export const LATE_DAILY_REPORT_PENALTY = 5;
+
+/** Escalated fine when the report still isn't in by 3 PM that same day. */
+export const MISSED_DAILY_REPORT_PENALTY = 10;
+
 /** Pre-filled amount for a manual (admin-issued) fine. */
 export const DEFAULT_MANUAL_PENALTY = 20;
 
@@ -38,12 +44,14 @@ export type PenaltyType =
   | "MEETING_SKIPPED"
   | "MEETING_LATE"
   | "LATE_SUBMISSION"
+  | "LATE_DAILY_REPORT"
   | "OTHER";
 
 export const PENALTY_LABEL: Record<PenaltyType, string> = {
   MEETING_SKIPPED: "Skipped meeting",
   MEETING_LATE: "Late to meeting",
   LATE_SUBMISSION: "Late submission",
+  LATE_DAILY_REPORT: "Late daily report",
   OTHER: "Fine",
 };
 

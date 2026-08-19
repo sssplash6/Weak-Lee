@@ -4,9 +4,10 @@
 // notificationTypes.ts vs notifications.ts.
 //
 // A report belongs to a Tashkent calendar day, stored at UTC midnight (the
-// goal-deadline date-only convention). It is due by that day's midnight —
-// i.e. the moment the next Tashkent day starts. Monday to Friday are expected;
-// weekend reports are welcome but never owed.
+// goal-deadline date-only convention). It is due by 5 AM the NEXT Tashkent
+// morning (moved from midnight on 2026-08-19, when fines arrived: $5 past
+// 5 AM, $10 if still not in by 3 PM — see lib/dailyReportFines.ts). Monday to
+// Friday are expected; weekend reports are welcome but never owed.
 
 import { fromYmd, toYmd, COMPANY_TIME_ZONE } from "@/lib/dates";
 
@@ -18,17 +19,32 @@ export const MAX_DAILY_REPORT = 5000;
 /** Nothing before this day is owed — the feature shipped here. */
 export const DAILY_REPORTS_EPOCH = fromYmd("2026-08-17");
 
+/** No day before this one is ever fined — the fine rule started here. */
+export const DAILY_REPORT_FINES_EPOCH = fromYmd("2026-08-19");
+
 /** Today's Tashkent calendar day as "YYYY-MM-DD". */
 export function tashkentTodayYmd(now: Date = new Date()): string {
   return toYmd(new Date(now.getTime() + TASHKENT_UTC_OFFSET_HOURS * 3_600_000));
 }
 
 /**
- * When the report for `day` is due: midnight at the end of that Tashkent day,
- * as a UTC instant (= day's UTC-midnight key + 24h − 5h offset).
+ * When the report for `day` is due: 5 AM the next Tashkent morning, as a UTC
+ * instant (= day's UTC-midnight key + 29h − 5h offset).
  */
 export function dayDeadline(day: Date): Date {
-  return new Date(day.getTime() + (24 - TASHKENT_UTC_OFFSET_HOURS) * 3_600_000);
+  return new Date(
+    day.getTime() + (24 + 5 - TASHKENT_UTC_OFFSET_HOURS) * 3_600_000,
+  );
+}
+
+/**
+ * When a missed report's fine escalates from $5 to $10: 3 PM on the same
+ * Tashkent day the 5 AM deadline fell on (= day key + 39h − 5h offset).
+ */
+export function dayEscalationDeadline(day: Date): Date {
+  return new Date(
+    day.getTime() + (24 + 15 - TASHKENT_UTC_OFFSET_HOURS) * 3_600_000,
+  );
 }
 
 /** Whether a report is owed for this day at all (Monday–Friday). */
@@ -37,11 +53,12 @@ export function isRequiredDay(day: Date): boolean {
   return wd >= 1 && wd <= 5;
 }
 
-// sent     — submitted by that day's midnight
-// late     — submitted, but after midnight
-// pending  — today, nothing sent yet (still time)
+// sent     — submitted by 5 AM the next morning
+// late     — submitted, but after 5 AM
+// pending  — nothing sent yet, deadline still ahead (today, or yesterday
+//            before its 5 AM cutoff)
 // upcoming — a future day (nothing owed yet)
-// missed   — a required weekday that ended with no report
+// missed   — a required weekday whose deadline passed with no report
 // skipped  — a weekend (or pre-launch day) with no report: never owed
 export type DailyReportStatus =
   | "sent"
@@ -62,7 +79,9 @@ export function reportStatus(
       : "late";
   }
   if (now.getTime() < dayDeadline(day).getTime()) {
-    return toYmd(day) === tashkentTodayYmd(now) ? "pending" : "upcoming";
+    // The deadline lives in the NEXT morning, so early hours can hold two open
+    // days at once: yesterday (until 5 AM) and today. Both read as pending.
+    return toYmd(day) <= tashkentTodayYmd(now) ? "pending" : "upcoming";
   }
   return isRequiredDay(day) && day.getTime() >= DAILY_REPORTS_EPOCH.getTime()
     ? "missed"
@@ -80,7 +99,7 @@ export const DAILY_REPORT_STATUS: Record<
 > = {
   sent: { label: "Sent", dot: "bg-chart-good" },
   late: { label: "Sent late", dot: "bg-chart-warn" },
-  pending: { label: "Due by midnight", dot: "border-[1.5px] border-muted-fg" },
+  pending: { label: "Due by 5 AM", dot: "border-[1.5px] border-muted-fg" },
   upcoming: { label: "Upcoming", dot: "bg-line" },
   missed: { label: "Not sent", dot: "bg-chart-bad" },
   skipped: { label: "Weekend", dot: "bg-chart-mute" },

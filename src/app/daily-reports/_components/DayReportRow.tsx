@@ -51,7 +51,7 @@ export function DayReportRow({
               }
             >
               {row.timeLabel}
-              {row.status === "late" && " · after midnight"}
+              {row.status === "late" && " · after 5 AM"}
             </span>
             {row.editedLabel && (
               <span className="text-muted-fg">

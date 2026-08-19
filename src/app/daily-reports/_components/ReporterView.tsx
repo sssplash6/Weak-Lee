@@ -92,8 +92,9 @@ export async function ReporterView({
         <div>
           <h1 className="mt-1 text-2xl font-bold text-ink">Daily reports</h1>
           <p className="mt-1 text-sm text-muted-fg">
-            A few lines on your day, Monday to Friday — due by midnight. Goes
-            straight to Valera.
+            A few lines on your day, Monday to Friday — due by 5 AM the next
+            morning ($5 fine after that, $10 past 3 PM). Goes straight to
+            Valera.
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -125,7 +126,7 @@ export async function ReporterView({
                     {`Sent ${formatTimeTz(todays.submittedAt)}`}
                   </span>
                   {todayStatus === "late" && (
-                    <span className="text-chart-warn"> · after midnight</span>
+                    <span className="text-chart-warn"> · after 5 AM</span>
                   )}
                   {updated && (
                     <span className="text-muted-fg">
@@ -134,7 +135,7 @@ export async function ReporterView({
                   )}
                 </>
               ) : isRequiredDay(today) ? (
-                <span className="text-muted-fg">Due by midnight.</span>
+                <span className="text-muted-fg">Due by 5 AM tomorrow.</span>
               ) : (
                 <span className="text-muted-fg">
                   Weekend — optional, but welcome.

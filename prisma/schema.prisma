@@ -166,6 +166,7 @@ enum PenaltyType {
   MEETING_SKIPPED
   MEETING_LATE
   LATE_SUBMISSION
+  LATE_DAILY_REPORT
   OTHER
 }
 
@@ -201,6 +202,10 @@ model Penalty {
   settledById String?
   // Money recorded against this fine so far, 0 ≤ paidAmount ≤ amount.
   paidAmount  Int       @default(0)
+  // LATE_DAILY_REPORT only: the Tashkent day (UTC-midnight key) the missing
+  // report was for. The unique below makes the daily fine sweep idempotent at
+  // the database — at most one daily fine per person per day.
+  reportDay   DateTime?
 
   user     User     @relation("PenaltiesReceived", fields: [userId], references: [id], onDelete: Cascade)
   issuedBy User?    @relation("PenaltiesIssued", fields: [issuedById], references: [id], onDelete: SetNull)
@@ -210,6 +215,7 @@ model Penalty {
   payments FinePayment[]
   payrollLines PayrollFineLine[]
 
+  @@unique([userId, type, reportDay])
   @@index([userId])
   @@index([weekId])
   @@index([meetingId])
@@ -329,6 +335,14 @@ model DailyReport {
 
   @@unique([userId, day])
   @@index([day])
+}
+
+// The lazy no-cron claim for the 21:00 (Tashkent) daily-report nudge: one row
+// per day, created by whichever page load reaches the slot first (the same
+// optimistic-claim pattern as PayrollPeriod.reminderSentAt).
+model DailyReportReminder {
+  day    DateTime @id
+  sentAt DateTime @default(now())
 }
 
 model Notification {

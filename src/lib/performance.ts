@@ -312,7 +312,13 @@ function emptyByPriority(): Record<PriorityKey, { set: number; done: number }> {
 }
 
 function emptyByType(): Record<PenaltyType, number> {
-  return { MEETING_SKIPPED: 0, MEETING_LATE: 0, LATE_SUBMISSION: 0, OTHER: 0 };
+  return {
+    MEETING_SKIPPED: 0,
+    MEETING_LATE: 0,
+    LATE_SUBMISSION: 0,
+    LATE_DAILY_REPORT: 0,
+    OTHER: 0,
+  };
 }
 
 /**

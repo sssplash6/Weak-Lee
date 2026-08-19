@@ -9,6 +9,7 @@ import { getWeekBounds } from "@/lib/weeks";
 import { goalPercent } from "@/lib/progress";
 import { currentMeetingSlot } from "@/lib/meetings";
 import { currentSubmissionCycle } from "@/lib/lateness";
+import { dayDeadline } from "@/lib/dailyReportTypes";
 import {
   formatMoney,
   MAX_PENALTY,
@@ -248,6 +249,7 @@ export async function deletePenalty(penaltyId: string) {
       amount: true,
       paidAmount: true,
       meetingId: true,
+      reportDay: true,
       createdAt: true,
     },
   });
@@ -277,10 +279,19 @@ export async function deletePenalty(penaltyId: string) {
             .submissionDeadline,
           meetingId: null,
         }
-      : (penalty.type === "MEETING_SKIPPED" || penalty.type === "MEETING_LATE") &&
-          penalty.meetingId
-        ? { cycleDeadline: null, meetingId: penalty.meetingId }
-        : null;
+      : penalty.type === "LATE_DAILY_REPORT" && penalty.reportDay
+        ? {
+            // Daily fines key their waiver by the day's 5 AM deadline instant.
+            // It can never collide with a weekly key (Sunday noon Tashkent),
+            // so both sweeps share the FineWaiver table safely.
+            cycleDeadline: dayDeadline(penalty.reportDay),
+            meetingId: null,
+          }
+        : (penalty.type === "MEETING_SKIPPED" ||
+              penalty.type === "MEETING_LATE") &&
+            penalty.meetingId
+          ? { cycleDeadline: null, meetingId: penalty.meetingId }
+          : null;
 
   await prisma.$transaction(async (tx) => {
     await tx.penalty.delete({ where: { id: penalty.id } });
