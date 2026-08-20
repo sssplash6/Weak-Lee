@@ -14,7 +14,7 @@ import {
   requireFinance,
   reviewerUsers,
 } from "@/lib/payroll";
-import { payrollPeriodLabel } from "@/lib/payrollTypes";
+import { payrollPeriodLabel, PAYROLL_CLOSED } from "@/lib/payrollTypes";
 
 export type FinanceActionResult = { ok: true } | { ok: false; error: string };
 const fail = (error: string): FinanceActionResult => ({ ok: false, error });
@@ -50,6 +50,7 @@ async function loadBasics(submissionId: string) {
 export async function processApproved(
   submissionId: string,
 ): Promise<FinanceActionResult> {
+  if (PAYROLL_CLOSED) return fail("Payroll is closed right now.");
   const session = await auth();
   const actorId = await requireFinance(session);
 
@@ -119,6 +120,7 @@ export async function sendBackToAdmins(
   submissionId: string,
   note: string,
 ): Promise<FinanceActionResult> {
+  if (PAYROLL_CLOSED) return fail("Payroll is closed right now.");
   const session = await auth();
   const actorId = await requireFinance(session);
 

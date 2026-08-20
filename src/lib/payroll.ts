@@ -18,7 +18,11 @@ import {
   PENALTY_LABEL,
   type PenaltyType,
 } from "@/lib/penalties";
-import { payrollPeriodLabel, PAYROLL_STATUS_LABEL } from "@/lib/payrollTypes";
+import {
+  payrollPeriodLabel,
+  PAYROLL_CLOSED,
+  PAYROLL_STATUS_LABEL,
+} from "@/lib/payrollTypes";
 import { notify } from "@/lib/notifications";
 import { sendEmail } from "@/lib/email";
 import type { PayrollStatus, Prisma } from "@/generated/prisma/client";
@@ -238,6 +242,9 @@ export function resubmitWindowFor(
  * update makes concurrent sweeps write one audit row, not two.
  */
 export async function expireLapsedSubmissions(now = new Date()): Promise<void> {
+  // Closed: a decline window that lapses while nobody can refile isn't the
+  // employee's fault, so nothing expires until payroll reopens.
+  if (PAYROLL_CLOSED) return;
   const lapsed = await prisma.payrollSubmission.findMany({
     where: { status: "DECLINED", resubmitDeadline: { lt: now } },
     select: { id: true },
@@ -511,6 +518,9 @@ export function appUrl(): string {
  * filing rolls to next month by design.
  */
 export async function reconcilePayrollReminders(now = new Date()): Promise<void> {
+  // Closed: never nag people to file a feature they can't reach. The claim on
+  // reminderSentAt is left unset, so reopening still gets its one reminder.
+  if (PAYROLL_CLOSED) return;
   const period = await ensureCurrentPeriod(prisma, now);
   if (period.reminderSentAt) return;
   if (now < period.remindAt || now > period.filingClosesAt) return;

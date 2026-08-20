@@ -15,9 +15,11 @@ import {
 import {
   payrollMonthName,
   payrollPeriodLabel,
+  PAYROLL_CLOSED,
   PAYROLL_METHOD_LABEL,
   type PayrollMethod,
 } from "@/lib/payrollTypes";
+import { PayrollComingSoon } from "../_components/PayrollComingSoon";
 import { ColumnChart, PairColumnChart, RowBars } from "./charts";
 
 export const metadata: Metadata = { title: "Payroll stats" };
@@ -77,6 +79,8 @@ export default async function PayrollStatsPage({
   const session = await auth();
   if (!session?.user?.id) redirect("/signin");
   await assertApproved(session.user);
+  // Closed: reviewers see the same screen employees do, before any sweep runs.
+  if (PAYROLL_CLOSED) return <PayrollComingSoon />;
   if (!canViewPayrollStats(session.user.email)) redirect("/payroll");
 
   const now = new Date();

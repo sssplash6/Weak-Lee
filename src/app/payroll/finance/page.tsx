@@ -17,7 +17,9 @@ import {
   parsePaymentDetails,
   paymentFull,
   payrollPeriodLabel,
+  PAYROLL_CLOSED,
 } from "@/lib/payrollTypes";
+import { PayrollComingSoon } from "../_components/PayrollComingSoon";
 import {
   bonusLineViews,
   eventViews,
@@ -94,6 +96,8 @@ export default async function PayrollFinancePage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/signin");
   await assertApproved(session.user);
+  // Closed: reviewers see the same screen employees do, before any sweep runs.
+  if (PAYROLL_CLOSED) return <PayrollComingSoon />;
   if (!isFinance(session.user.email)) redirect("/payroll");
 
   const now = new Date();

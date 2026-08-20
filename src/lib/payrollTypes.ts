@@ -3,6 +3,15 @@
 // arithmetic and upload limits, so the form previews with exactly the numbers
 // the server action then stores. All money is whole-dollar USD app-wide.
 
+/**
+ * Payroll is closed: every route under /payroll shows the coming-soon screen
+ * instead of its content (employees and both reviewer stages alike), the lazy
+ * sweeps stay quiet so nothing expires or emails a reminder while it's shut,
+ * and every action refuses. Rows already in the database are left exactly as
+ * they are — flipping this to `false` reopens the feature mid-flight.
+ */
+export const PAYROLL_CLOSED = true;
+
 export type PayrollStatus =
   | "DRAFT"
   | "SUBMITTED"

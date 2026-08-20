@@ -26,6 +26,7 @@ import {
   RECEIPT_MIME_TYPES,
   payrollMonthName,
   payrollPeriodLabel,
+  PAYROLL_CLOSED,
   type PaymentDetails,
   type PayrollMethod,
 } from "@/lib/payrollTypes";
@@ -60,6 +61,9 @@ type ParsedExpense = {
 export async function submitPayroll(
   formData: FormData,
 ): Promise<SubmitPayrollResult> {
+  // The page renders the coming-soon screen while payroll is closed, but the
+  // action stays POST-reachable — refuse here too.
+  if (PAYROLL_CLOSED) return fail("Payroll is closed right now.");
   const session = await auth();
   if (!session?.user?.id) throw new Error("Not authenticated");
   if (!(await isApprovedUser(session.user))) throw new Error("Not authorized");

@@ -24,10 +24,12 @@ import {
   payrollEventLabel,
   payrollMonthName,
   payrollPeriodLabel,
+  PAYROLL_CLOSED,
   PAYROLL_STATUS_BADGE,
   PAYROLL_STATUS_LABEL,
 } from "@/lib/payrollTypes";
 import { formatMoney } from "@/lib/penalties";
+import { PayrollComingSoon } from "./_components/PayrollComingSoon";
 import { PayrollForm } from "./_components/PayrollForm";
 import type { LedgerLineView } from "./_components/LedgerBreakdown";
 import {
@@ -47,6 +49,8 @@ export default async function PayrollPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/signin");
   await assertApproved(session.user);
+  // Closed: bail before the sweeps so nothing expires or emails while shut.
+  if (PAYROLL_CLOSED) return <PayrollComingSoon />;
 
   const me = await prisma.user.findUnique({
     where: { id: session.user.id },

@@ -6,12 +6,13 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { isFinance, isPayrollAdmin } from "@/lib/payroll";
-import { payrollPeriodLabel } from "@/lib/payrollTypes";
+import { payrollPeriodLabel, PAYROLL_CLOSED } from "@/lib/payrollTypes";
 
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  if (PAYROLL_CLOSED) return new Response("Payroll is closed", { status: 404 });
   const session = await auth();
   if (!session?.user) return new Response("Sign in required", { status: 401 });
 
