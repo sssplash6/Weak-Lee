@@ -179,6 +179,17 @@ export default async function DashboardPage({
         select: { submittedAt: true },
       })
     : null;
+  // Between midnight and 5 AM Tashkent, yesterday's report is still open —
+  // the prompt nags about that day, not today's barely-started one.
+  const reportYesterday = new Date(reportDay.getTime() - 86_400_000);
+  const yesterdayReportOpen =
+    dailyReporter &&
+    isRequiredDay(reportYesterday) &&
+    now.getTime() < dayDeadline(reportYesterday).getTime() &&
+    !(await prisma.dailyReport.findUnique({
+      where: { userId_day: { userId, day: reportYesterday } },
+      select: { id: true },
+    }));
   const reportRecipient = isDailyReportRecipient(session!.user.email);
   let todaysReportRows: TodaysReportRow[] = [];
   if (reportRecipient) {
@@ -713,6 +724,7 @@ export default async function DashboardPage({
               ownTodayReport ? formatTimeTz(ownTodayReport.submittedAt) : null
             }
             optionalDay={!isRequiredDay(reportDay)}
+            yesterdayOpen={yesterdayReportOpen}
           />
         </div>
       )}

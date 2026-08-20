@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { fromYmd, toYmd } from "@/lib/dates";
 import {
   DAILY_REPORT_STATUS,
+  dayDeadline,
   dayLabel,
   formatTimeTz,
   reportStatus,
@@ -50,6 +51,17 @@ export async function ReporterView({
     todays != null &&
     todays.lastSentAt.getTime() - todays.submittedAt.getTime() > 60_000;
 
+  // The 5 AM grace window: between midnight and 5 AM Tashkent, yesterday's
+  // report is still unsent-but-on-time — and it's the one the late-night
+  // writer actually came to send, so it gets its own composer up top rather
+  // than hiding until it turns "missed" at 5 AM.
+  const yesterdayYmd = toYmd(new Date(today.getTime() - DAY_MS));
+  const yesterday = fromYmd(yesterdayYmd);
+  const yesterdayOpen =
+    !byYmd.has(yesterdayYmd) &&
+    isRequiredDay(yesterday) &&
+    now.getTime() < dayDeadline(yesterday).getTime();
+
   // This week, Monday first, as compact status dots.
   const monday = new Date(
     today.getTime() - (((today.getUTCDay() + 6) % 7) * DAY_MS),
@@ -67,14 +79,17 @@ export async function ReporterView({
   });
 
   // The recent record: every sent day, plus the holes that count (missed
-  // weekdays). Quiet weekends stay out of the list.
+  // weekdays) and any still-open day (an unsent weekend yesterday before its
+  // 5 AM cutoff — a required yesterday gets the composer card instead).
+  // Quiet weekends stay out of the list.
   const history: HistoryRow[] = [];
   for (let i = 1; i <= HISTORY_DAYS; i++) {
     const day = new Date(today.getTime() - i * DAY_MS);
     const ymd = toYmd(day);
+    if (ymd === yesterdayYmd && yesterdayOpen) continue;
     const report = byYmd.get(ymd) ?? null;
     const status = reportStatus(day, report?.submittedAt ?? null, now);
-    if (!report && status !== "missed") continue;
+    if (!report && status !== "missed" && status !== "pending") continue;
     history.push({
       ymd,
       label: dayLabel(ymd),
@@ -109,6 +124,28 @@ export async function ReporterView({
           <BackLink href="/dashboard" label="Dashboard" />
         </div>
       </header>
+
+      {yesterdayOpen && (
+        <section className="mb-4 rounded-xl border border-chart-warn/50 bg-surface p-4 sm:p-5">
+          <div className="mb-4 min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-widest text-chart-warn">
+              Yesterday — still open
+            </p>
+            <h2 className="mt-1 text-lg font-bold text-ink">
+              {dayLabel(yesterdayYmd)}
+            </h2>
+            <p className="mt-0.5 text-sm text-muted-fg">
+              Not sent yet — you have until 5 AM before the $5 fine lands.
+            </p>
+          </div>
+          <ReportEditor
+            dayYmd={yesterdayYmd}
+            initialContent=""
+            sendLabel="Send report"
+            big
+          />
+        </section>
+      )}
 
       <section className="rounded-xl border border-line bg-surface p-4 sm:p-5">
         <div className="mb-4 flex items-start justify-between gap-4">

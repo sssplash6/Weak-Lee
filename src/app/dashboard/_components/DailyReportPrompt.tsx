@@ -9,9 +9,13 @@ import { PenIcon, ChevronIcon } from "./icons";
 export function DailyReportPrompt({
   sentTimeLabel,
   optionalDay,
+  yesterdayOpen,
 }: {
   sentTimeLabel: string | null;
   optionalDay: boolean;
+  // Midnight–5 AM Tashkent with yesterday's report unsent: the urgent day is
+  // yesterday, whatever today's own state says.
+  yesterdayOpen: boolean;
 }) {
   return (
     <Link
@@ -29,7 +33,11 @@ export function DailyReportPrompt({
           Daily report
         </span>
         <span className="block text-xs">
-          {sentTimeLabel ? (
+          {yesterdayOpen ? (
+            <span className="font-medium text-chart-warn">
+              Yesterday not sent — due by 5 AM
+            </span>
+          ) : sentTimeLabel ? (
             <>
               <span className="font-medium text-chart-good">
                 {`Sent ${sentTimeLabel}`}
