@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { AVATARS, resolveAvatar } from "@/lib/avatar";
+import { AnimalGrid } from "@/app/_components/AnimalGrid";
 import { setAvatar } from "./actions";
 
 /**
@@ -14,20 +15,21 @@ import { setAvatar } from "./actions";
 export function ProfileAnimal({
   assigned,
   seed,
-  taken,
+  takenByOthers: takenList,
 }: {
   assigned: string | null;
   /** Fallback identity for the auto-assigned face (email, then name). */
   seed: string | null;
-  /** Every animal currently spoken for, this user's own included. */
-  taken: string[];
+  /** Animals worn by teammates — excludes this user's own, which they can
+   *  always come back to after trying a different one. */
+  takenByOthers: string[];
 }) {
   const [current, setCurrent] = useState<string | null>(assigned);
   const [error, setError] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   const shown = resolveAvatar(current, seed);
-  const takenByOthers = new Set(taken.filter((e) => e !== current));
+  const takenByOthers = new Set(takenList.filter((e) => e !== current));
   const free = AVATARS.length - takenByOthers.size;
 
   function choose(emoji: string) {
@@ -63,37 +65,13 @@ export function ProfileAnimal({
         </div>
       </div>
 
-      <div className="mt-4 max-h-72 overflow-y-auto rounded-xl border border-line bg-canvas p-3">
-        <div className="grid grid-cols-8 gap-1.5 sm:grid-cols-10">
-          {AVATARS.map((a) => {
-            const isCurrent = a.emoji === current;
-            const isTaken = takenByOthers.has(a.emoji);
-            return (
-              <button
-                key={a.emoji}
-                type="button"
-                disabled={isTaken || isPending}
-                onClick={() => choose(a.emoji)}
-                title={isTaken ? "Taken by a teammate" : undefined}
-                aria-label={
-                  isCurrent ? "Your animal" : isTaken ? "Taken" : "Choose this animal"
-                }
-                aria-pressed={isCurrent}
-                className={`flex h-9 w-9 items-center justify-center rounded-full text-lg transition ${
-                  a.bg
-                } ${
-                  isCurrent
-                    ? "ring-2 ring-brand"
-                    : isTaken
-                      ? "cursor-not-allowed opacity-30"
-                      : "hover:ring-2 hover:ring-brand-soft"
-                }`}
-              >
-                <span aria-hidden="true">{a.emoji}</span>
-              </button>
-            );
-          })}
-        </div>
+      <div className="mt-4">
+        <AnimalGrid
+          value={current}
+          takenByOthers={takenByOthers}
+          onPick={choose}
+          disabled={isPending}
+        />
       </div>
 
       {error && (

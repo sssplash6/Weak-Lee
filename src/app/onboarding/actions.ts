@@ -5,16 +5,17 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { normalizeTelegram } from "@/lib/profile";
+import { AVATAR_EMOJIS } from "@/lib/avatar";
 import { fromYmd } from "@/lib/dates";
 
 export type OnboardingState = { error: string | null };
 
 /**
  * Save the onboarding profile (full name, work phone, Telegram handle,
- * departments picked from the existing list — one or more) for the signed-in
- * user, then send them to the dashboard. Every field is required. New joiners
- * always start as a MEMBER in each picked department — an admin promotes
- * department leads on /departments.
+ * departments picked from the existing list — one or more, and the animal
+ * they'll wear across the app) for the signed-in user, then send them to the
+ * dashboard. Every field is required. New joiners always start as a MEMBER in
+ * each picked department — an admin promotes department leads on /departments.
  */
 export async function completeProfile(
   _prev: OnboardingState,
@@ -38,6 +39,7 @@ export async function completeProfile(
     ),
   ];
   const birthday = String(formData.get("birthday") ?? "").trim();
+  const avatar = String(formData.get("avatar") ?? "").trim();
 
   if (!name || !workPhone || !telegramUsername || !birthday) {
     return { error: "Please fill in every field." };
@@ -56,25 +58,42 @@ export async function completeProfile(
     return { error: "Pick departments from the list." };
   }
 
-  await prisma.user.update({
-    where: { id: userId },
-    data: {
-      name,
-      workPhone,
-      telegramUsername,
-      birthday: fromYmd(birthday),
-      // Their first seats, always as members. Upsert-shaped so re-running
-      // onboarding can never demote a lead membership an admin granted.
-      memberships: {
-        connectOrCreate: departmentIds.map((departmentId) => ({
-          where: {
-            userId_departmentId: { userId, departmentId },
-          },
-          create: { departmentId },
-        })),
+  // An animal is offered pre-picked, so an empty value means the roster was
+  // full — leave it unset and let lib/assignAvatar.ts backfill one later.
+  if (avatar && !AVATAR_EMOJIS.includes(avatar)) {
+    return { error: "Pick an animal from the list." };
+  }
+
+  try {
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        name,
+        workPhone,
+        telegramUsername,
+        avatar: avatar || undefined,
+        birthday: fromYmd(birthday),
+        // Their first seats, always as members. Upsert-shaped so re-running
+        // onboarding can never demote a lead membership an admin granted.
+        memberships: {
+          connectOrCreate: departmentIds.map((departmentId) => ({
+            where: {
+              userId_departmentId: { userId, departmentId },
+            },
+            create: { departmentId },
+          })),
+        },
       },
-    },
-  });
+    });
+  } catch (e) {
+    // One animal per person is a DB constraint: two people finishing sign-up
+    // at once can pick the same one. Say so instead of failing the whole form —
+    // everything they typed is still on screen.
+    if (e && typeof e === "object" && "code" in e && e.code === "P2002") {
+      return { error: "That animal was just taken — pick another one." };
+    }
+    throw e;
+  }
 
   revalidatePath("/dashboard");
   redirect("/dashboard");

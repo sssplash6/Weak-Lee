@@ -95,7 +95,9 @@ export default async function ProfilePage() {
         <ProfileAnimal
           assigned={user.avatar}
           seed={user.email ?? user.name}
-          taken={avatarOwners.map((u) => u.avatar as string)}
+          takenByOthers={avatarOwners
+            .map((u) => u.avatar as string)
+            .filter((e) => e !== user.avatar)}
         />
 
         <ProfileDepartments memberships={memberships} joinable={joinable} />
