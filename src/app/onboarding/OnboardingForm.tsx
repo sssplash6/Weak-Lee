@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { completeProfile, type OnboardingState } from "./actions";
 
 const initial: OnboardingState = { error: null };
@@ -9,7 +9,7 @@ type Defaults = {
   name: string;
   workPhone: string;
   telegramUsername: string;
-  departmentId: string;
+  departmentIds: string[];
   birthday: string;
 };
 
@@ -21,6 +21,13 @@ export function OnboardingForm({
   defaults: Defaults;
 }) {
   const [state, action, isPending] = useActionState(completeProfile, initial);
+  const [selected, setSelected] = useState<string[]>(defaults.departmentIds);
+
+  function toggle(id: string) {
+    setSelected((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  }
 
   return (
     <form action={action} className="mt-6 flex flex-col gap-4">
@@ -48,32 +55,48 @@ export function OnboardingForm({
       />
 
       {/* Departments are a fixed list managed by admins — new joiners pick the
-          one they're joining rather than typing free text. */}
-      <label className="block">
-        <span className="text-sm font-semibold text-ink">Department</span>
+          ones they're joining rather than typing free text. Multi-seat people
+          (member of one, working in another) select every department here. */}
+      <div>
+        <span className="text-sm font-semibold text-ink">Departments</span>
         {departments.length > 0 ? (
-          <select
-            name="departmentId"
-            required
-            defaultValue={defaults.departmentId}
-            className="mt-1.5 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink focus:border-brand focus:outline-none"
-          >
-            <option value="" disabled>
-              Choose your department…
-            </option>
-            {departments.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name}
-              </option>
-            ))}
-          </select>
+          <>
+            <div className="mt-1.5 flex flex-wrap gap-2">
+              {departments.map((d) => {
+                const on = selected.includes(d.id);
+                return (
+                  <label
+                    key={d.id}
+                    className={`cursor-pointer whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-medium transition focus-within:border-brand ${
+                      on
+                        ? "border-brand bg-brand-soft text-brand"
+                        : "border-line bg-surface text-muted-fg hover:text-ink"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      name="departmentIds"
+                      value={d.id}
+                      checked={on}
+                      onChange={() => toggle(d.id)}
+                      className="sr-only"
+                    />
+                    {d.name}
+                  </label>
+                );
+              })}
+            </div>
+            <span className="mt-1 block text-xs text-muted-fg">
+              Pick every department you&rsquo;ll work in — at least one.
+            </span>
+          </>
         ) : (
           <p className="mt-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
             No departments exist yet — ask an admin to create yours on the
             Departments page, then come back here.
           </p>
         )}
-      </label>
+      </div>
 
       <Field
         label="Birthday"
@@ -90,7 +113,7 @@ export function OnboardingForm({
 
       <button
         type="submit"
-        disabled={isPending || departments.length === 0}
+        disabled={isPending || departments.length === 0 || selected.length === 0}
         className="mt-2 rounded-lg bg-brand px-4 py-3 text-sm font-semibold text-white transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-50"
       >
         {isPending ? "Saving…" : "Continue to dashboard"}

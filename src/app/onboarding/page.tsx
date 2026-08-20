@@ -25,7 +25,7 @@ export default async function OnboardingPage() {
         birthday: true,
       },
     }),
-    // The fixed list a new joiner picks their department from. Admins manage
+    // The fixed list a new joiner picks their departments from. Admins manage
     // it on /departments; there's no free-text fallback.
     prisma.department.findMany({
       orderBy: { name: "asc" },
@@ -55,7 +55,7 @@ export default async function OnboardingPage() {
             name: user?.name ?? session.user.name ?? "",
             workPhone: user?.workPhone ?? "",
             telegramUsername: user?.telegramUsername ?? "",
-            departmentId: user?.memberships[0]?.departmentId ?? "",
+            departmentIds: user?.memberships.map((m) => m.departmentId) ?? [],
             birthday: user?.birthday ? toYmd(user.birthday) : "",
           }}
         />
