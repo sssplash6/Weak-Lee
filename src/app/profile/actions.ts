@@ -9,6 +9,7 @@ import {
   normalizeTelegram,
 } from "@/lib/profile";
 import { fromYmd } from "@/lib/dates";
+import { AVATAR_EMOJIS } from "@/lib/avatar";
 import { notify } from "@/lib/notifications";
 
 export type ProfileState = { error: string | null; saved: boolean };
@@ -152,4 +153,39 @@ export async function updateProfile(
   revalidatePath("/team");
   revalidatePath("/dashboard");
   return { error: null, saved: true };
+}
+
+export type SetAvatarResult =
+  | { ok: true; emoji: string }
+  | { ok: false; error: "taken" | "invalid" };
+
+/**
+ * Set the signed-in user's animal to `emoji`. One animal per person is a DB
+ * constraint, so when someone else claims it first we report "taken" and the
+ * picker puts the old one back.
+ */
+export async function setAvatar(emoji: string): Promise<SetAvatarResult> {
+  const session = await auth();
+  if (!session?.user?.id) return { ok: false, error: "invalid" };
+  if (!AVATAR_EMOJIS.includes(emoji)) return { ok: false, error: "invalid" };
+
+  try {
+    await prisma.user.update({
+      where: { id: session.user.id },
+      data: { avatar: emoji },
+    });
+  } catch (e) {
+    if (e && typeof e === "object" && "code" in e && e.code === "P2002") {
+      return { ok: false, error: "taken" };
+    }
+    throw e;
+  }
+
+  // Everywhere a face is drawn.
+  revalidatePath("/profile");
+  revalidatePath("/dashboard");
+  revalidatePath("/team");
+  revalidatePath("/admin");
+  revalidatePath("/department");
+  return { ok: true, emoji };
 }

@@ -9,6 +9,7 @@ import { prisma } from "@/lib/prisma";
 import { toYmd } from "@/lib/dates";
 import { BackLink } from "@/app/_components/BackLink";
 import { ProfileForm } from "./ProfileForm";
+import { ProfileAnimal } from "./ProfileAnimal";
 import { ProfileDepartments } from "./ProfileDepartments";
 
 export default async function ProfilePage() {
@@ -16,12 +17,13 @@ export default async function ProfilePage() {
   if (!session?.user?.id) redirect("/signin");
   await assertApproved(session.user);
 
-  const [user, departments] = await Promise.all([
+  const [user, departments, avatarOwners] = await Promise.all([
     prisma.user.findUnique({
       where: { id: session.user.id },
       select: {
         name: true,
         email: true,
+        avatar: true,
         workPhone: true,
         telegramUsername: true,
         memberships: {
@@ -38,6 +40,11 @@ export default async function ProfilePage() {
     prisma.department.findMany({
       orderBy: { name: "asc" },
       select: { id: true, name: true },
+    }),
+    // Animals already spoken for — the picker greys those out.
+    prisma.user.findMany({
+      where: { avatar: { not: null } },
+      select: { avatar: true },
     }),
   ]);
   if (!user) redirect("/signin");
@@ -84,6 +91,12 @@ export default async function ProfilePage() {
             }}
           />
         </div>
+
+        <ProfileAnimal
+          assigned={user.avatar}
+          seed={user.email ?? user.name}
+          taken={avatarOwners.map((u) => u.avatar as string)}
+        />
 
         <ProfileDepartments memberships={memberships} joinable={joinable} />
       </div>

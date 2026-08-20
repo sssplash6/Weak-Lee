@@ -1,10 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState, useTransition } from "react";
+import { useRef, useState } from "react";
 import { signOut } from "next-auth/react";
-import { AVATARS, resolveAvatar } from "@/lib/avatar";
-import { setAvatar } from "../actions";
+import { resolveAvatar } from "@/lib/avatar";
 import { useDismissible } from "@/lib/useDismissible";
 import { ThemeToggle } from "@/app/_components/ThemeToggle";
 import { PencilIcon } from "./icons";
@@ -13,47 +12,25 @@ type Props = {
   name?: string | null;
   email?: string | null;
   avatar?: string | null;
-  takenAvatars?: string[];
   isAdmin?: boolean;
   /** Leads at least one department — unlocks the department panel entry. */
   isLead?: boolean;
 };
 
+// Changing your animal lives on /profile (see ProfileAnimal) — the roster is
+// far too big for this popover. Here it's identity only.
 export function ProfileMenu({
   name,
   email,
   avatar: assigned,
-  takenAvatars = [],
   isAdmin,
   isLead,
 }: Props) {
   const [open, setOpen] = useState(false);
-  const [current, setCurrent] = useState<string | null>(assigned ?? null);
-  const [error, setError] = useState(false);
-  const [isPending, startTransition] = useTransition();
   const ref = useRef<HTMLDivElement>(null);
   useDismissible(open, () => setOpen(false), ref);
 
-  const avatar = resolveAvatar(current, email ?? name);
-
-  // Animals taken by other users (so the current pick stays selectable).
-  const takenByOthers = new Set(
-    takenAvatars.filter((e) => e !== current),
-  );
-
-  function choose(emoji: string) {
-    if (emoji === current || takenByOthers.has(emoji)) return;
-    const prev = current;
-    setError(false);
-    setCurrent(emoji); // optimistic
-    startTransition(async () => {
-      const res = await setAvatar(emoji);
-      if (!res.ok) {
-        setCurrent(prev);
-        setError(true);
-      }
-    });
-  }
+  const avatar = resolveAvatar(assigned ?? null, email ?? name);
 
   return (
     <div className="relative" ref={ref}>
@@ -89,47 +66,6 @@ export function ProfileMenu({
             >
               <PencilIcon className="h-4 w-4" />
             </Link>
-          </div>
-
-          <div className="my-1 border-t border-line" />
-
-          {/* Avatar picker */}
-          <div className="px-3 py-2">
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-fg">
-              Your animal
-            </p>
-            <div className="grid grid-cols-6 gap-1">
-              {AVATARS.map((a) => {
-                const isCurrent = a.emoji === current;
-                const taken = takenByOthers.has(a.emoji);
-                return (
-                  <button
-                    key={a.emoji}
-                    type="button"
-                    disabled={taken || isPending}
-                    onClick={() => choose(a.emoji)}
-                    title={taken ? "Taken" : undefined}
-                    aria-label={isCurrent ? "Current avatar" : "Choose avatar"}
-                    className={`flex h-8 w-8 items-center justify-center rounded-full text-base transition ${
-                      a.bg
-                    } ${
-                      isCurrent
-                        ? "ring-2 ring-brand"
-                        : taken
-                          ? "cursor-not-allowed opacity-30"
-                          : "hover:ring-2 hover:ring-brand-soft"
-                    }`}
-                  >
-                    <span aria-hidden="true">{a.emoji}</span>
-                  </button>
-                );
-              })}
-            </div>
-            {error && (
-              <p className="mt-2 text-xs text-red-600">
-                That one was just taken — pick another.
-              </p>
-            )}
           </div>
 
           <div className="my-1 border-t border-line" />

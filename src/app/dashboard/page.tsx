@@ -154,14 +154,6 @@ export default async function DashboardPage({
   const avatar =
     profile.avatar ?? (await ensureAvatar(userId, session!.user.email));
 
-  // Animals already taken (by anyone) — used to grey out the picker.
-  const takenAvatars = (
-    await prisma.user.findMany({
-      where: { avatar: { not: null } },
-      select: { avatar: true },
-    })
-  ).map((u) => u.avatar as string);
-
   // The updates zone shows everything from the last 48 hours.
   const updatesSince = new Date(Date.now() - 48 * 60 * 60 * 1000);
 
@@ -707,7 +699,6 @@ export default async function DashboardPage({
               name={session!.user.name}
               email={session!.user.email}
               avatar={avatar}
-              takenAvatars={takenAvatars}
               isAdmin={isAdmin(session!.user.email)}
               isLead={viewerIsLead}
             />
