@@ -33,9 +33,10 @@ services:
       - key: AUTH_URL
         value: "https://www.freshweek.org"
       # One-click test login that BYPASSES real auth (anyone with the URL signs
-      # in as a shared test account). Left unset on purpose so the committed
-      # blueprint never ships a bypass. To demo without Google, set this to
-      # "true" in the Render dashboard; remove it once Google sign-in is set up.
+      # in as a shared test account). Ignored entirely in production builds —
+      # src/auth.ts refuses to register the provider when NODE_ENV=production,
+      # so setting this here does nothing but log an error. It exists for local
+      # and preview builds only; use Google sign-in on the live site.
       - key: ALLOW_DEV_LOGIN
         sync: false
       # Optional: fill these in to enable "Continue with Google".

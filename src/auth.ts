@@ -9,15 +9,20 @@ import { adminEmails } from "@/lib/admin";
 import { notify } from "@/lib/notifications";
 
 // Dev-only login: a one-click "Continue as test student" that bypasses real
-// auth. Enabled only when ALLOW_DEV_LOGIN=true. Anyone with the URL can sign in
-// as a shared account, so only enable it for throwaway demos — never for a real
-// deployment with user data.
-export const devLoginEnabled = process.env.ALLOW_DEV_LOGIN === "true";
+// auth. Anyone with the URL can sign in as a shared account, so it needs BOTH
+// ALLOW_DEV_LOGIN=true and a non-production build. A production build never
+// registers the provider whatever the environment says — a warning is not a
+// control, and a stray dashboard variable must not be able to reopen an auth
+// bypass on the live site.
+const devLoginRequested = process.env.ALLOW_DEV_LOGIN === "true";
+const inProduction = process.env.NODE_ENV === "production";
 
-if (devLoginEnabled && process.env.NODE_ENV === "production") {
-  console.warn(
-    "[auth] ALLOW_DEV_LOGIN is enabled in production — this is an auth bypass. " +
-      "Disable it once real sign-in is configured.",
+export const devLoginEnabled = devLoginRequested && !inProduction;
+
+if (devLoginRequested && inProduction) {
+  console.error(
+    "[auth] ALLOW_DEV_LOGIN=true was IGNORED: the dev login bypass is disabled " +
+      "in production builds. Unset the variable to silence this.",
   );
 }
 
