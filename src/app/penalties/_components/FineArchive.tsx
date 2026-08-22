@@ -45,7 +45,8 @@ export type ArchiveRow = {
  * off, opening onto their payment history — each settlement as a receipt with
  * the fines it went to, so a part payment is as legible as a cleared one.
  * Admins can undo a whole receipt (a mistyped amount): every fine it touched
- * gets its balance back and reopens in the active matrix above.
+ * gets its balance back and reopens in the active matrix above. Payroll
+ * deductions are the exception — see undoSettlement.
  */
 export function FineArchive({
   rows,
@@ -162,7 +163,10 @@ function ReceiptLines({
         <span className="shrink-0 text-[11px] text-muted-fg">
           {receipt.dateLabel}
         </span>
-        {viewerIsAdmin && (
+        {/* Payroll deductions are half of a processed pay request — undoing
+            just this side would contradict the invoice, so no button is
+            offered (the server refuses them too). */}
+        {viewerIsAdmin && !receipt.viaPayroll && (
           <button
             type="button"
             disabled={isPending}

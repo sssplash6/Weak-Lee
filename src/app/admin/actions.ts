@@ -505,6 +505,13 @@ export async function settleFineAmount(
  * however many fines it touched. Each fine gets its balance back and reopens if
  * the payment had closed it. For a mistyped amount this is the fix: undo the
  * receipt and record the right one. Silent (no notification). Admin-only.
+ *
+ * PAYROLL batches are refused. That deduction is one half of a PROCESSED pay
+ * request: the money was already netted off an invoice the person was paid
+ * against. Handing the fines back here would leave them owing what their
+ * invoice says they settled, with the submission still marked processed — two
+ * records of the same money disagreeing. Reversing it properly means reversing
+ * the submission, which is payroll's job, not this receipt's.
  */
 export async function undoSettlement(batchId: string) {
   const session = await auth();
@@ -516,10 +523,19 @@ export async function undoSettlement(batchId: string) {
       where: { batchId },
       select: {
         amount: true,
+        source: true,
         penalty: { select: { id: true, amount: true, paidAmount: true } },
       },
     });
     if (payments.length === 0) return;
+
+    // One settle action writes one batch with one source, but check every row:
+    // a single payroll payment is enough to make the whole receipt unsafe.
+    if (payments.some((p) => p.source === "PAYROLL")) {
+      throw new Error(
+        "This deduction came from a processed pay request — it can't be undone here.",
+      );
+    }
 
     // A batch normally hits each fine once, but sum per fine anyway so an undo
     // can never leave a stray part-payment behind.
