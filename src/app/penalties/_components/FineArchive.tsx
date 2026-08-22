@@ -145,6 +145,11 @@ function ReceiptLines({
   viewerIsAdmin: boolean;
 }) {
   const [isPending, startTransition] = useTransition();
+  // Undo moves money on the ledger, so it asks first. Inline rather than a
+  // modal: the receipt and the fines it touched are already on screen right
+  // here, which is exactly what the admin needs to check before confirming.
+  const [confirming, setConfirming] = useState(false);
+  const fineCount = new Set(receipt.lines.map((l) => l.id)).size;
 
   return (
     <li className="border-t border-line py-2 first:border-t-0">
@@ -166,19 +171,43 @@ function ReceiptLines({
         {/* Payroll deductions are half of a processed pay request — undoing
             just this side would contradict the invoice, so no button is
             offered (the server refuses them too). */}
-        {viewerIsAdmin && !receipt.viaPayroll && (
-          <button
-            type="button"
-            disabled={isPending}
-            onClick={() =>
-              startTransition(() => void undoSettlement(receipt.batchId))
-            }
-            title="Undo this settlement — the fines it paid go back to outstanding"
-            className="shrink-0 rounded-lg border border-line px-2 py-0.5 text-[11px] font-semibold text-muted-fg transition hover:border-red-300 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
-          >
-            Undo
-          </button>
-        )}
+        {viewerIsAdmin &&
+          !receipt.viaPayroll &&
+          (confirming ? (
+            <span className="flex shrink-0 items-center gap-1.5">
+              <span className="text-[11px] text-muted-fg">
+                {`Reopen ${fineCount === 1 ? "1 fine" : `${fineCount} fines`}?`}
+              </span>
+              <button
+                type="button"
+                onClick={() => setConfirming(false)}
+                className="rounded-lg border border-line px-2 py-0.5 text-[11px] font-semibold text-muted-fg transition hover:bg-line"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => {
+                  setConfirming(false);
+                  startTransition(() => void undoSettlement(receipt.batchId));
+                }}
+                className="rounded-lg border border-red-300 bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-600 transition hover:bg-red-100 disabled:opacity-50"
+              >
+                {`Undo ${formatMoney(receipt.amount)}`}
+              </button>
+            </span>
+          ) : (
+            <button
+              type="button"
+              disabled={isPending}
+              onClick={() => setConfirming(true)}
+              title="Undo this settlement — the fines it paid go back to outstanding"
+              className="shrink-0 rounded-lg border border-line px-2 py-0.5 text-[11px] font-semibold text-muted-fg transition hover:border-red-300 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+            >
+              Undo
+            </button>
+          ))}
       </div>
       <ul className="mt-1 flex flex-col pl-8">
         {receipt.lines.map((l) => {
