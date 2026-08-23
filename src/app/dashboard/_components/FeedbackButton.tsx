@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { useModalFocus } from "@/lib/useModalFocus";
 import { submitFeedback } from "../actions";
 import { ChatIcon } from "./icons";
 
@@ -16,6 +17,18 @@ export function FeedbackButton() {
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const boxRef = useRef<HTMLDivElement>(null);
+  useModalFocus(open, boxRef);
+
+  // This component swaps its trigger out for the modal, so by the time the
+  // modal closes the button the hook memorised is gone. Hand focus back to the
+  // fresh one instead of dropping the keyboard user at the top of the page.
+  const wasOpen = useRef(false);
+  useEffect(() => {
+    if (wasOpen.current && !open) triggerRef.current?.focus();
+    wasOpen.current = open;
+  }, [open]);
 
   const canSend = message.trim().length > 0;
 
@@ -54,6 +67,7 @@ export function FeedbackButton() {
   if (!open) {
     return (
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Share feedback"
@@ -73,14 +87,18 @@ export function FeedbackButton() {
       onClick={() => !isPending && close()}
       role="dialog"
       aria-modal="true"
+      aria-labelledby="feedback-heading"
     >
       <div
+        ref={boxRef}
         className="modal-in w-full max-w-md rounded-2xl border border-line bg-surface p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         {sent ? (
           <div className="text-center">
-            <h2 className="text-base font-bold text-ink">Thanks for the feedback!</h2>
+            <h2 id="feedback-heading" className="text-base font-bold text-ink">
+              Thanks for the feedback!
+            </h2>
             <p className="mt-1 text-sm text-muted-fg">
               It&rsquo;s on its way to the {FEEDBACK_EMAIL} team.
             </p>
@@ -94,7 +112,9 @@ export function FeedbackButton() {
           </div>
         ) : (
           <>
-            <h2 className="text-base font-bold text-ink">Share feedback</h2>
+            <h2 id="feedback-heading" className="text-base font-bold text-ink">
+              Share feedback
+            </h2>
             <p className="mt-1 text-sm text-muted-fg">
               Found a bug or have an idea? It goes straight to {FEEDBACK_EMAIL}.
             </p>

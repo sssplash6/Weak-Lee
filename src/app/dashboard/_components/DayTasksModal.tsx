@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
+import { useModalFocus } from "@/lib/useModalFocus";
 import {
   addDayTask,
   deleteDayTask,
@@ -60,6 +61,9 @@ export function DayTasksModal({
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const inputRef = useRef<HTMLInputElement>(null);
+  const boxRef = useRef<HTMLDivElement>(null);
+  // Mounted only while open, so the trap is always on.
+  useModalFocus(true, boxRef);
 
   /** Adopt a list from the server and mirror it to the caller. */
   const applyTasks = useCallback(
@@ -133,6 +137,7 @@ export function DayTasksModal({
       aria-label={`Tasks for ${formatDayHeading(ymd)}`}
     >
       <div
+        ref={boxRef}
         className="modal-in flex max-h-[85vh] w-full max-w-md flex-col rounded-2xl border border-line bg-surface p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { useModalFocus } from "@/lib/useModalFocus";
 import { startNewWeek } from "../actions";
 
 type IncompleteGoal = { id: string; title: string; percent: number };
@@ -46,6 +47,17 @@ export function StartNewWeekButton({
   opensOnLabel: string;
 }) {
   const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const boxRef = useRef<HTMLDivElement>(null);
+  useModalFocus(open, boxRef);
+
+  // The trigger is replaced by the modal, so the hook has nothing to restore
+  // focus to — put it back on the rebuilt button once the modal closes.
+  const wasOpen = useRef(false);
+  useEffect(() => {
+    if (wasOpen.current && !open) triggerRef.current?.focus();
+    wasOpen.current = open;
+  }, [open]);
   const [reasons, setReasons] = useState<Record<string, string>>({});
   // Which goals to copy into the new week (unfinished ones default on), and the
   // fresh deadline for each (defaults to the new week's end).
@@ -164,6 +176,7 @@ export function StartNewWeekButton({
     }
     return (
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen(true)}
         className="w-full rounded-xl border border-accent bg-surface px-4 py-3 text-sm font-semibold text-accent-ink transition hover:bg-accent-soft"
@@ -179,14 +192,18 @@ export function StartNewWeekButton({
       onClick={() => !isPending && close()}
       role="dialog"
       aria-modal="true"
+      aria-labelledby="start-week-heading"
     >
       <div
+        ref={boxRef}
         className="modal-in max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-line bg-surface p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Flexible start, preset end for the new week */}
         <div className="mb-5">
-          <h2 className="text-base font-bold text-ink">Start a new week</h2>
+          <h2 id="start-week-heading" className="text-base font-bold text-ink">
+            Start a new week
+          </h2>
           <p className="mt-1 text-sm text-muted-fg">
             Pick when the week starts — it ends on the preset date. Carry
             unfinished goals forward below, or start fresh and add goals

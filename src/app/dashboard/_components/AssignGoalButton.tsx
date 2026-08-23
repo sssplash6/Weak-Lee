@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
+import { useModalFocus } from "@/lib/useModalFocus";
 import { assignTask } from "../../admin/actions";
 
 type Scope = "WEEKLY" | "MONTHLY";
@@ -19,6 +20,8 @@ export function AssignGoalButton({
   people: { id: string; name: string }[];
 }) {
   const [open, setOpen] = useState(false);
+  const boxRef = useRef<HTMLDivElement>(null);
+  useModalFocus(open, boxRef);
   const [selected, setSelected] = useState<string[]>([]);
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState<Scope>("WEEKLY");
@@ -135,12 +138,16 @@ export function AssignGoalButton({
             onClick={() => !isPending && close()}
             role="dialog"
             aria-modal="true"
+            aria-labelledby="assign-goal-heading"
           >
       <div
+        ref={boxRef}
         className="modal-in w-full max-w-md rounded-2xl border border-line bg-surface p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-base font-bold text-ink">Assign a goal</h2>
+        <h2 id="assign-goal-heading" className="text-base font-bold text-ink">
+          Assign a goal
+        </h2>
         <p className="mt-1 text-sm text-muted-fg">
           {`Hand a goal to one or more teammates. It appears in their ${
             scope === "MONTHLY" ? "monthly" : "weekly"

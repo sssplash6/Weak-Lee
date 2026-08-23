@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
+import { useModalFocus } from "@/lib/useModalFocus";
 import { formatMoney } from "@/lib/penalties";
 import { allocateSettlement, fineOwed, totalOwed } from "@/lib/settlement";
 import { settleAmount, settleFineAmount } from "../../admin/actions";
@@ -51,6 +52,9 @@ export function SettleDialog({
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const inputRef = useRef<HTMLInputElement>(null);
+  const boxRef = useRef<HTMLDivElement>(null);
+  // The dialog only exists while it's open, so the trap is always on.
+  useModalFocus(true, boxRef);
 
   const value = clampAmount(raw, owed);
   const plan = allocateSettlement(fines, value);
@@ -87,9 +91,9 @@ export function SettleDialog({
     });
   }
 
-  if (typeof document === "undefined") return null;
-
   const single = scope.kind === "fine";
+
+  if (typeof document === "undefined") return null;
 
   return createPortal(
     <div
@@ -100,6 +104,7 @@ export function SettleDialog({
       aria-label={`Settle fines for ${person.name}`}
     >
       <div
+        ref={boxRef}
         className="modal-in flex max-h-[88vh] w-full max-w-lg flex-col rounded-2xl border border-line bg-surface shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
