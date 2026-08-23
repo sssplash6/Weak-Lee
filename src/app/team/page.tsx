@@ -46,6 +46,27 @@ export default async function TeamPage() {
     orderBy: [{ name: "asc" }, { email: "asc" }],
   });
 
+  // Shape each person once; the phone and desktop layouts below are two
+  // renderings of this same list, not two queries.
+  const rows = members.map((m) => {
+    const avatar = resolveAvatar(m.avatar, m.email ?? m.name);
+    return {
+      id: m.id,
+      name: m.name,
+      isYou: m.id === session.user.id,
+      emoji: avatar.emoji,
+      bg: avatar.bg,
+      department: departmentLine(m.memberships),
+      lead: isLead(m.memberships),
+      email: m.email,
+      workPhone: m.workPhone,
+      telegram: m.telegramUsername,
+      linkedin: m.linkedin,
+      instagram: m.instagram,
+      birthdayLabel: m.birthday ? formatYmd(toYmd(m.birthday)) : null,
+    };
+  });
+
   return (
     <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">
       <header className="mb-8 flex items-start justify-between gap-4">
@@ -66,53 +87,116 @@ export default async function TeamPage() {
           fill in their profile.
         </p>
       ) : (
-        /* One row per person so the whole directory reads down a column at a
-           time. Too wide for a phone, so the table scrolls sideways inside this
-           box rather than wrapping every cell into a tall, unreadable row —
-           and the name column pins itself so it stays visible while it does. */
-        <div className="overflow-x-auto rounded-2xl border border-line bg-surface shadow-sm">
-          <table className="w-full min-w-[58rem] text-left text-sm">
-            <thead>
-              <tr className="border-b border-line text-xs font-medium uppercase tracking-wide text-muted-fg">
-                <th
-                  scope="col"
-                  className="sticky left-0 bg-surface px-4 py-3 shadow-[inset_-1px_0_0_0_var(--color-line)]"
-                >
-                  Person
-                </th>
-                <th scope="col" className="px-4 py-3">
-                  Department
-                </th>
-                <th scope="col" className="px-4 py-3">
-                  Role
-                </th>
-                <th scope="col" className="px-4 py-3">
-                  Email
-                </th>
-                <th scope="col" className="px-4 py-3">
-                  Phone
-                </th>
-                <th scope="col" className="px-4 py-3">
-                  Telegram
-                </th>
-                <th scope="col" className="px-4 py-3">
-                  LinkedIn
-                </th>
-                <th scope="col" className="px-4 py-3">
-                  Instagram
-                </th>
-                <th scope="col" className="px-4 py-3">
-                  Birthday
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {members.map((m) => {
-                const avatar = resolveAvatar(m.avatar, m.email ?? m.name);
-                const isYou = m.id === session.user.id;
-                return (
+        <>
+          {/* Phone: one card per person. Nine columns can't be squeezed into a
+              phone's width, and forcing a 58rem table through a 20rem viewport
+              means dragging sideways through every field of every row. */}
+          <ul className="flex flex-col gap-3 md:hidden">
+            {rows.map((r) => (
+              <li
+                key={r.id}
+                className="rounded-2xl border border-line bg-surface p-4 shadow-sm"
+              >
+                <div className="flex items-center gap-2.5">
+                  <span
+                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-line text-base ${r.bg}`}
+                    aria-hidden="true"
+                  >
+                    {r.emoji}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-semibold text-ink">
+                      {r.name}
+                      {r.isYou && (
+                        <span className="ml-1.5 text-xs font-normal text-muted-fg">
+                          (you)
+                        </span>
+                      )}
+                    </span>
+                    <span className="block truncate text-xs text-muted-fg">
+                      {r.department}
+                    </span>
+                  </span>
+                  {r.lead && <RoleChip />}
+                </div>
+                <dl className="mt-3 flex flex-col gap-1.5 text-sm">
+                  {r.email && (
+                    <Field label="Email">
+                      <EmailLink email={r.email} />
+                    </Field>
+                  )}
+                  {r.workPhone && (
+                    <Field label="Phone">
+                      <PhoneLink phone={r.workPhone} />
+                    </Field>
+                  )}
+                  {r.telegram && (
+                    <Field label="Telegram">
+                      <TelegramLink handle={r.telegram} />
+                    </Field>
+                  )}
+                  {r.linkedin && (
+                    <Field label="LinkedIn">
+                      <LinkedinLink value={r.linkedin} />
+                    </Field>
+                  )}
+                  {r.instagram && (
+                    <Field label="Instagram">
+                      <InstagramLink handle={r.instagram} />
+                    </Field>
+                  )}
+                  {r.birthdayLabel && (
+                    <Field label="Birthday">{r.birthdayLabel}</Field>
+                  )}
+                </dl>
+              </li>
+            ))}
+          </ul>
+
+          {/* Tablet and up: one row per person so the whole directory reads
+              down a column at a time. Still wider than a small tablet, so the
+              table scrolls sideways inside this box — and the name column pins
+              itself so it stays visible while it does. */}
+          <div className="hidden overflow-x-auto rounded-2xl border border-line bg-surface shadow-sm md:block">
+            <table className="w-full min-w-[58rem] text-left text-sm">
+              <thead>
+                <tr className="border-b border-line text-xs font-medium uppercase tracking-wide text-muted-fg">
+                  <th
+                    scope="col"
+                    className="sticky left-0 bg-surface px-4 py-3 shadow-[inset_-1px_0_0_0_var(--color-line)]"
+                  >
+                    Person
+                  </th>
+                  <th scope="col" className="px-4 py-3">
+                    Department
+                  </th>
+                  <th scope="col" className="px-4 py-3">
+                    Role
+                  </th>
+                  <th scope="col" className="px-4 py-3">
+                    Email
+                  </th>
+                  <th scope="col" className="px-4 py-3">
+                    Phone
+                  </th>
+                  <th scope="col" className="px-4 py-3">
+                    Telegram
+                  </th>
+                  <th scope="col" className="px-4 py-3">
+                    LinkedIn
+                  </th>
+                  <th scope="col" className="px-4 py-3">
+                    Instagram
+                  </th>
+                  <th scope="col" className="px-4 py-3">
+                    Birthday
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
                   <tr
-                    key={m.id}
+                    key={r.id}
                     className="group border-b border-line/60 transition last:border-0 hover:bg-canvas"
                   >
                     {/* The pinned cell needs the row's hover colour of its own —
@@ -128,14 +212,14 @@ export default async function TeamPage() {
                     >
                       <span className="flex items-center gap-2.5">
                         <span
-                          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line text-base ${avatar.bg}`}
+                          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line text-base ${r.bg}`}
                           aria-hidden="true"
                         >
-                          {avatar.emoji}
+                          {r.emoji}
                         </span>
                         <span className="font-semibold whitespace-nowrap text-ink">
-                          {m.name}
-                          {isYou && (
+                          {r.name}
+                          {r.isYou && (
                             <span className="ml-1.5 text-xs font-normal text-muted-fg">
                               (you)
                             </span>
@@ -143,84 +227,37 @@ export default async function TeamPage() {
                         </span>
                       </span>
                     </th>
-                    <Cell>{departmentLine(m.memberships)}</Cell>
+                    <Cell>{r.department}</Cell>
                     <Cell>
                       {/* The label the whole expectations system keys off:
                           leads owe meetings and weekly/monthly goals, members
                           don't — so leads get the chip, members stay quiet. */}
-                      {isLead(m.memberships) ? (
-                        <span className="rounded-full bg-brand-soft px-2 py-0.5 text-[11px] font-semibold text-brand">
-                          {ROLE_LABEL.LEAD}
-                        </span>
+                      {r.lead ? (
+                        <RoleChip />
                       ) : (
                         <span className="text-muted-fg">{ROLE_LABEL.MEMBER}</span>
                       )}
                     </Cell>
+                    <Cell>{r.email && <EmailLink email={r.email} />}</Cell>
                     <Cell>
-                      {m.email && (
-                        <a
-                          href={`mailto:${m.email}`}
-                          className="text-ink hover:text-brand"
-                        >
-                          {m.email}
-                        </a>
-                      )}
+                      {r.workPhone && <PhoneLink phone={r.workPhone} />}
                     </Cell>
                     <Cell>
-                      {m.workPhone && (
-                        <a
-                          href={`tel:${m.workPhone}`}
-                          className="text-ink hover:text-brand"
-                        >
-                          {m.workPhone}
-                        </a>
-                      )}
+                      {r.telegram && <TelegramLink handle={r.telegram} />}
                     </Cell>
                     <Cell>
-                      {m.telegramUsername && (
-                        <a
-                          href={`https://t.me/${m.telegramUsername}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-ink hover:text-brand"
-                        >
-                          {`@${m.telegramUsername}`}
-                        </a>
-                      )}
+                      {r.linkedin && <LinkedinLink value={r.linkedin} />}
                     </Cell>
                     <Cell>
-                      {m.linkedin && (
-                        <a
-                          href={linkedinUrl(m.linkedin)}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-ink hover:text-brand"
-                        >
-                          {m.linkedin}
-                        </a>
-                      )}
+                      {r.instagram && <InstagramLink handle={r.instagram} />}
                     </Cell>
-                    <Cell>
-                      {m.instagram && (
-                        <a
-                          href={`https://instagram.com/${m.instagram}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-ink hover:text-brand"
-                        >
-                          {`@${m.instagram}`}
-                        </a>
-                      )}
-                    </Cell>
-                    <Cell>
-                      {m.birthday && formatYmd(toYmd(m.birthday))}
-                    </Cell>
+                    <Cell>{r.birthdayLabel}</Cell>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </main>
   );
@@ -235,5 +272,87 @@ function Cell({ children }: { children?: React.ReactNode }) {
     <td className="px-4 py-3 whitespace-nowrap text-ink">
       {children || <span className="text-muted-fg">—</span>}
     </td>
+  );
+}
+
+/** The lead badge — the one role the expectations system keys off. */
+function RoleChip() {
+  return (
+    <span className="shrink-0 rounded-full bg-brand-soft px-2 py-0.5 text-[11px] font-semibold text-brand">
+      {ROLE_LABEL.LEAD}
+    </span>
+  );
+}
+
+/** One labelled line inside a phone card. Only rendered for filled-in fields. */
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-baseline gap-2">
+      <dt className="w-20 shrink-0 text-xs text-muted-fg">{label}</dt>
+      <dd className="min-w-0 flex-1 break-words text-ink">{children}</dd>
+    </div>
+  );
+}
+
+const LINK_CLASS = "text-ink hover:text-brand";
+
+function EmailLink({ email }: { email: string }) {
+  return (
+    <a href={`mailto:${email}`} className={LINK_CLASS}>
+      {email}
+    </a>
+  );
+}
+
+function PhoneLink({ phone }: { phone: string }) {
+  return (
+    <a href={`tel:${phone}`} className={LINK_CLASS}>
+      {phone}
+    </a>
+  );
+}
+
+function TelegramLink({ handle }: { handle: string }) {
+  return (
+    <a
+      href={`https://t.me/${handle}`}
+      target="_blank"
+      rel="noreferrer"
+      className={LINK_CLASS}
+    >
+      {`@${handle}`}
+    </a>
+  );
+}
+
+function LinkedinLink({ value }: { value: string }) {
+  return (
+    <a
+      href={linkedinUrl(value)}
+      target="_blank"
+      rel="noreferrer"
+      className={LINK_CLASS}
+    >
+      {value}
+    </a>
+  );
+}
+
+function InstagramLink({ handle }: { handle: string }) {
+  return (
+    <a
+      href={`https://instagram.com/${handle}`}
+      target="_blank"
+      rel="noreferrer"
+      className={LINK_CLASS}
+    >
+      {`@${handle}`}
+    </a>
   );
 }
