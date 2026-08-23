@@ -808,12 +808,11 @@ export async function startNewWeek(
     if (!from || !to) {
       throw new Error("Invalid week dates");
     }
-    start = new Date(
-      from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate(), 0, 0, 0, 0,
-    );
-    end = new Date(
-      to.getUTCFullYear(), to.getUTCMonth(), to.getUTCDate(), 23, 59, 59, 999,
-    );
+    // parseYmd hands back UTC midnight — the same instant getWeekBounds
+    // produces — so the start is already right and the end is simply the last
+    // millisecond of that UTC day.
+    start = from;
+    end = new Date(to.getTime() + 86_399_999);
     if (start > end) {
       throw new Error("Invalid week dates");
     }

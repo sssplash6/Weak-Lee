@@ -1,16 +1,24 @@
 import { prisma } from "@/lib/prisma";
 
-/** First day 00:00 and last day 23:59:59.999 of the calendar month containing `date`. */
+/**
+ * First day 00:00 UTC and last day 23:59:59.999 UTC of the calendar month
+ * containing `date`. UTC for the same reason as getWeekBounds — a period
+ * boundary must not move because the deployment's timezone did.
+ */
 export function getMonthBounds(date = new Date()): { start: Date; end: Date } {
-  const start = new Date(date.getFullYear(), date.getMonth(), 1, 0, 0, 0, 0);
+  const start = new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1, 0, 0, 0, 0),
+  );
   const end = new Date(
-    date.getFullYear(),
-    date.getMonth() + 1,
-    0, // day 0 of the next month = last day of this month
-    23,
-    59,
-    59,
-    999,
+    Date.UTC(
+      date.getUTCFullYear(),
+      date.getUTCMonth() + 1,
+      0, // day 0 of the next month = last day of this month
+      23,
+      59,
+      59,
+      999,
+    ),
   );
   return { start, end };
 }
@@ -22,7 +30,7 @@ export function getMonthBounds(date = new Date()): { start: Date; end: Date } {
  */
 export function nextMonthBounds(prevEnd: Date): { start: Date; end: Date } {
   const next = new Date(prevEnd);
-  next.setDate(next.getDate() + 1); // step into the following month
+  next.setUTCDate(next.getUTCDate() + 1); // step into the following month
   return getMonthBounds(next);
 }
 
@@ -31,10 +39,11 @@ const MONTH_NAMES = [
   "July", "August", "September", "October", "November", "December",
 ];
 
-// Month bounds are created with local server time (see getMonthBounds above),
-// so read them back with local getters rather than UTC ones.
+// Month bounds are UTC instants (see getMonthBounds above), so read them back
+// with UTC getters — local ones would name the wrong month either side of
+// midnight for any server that isn't on UTC.
 export function monthLabel(start: Date): string {
-  return `${MONTH_NAMES[start.getMonth()]} ${start.getFullYear()}`;
+  return `${MONTH_NAMES[start.getUTCMonth()]} ${start.getUTCFullYear()}`;
 }
 
 // Loads a month with its goals, subtasks, and delegation info. Same shape as

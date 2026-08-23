@@ -1,16 +1,26 @@
 import { prisma } from "@/lib/prisma";
 
-/** Monday 00:00 and the following Sunday 23:59:59 for the week containing `date`. */
+/**
+ * Monday 00:00 UTC and the following Sunday 23:59:59.999 UTC for the week
+ * containing `date`.
+ *
+ * UTC deliberately, not the server's local time. Everything downstream already
+ * assumes a Monday-00:00-UTC start — weekSubmissionDeadline steps back a UTC
+ * day and sets 07:00 UTC to land on Sunday 12:00 Tashkent (see lib/lateness.ts,
+ * which says so in its header). Built from local getters this only held while
+ * the deployment happened to run in UTC; set TZ to anything else and every
+ * week boundary, submission deadline and fine slid with it.
+ */
 export function getWeekBounds(date = new Date()): { start: Date; end: Date } {
   const start = new Date(date);
-  const day = start.getDay(); // 0 = Sunday
+  const day = start.getUTCDay(); // 0 = Sunday
   const diffToMonday = (day + 6) % 7; // days since Monday
-  start.setDate(start.getDate() - diffToMonday);
-  start.setHours(0, 0, 0, 0);
+  start.setUTCDate(start.getUTCDate() - diffToMonday);
+  start.setUTCHours(0, 0, 0, 0);
 
   const end = new Date(start);
-  end.setDate(start.getDate() + 6);
-  end.setHours(23, 59, 59, 999);
+  end.setUTCDate(start.getUTCDate() + 6);
+  end.setUTCHours(23, 59, 59, 999);
 
   return { start, end };
 }
@@ -22,7 +32,7 @@ export function getWeekBounds(date = new Date()): { start: Date; end: Date } {
  */
 export function nextWeekBounds(prevEnd: Date): { start: Date; end: Date } {
   const next = new Date(prevEnd);
-  next.setDate(next.getDate() + 1); // step into the following week
+  next.setUTCDate(next.getUTCDate() + 1); // step into the following week
   return getWeekBounds(next);
 }
 
