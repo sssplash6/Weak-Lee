@@ -19,6 +19,11 @@ import {
   MAX_DAY_TASK_TITLE,
   type DayTaskView,
 } from "@/lib/dayTasks";
+import {
+  MAX_COMPLETION_REASON,
+  MAX_GOAL_TITLE,
+  requireText,
+} from "@/lib/goals";
 import { notify } from "@/lib/notifications";
 import { formatYmd, parseYmd, toYmd } from "@/lib/dates";
 
@@ -252,7 +257,7 @@ export async function addGoal(input: {
   scope?: GoalScope;
 }) {
   const userId = await requireUserId();
-  const title = input.title.trim();
+  const title = requireText(input.title, MAX_GOAL_TITLE, "That goal title");
   if (!title) throw new Error("A goal needs a title.");
   if (!isPriority(input.priority)) throw new Error("A priority is required.");
   const deadline = parseRequiredDeadline(input.deadline);
@@ -344,7 +349,7 @@ export async function reopenMonth() {
 
 export async function renameGoal(goalId: string, title: string) {
   const userId = await requireUserId();
-  const trimmed = title.trim();
+  const trimmed = requireText(title, MAX_GOAL_TITLE, "That goal title");
   if (!trimmed) return;
   await assertGoalEditable(goalId, userId);
   await prisma.goal.update({ where: { id: goalId }, data: { title: trimmed } });
@@ -507,7 +512,7 @@ export async function deleteGoal(goalId: string) {
 
 export async function addSubtask(goalId: string, title: string) {
   const userId = await requireUserId();
-  const trimmed = title.trim();
+  const trimmed = requireText(title, MAX_GOAL_TITLE, "That subtask title");
   if (!trimmed) return;
   await assertGoalEditable(goalId, userId);
 
@@ -521,7 +526,7 @@ export async function addSubtask(goalId: string, title: string) {
 /** Rename a subtask in place (so users can edit instead of delete-and-retype). */
 export async function renameSubtask(subtaskId: string, title: string) {
   const userId = await requireUserId();
-  const trimmed = title.trim();
+  const trimmed = requireText(title, MAX_GOAL_TITLE, "That subtask title");
   if (!trimmed) return;
   await assertSubtaskEditable(subtaskId, userId);
   await prisma.subtask.update({
@@ -719,7 +724,10 @@ export async function startNewWeek(
   const week = await getOrCreateCurrentWeek(userId);
 
   const reasonByGoal = new Map(
-    reasons.map((r) => [r.goalId, r.reason.trim()]),
+    reasons.map((r) => [
+      r.goalId,
+      requireText(r.reason, MAX_COMPLETION_REASON, "That reason"),
+    ]),
   );
 
   // Goals below 100% require a reason before the week can close — including ones
@@ -882,7 +890,9 @@ export async function startNewMonth(
 
   // The new month must be opened with at least one goal — with the same
   // required priority and deadline as any other goal.
-  const firstGoalTitle = (firstGoal?.title ?? "").trim();
+  const firstGoalTitle = requireText(
+    firstGoal?.title ?? "", MAX_GOAL_TITLE, "That goal title",
+  );
   if (!firstGoalTitle) {
     throw new Error("Add at least one goal for the new month.");
   }
@@ -891,7 +901,12 @@ export async function startNewMonth(
   }
   const firstGoalDeadline = parseRequiredDeadline(firstGoal.deadline);
 
-  const reasonByGoal = new Map(reasons.map((r) => [r.goalId, r.reason.trim()]));
+  const reasonByGoal = new Map(
+    reasons.map((r) => [
+      r.goalId,
+      requireText(r.reason, MAX_COMPLETION_REASON, "That reason"),
+    ]),
+  );
 
   // Goals below 100% require a reason before the month closes — including ones
   // marked complete at a partial rate, not just unfinished ones.
@@ -1002,7 +1017,7 @@ export async function addDayTask(
 ): Promise<DayTaskView[]> {
   const userId = await requireUserId();
   const date = parseDay(ymd);
-  const trimmed = title.trim();
+  const trimmed = requireText(title, MAX_DAY_TASK_TITLE, "That task title");
   if (!trimmed) throw new Error("A task needs a title.");
 
   const count = await prisma.dayTask.count({ where: { userId, date } });
@@ -1042,11 +1057,11 @@ export async function renameDayTask(
 ): Promise<DayTaskView[]> {
   const userId = await requireUserId();
   const task = await assertDayTaskOwned(taskId, userId);
-  const trimmed = title.trim();
+  const trimmed = requireText(title, MAX_DAY_TASK_TITLE, "That task title");
   if (trimmed) {
     await prisma.dayTask.update({
       where: { id: taskId },
-      data: { title: trimmed.slice(0, MAX_DAY_TASK_TITLE) },
+      data: { title: trimmed },
     });
     revalidatePath("/dashboard");
   }
