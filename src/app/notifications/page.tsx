@@ -10,6 +10,9 @@ import { NOTIFICATION_DOT } from "@/lib/notificationTypes";
 import { BackLink } from "@/app/_components/BackLink";
 import { MarkAllReadButton } from "./_components/MarkAllReadButton";
 
+/** How many notifications one page load carries. */
+const NOTIFICATION_LIMIT = 200;
+
 type Row = {
   id: string;
   dot: string;
@@ -28,10 +31,12 @@ export default async function NotificationsPage() {
   if (!session?.user?.id) redirect("/signin");
   await assertApproved(session.user);
 
-  const notifications = await prisma.notification.findMany({
+  // Fetch one past the limit purely to learn whether there are older ones —
+  // the page claims to show everything, so if it can't, it has to say so.
+  const page = await prisma.notification.findMany({
     where: { userId: session.user.id },
     orderBy: { createdAt: "desc" },
-    take: 200,
+    take: NOTIFICATION_LIMIT + 1,
     select: {
       id: true,
       type: true,
@@ -40,6 +45,8 @@ export default async function NotificationsPage() {
       readAt: true,
     },
   });
+  const truncated = page.length > NOTIFICATION_LIMIT;
+  const notifications = truncated ? page.slice(0, NOTIFICATION_LIMIT) : page;
   const hasUnread = notifications.some((n) => n.readAt == null);
 
   const cutoff = Date.now() - 48 * 60 * 60 * 1000;
@@ -63,8 +70,9 @@ export default async function NotificationsPage() {
         <div>
           <h1 className="mt-1 text-2xl font-bold text-ink">Notifications</h1>
           <p className="mt-1 text-sm text-muted-fg">
-            Every update you&rsquo;ve received — fines, bonuses, assigned tasks
-            and reports.
+            {truncated
+              ? `Your latest ${NOTIFICATION_LIMIT} updates — fines, bonuses, assigned tasks and reports.`
+              : "Every update you\u2019ve received — fines, bonuses, assigned tasks and reports."}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -84,6 +92,11 @@ export default async function NotificationsPage() {
             <div className="mt-8">
               <Section title="Earlier" rows={earlier} emptyHint="" />
             </div>
+          )}
+          {truncated && (
+            <p className="mt-4 px-1 text-xs text-muted-fg">
+              {`Older updates beyond the most recent ${NOTIFICATION_LIMIT} aren\u2019t shown.`}
+            </p>
           )}
         </>
       )}
