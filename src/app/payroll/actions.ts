@@ -194,6 +194,37 @@ export async function submitPayroll(
   let netTotal = 0;
   try {
     await prisma.$transaction(async (tx) => {
+      // Serialize this person's filings before reading anything. Every check
+      // above ran outside the transaction, so two requests for DIFFERENT
+      // periods could both pass the in-flight guard and then snapshot the same
+      // unpaid fines and unpaid bonuses — paying the bonuses twice and
+      // deducting the fines twice. The (userId, periodId) unique key doesn't
+      // help: it only stops two filings for the SAME period. A per-user
+      // advisory lock does, and needs no schema change — Postgres holds it for
+      // the life of the transaction and drops it on commit or rollback.
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(${PAYROLL_LOCK_NAMESPACE}::int4, hashtext(${userId}))`;
+
+      // Re-assert what decided `mode`, now that nothing else can be filing for
+      // this person. Whoever held the lock first may have just used it up.
+      if (mode === "create") {
+        const blocking = await inFlightSubmission(tx, userId);
+        if (blocking) {
+          throw new SubmitError(
+            `Your ${payrollMonthName(blocking.period.month)} request is still in review — filing for ${label} unlocks once it's processed.`,
+          );
+        }
+      } else {
+        const still = await tx.payrollSubmission.findUnique({
+          where: { id: existing!.id },
+          select: { status: true },
+        });
+        if (still?.status !== "DECLINED") {
+          throw new SubmitError(
+            "That request has already moved on — reload to see where it is.",
+          );
+        }
+      }
+
       const snapshot = await pullLedgerSnapshot(tx, userId);
       netTotal = computeNet({
         baseSalary,
@@ -380,3 +411,9 @@ export async function submitPayroll(
 
 /** An expected, user-facing refusal thrown from inside the transaction. */
 class SubmitError extends Error {}
+
+/**
+ * Namespace for the per-user payroll advisory lock, so it can't collide with
+ * any other advisory lock the app might take later. Arbitrary but fixed.
+ */
+const PAYROLL_LOCK_NAMESPACE = 8_140_233;
