@@ -6,7 +6,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { normalizeTelegram } from "@/lib/profile";
 import { AVATAR_EMOJIS } from "@/lib/avatar";
-import { fromYmd } from "@/lib/dates";
+import { parseYmd } from "@/lib/dates";
 
 export type OnboardingState = { error: string | null };
 
@@ -64,6 +64,11 @@ export async function completeProfile(
     return { error: "Pick an animal from the list." };
   }
 
+  const birthdayDate = parseYmd(birthday);
+  if (!birthdayDate) {
+    return { error: "That birthday isn't a real date." };
+  }
+
   try {
     await prisma.user.update({
       where: { id: userId },
@@ -72,7 +77,7 @@ export async function completeProfile(
         workPhone,
         telegramUsername,
         avatar: avatar || undefined,
-        birthday: fromYmd(birthday),
+        birthday: birthdayDate,
         // Their first seats, always as members. Upsert-shaped so re-running
         // onboarding can never demote a lead membership an admin granted.
         memberships: {

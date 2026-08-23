@@ -15,10 +15,8 @@ import {
   dayLabel,
   tashkentTodayYmd,
 } from "@/lib/dailyReportTypes";
-import { fromYmd } from "@/lib/dates";
+import { parseYmd } from "@/lib/dates";
 import { sendEmail } from "@/lib/email";
-
-const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
  * Send (or edit-and-resend) the signed-in reporter's report for one day.
@@ -39,9 +37,9 @@ export async function sendDailyReport(
     throw new Error("This account doesn't write daily reports");
   }
 
-  if (!YMD_RE.test(dayYmd)) throw new Error("Invalid day");
-  const day = fromYmd(dayYmd);
-  if (Number.isNaN(day.getTime())) throw new Error("Invalid day");
+  // parseYmd rejects impossible days (Feb 31) as well as malformed ones.
+  const day = parseYmd(dayYmd);
+  if (!day) throw new Error("Invalid day");
   // Today or a past day only — reports describe a day that's happening, and
   // nothing before the feature existed is owed.
   if (dayYmd > tashkentTodayYmd()) {

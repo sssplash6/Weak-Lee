@@ -16,9 +16,30 @@ export function toYmd(date: Date | string): string {
   return `${y}-${m}-${day}`;
 }
 
-/** "YYYY-MM-DD" → a Date at UTC midnight, for persisting. */
+/**
+ * "YYYY-MM-DD" → a Date at UTC midnight, or null if that isn't a real calendar
+ * day. Date construction rolls overflow forward instead of failing — Feb 31
+ * quietly becomes Mar 3, and month 13 becomes next January — so a format check
+ * and a NaN check together still let impossible dates through. The only
+ * reliable test is to build the date and confirm it reads back as the string
+ * that produced it.
+ */
+export function parseYmd(ymd: string): Date | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return null;
+  const date = new Date(`${ymd}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) return null;
+  return toYmd(date) === ymd ? date : null;
+}
+
+/**
+ * "YYYY-MM-DD" → a Date at UTC midnight, for persisting. Throws on anything
+ * that isn't a real calendar day; use `parseYmd` at the edges where user input
+ * arrives and a message is nicer than an exception.
+ */
 export function fromYmd(ymd: string): Date {
-  return new Date(`${ymd}T00:00:00.000Z`);
+  const date = parseYmd(ymd);
+  if (!date) throw new Error(`Not a real calendar date: ${ymd}`);
+  return date;
 }
 
 /** A Date (or ISO string) → "HH:MM" using its UTC clock. */

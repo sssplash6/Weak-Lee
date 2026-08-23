@@ -20,7 +20,7 @@ import {
   type DayTaskView,
 } from "@/lib/dayTasks";
 import { notify } from "@/lib/notifications";
-import { formatYmd, fromYmd, toYmd } from "@/lib/dates";
+import { formatYmd, parseYmd, toYmd } from "@/lib/dates";
 
 async function requireUserId(): Promise<string> {
   const session = await auth();
@@ -740,18 +740,13 @@ export async function startNewWeek(
 
   // Goals the user chose to carry into the new week, each with a fresh deadline
   // (date-only, stored at UTC midnight to match how goal deadlines are kept).
-  const ymdRe = /^\d{4}-\d{2}-\d{2}$/;
   const weekGoalById = new Map(week.goals.map((g) => [g.id, g]));
   const carryPlan: { goal: (typeof week.goals)[number]; deadline: Date }[] = [];
   for (const c of carry) {
     const goal = weekGoalById.get(c.goalId);
     if (!goal) continue; // ignore anything not in the closing week
-    if (!ymdRe.test(c.deadline)) {
-      throw new Error("Invalid carry-over deadline");
-    }
-    const [y, m, d] = c.deadline.split("-").map(Number);
-    const deadline = new Date(Date.UTC(y, m - 1, d));
-    if (Number.isNaN(deadline.getTime())) {
+    const deadline = parseYmd(c.deadline);
+    if (!deadline) {
       throw new Error("Invalid carry-over deadline");
     }
     carryPlan.push({ goal, deadline });
@@ -763,15 +758,20 @@ export async function startNewWeek(
   let start: Date;
   let end: Date;
   if (range) {
-    const ymd = /^\d{4}-\d{2}-\d{2}$/;
-    if (!ymd.test(range.start) || !ymd.test(range.end)) {
+    // parseYmd catches impossible days the old regex-plus-NaN pair let through:
+    // "2026-02-31" is well-formed and not NaN, it just isn't a date.
+    const from = parseYmd(range.start);
+    const to = parseYmd(range.end);
+    if (!from || !to) {
       throw new Error("Invalid week dates");
     }
-    const [sy, sm, sd] = range.start.split("-").map(Number);
-    const [ey, em, ed] = range.end.split("-").map(Number);
-    start = new Date(sy, sm - 1, sd, 0, 0, 0, 0);
-    end = new Date(ey, em - 1, ed, 23, 59, 59, 999);
-    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) {
+    start = new Date(
+      from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate(), 0, 0, 0, 0,
+    );
+    end = new Date(
+      to.getUTCFullYear(), to.getUTCMonth(), to.getUTCDate(), 23, 59, 59, 999,
+    );
+    if (start > end) {
       throw new Error("Invalid week dates");
     }
   } else {
@@ -959,11 +959,10 @@ export async function startNewMonth(
 
 // ----- Day tasks (the calendar's per-day focus list) -----
 
-/** "YYYY-MM-DD" → UTC midnight, rejecting anything malformed. */
+/** "YYYY-MM-DD" → UTC midnight, rejecting malformed and impossible days. */
 function parseDay(ymd: string): Date {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) throw new Error("Invalid date");
-  const date = fromYmd(ymd);
-  if (Number.isNaN(date.getTime())) throw new Error("Invalid date");
+  const date = parseYmd(ymd);
+  if (!date) throw new Error("Invalid date");
   return date;
 }
 

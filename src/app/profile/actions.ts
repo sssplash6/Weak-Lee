@@ -8,7 +8,7 @@ import {
   normalizeLinkedin,
   normalizeTelegram,
 } from "@/lib/profile";
-import { fromYmd } from "@/lib/dates";
+import { parseYmd } from "@/lib/dates";
 import { AVATAR_EMOJIS } from "@/lib/avatar";
 import { notify } from "@/lib/notifications";
 
@@ -136,6 +136,10 @@ export async function updateProfile(
   if (!name || !workPhone || !telegramUsername || !birthday) {
     return { error: "Name, phone, Telegram and birthday are required.", saved: false };
   }
+  const birthdayDate = parseYmd(birthday);
+  if (!birthdayDate) {
+    return { error: "That birthday isn't a real date.", saved: false };
+  }
 
   await prisma.user.update({
     where: { id: session.user.id },
@@ -143,7 +147,7 @@ export async function updateProfile(
       name,
       workPhone,
       telegramUsername,
-      birthday: fromYmd(birthday),
+      birthday: birthdayDate,
       linkedin: linkedin || null,
       instagram: instagram || null,
     },
