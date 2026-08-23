@@ -89,12 +89,24 @@ export async function getOrCreateCurrentWeek(userId: string) {
   });
 
   if (current.length > 0) {
-    return current.sort(
+    const [keep, ...extra] = current.sort(
       (a, b) =>
         Number(b.submittedAt != null) - Number(a.submittedAt != null) ||
         b.goals.length - a.goals.length ||
         a.createdAt.getTime() - b.createdAt.getTime(),
-    )[0];
+    );
+    // Retire the losers rather than sorting past them every load. Left current
+    // they stay live for every OTHER query that filters on isCurrent, so the
+    // dashboard and the admin roster can disagree about which week someone is
+    // in. Demoted they become ordinary archived weeks — nothing is deleted,
+    // and the goals on them stay reachable in the archive.
+    if (extra.length > 0) {
+      await prisma.week.updateMany({
+        where: { id: { in: extra.map((w) => w.id) } },
+        data: { isCurrent: false },
+      });
+    }
+    return keep;
   }
 
   const { start, end } = LAUNCH_START_NEXT_WEEK

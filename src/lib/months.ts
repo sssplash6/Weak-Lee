@@ -79,12 +79,31 @@ const monthInclude = {
  * current.
  */
 export async function getOrCreateCurrentMonth(userId: string) {
-  const existing = await prisma.month.findFirst({
+  // findFirst used to be enough, but nothing stops two concurrent loads from
+  // both creating a current month, and it would then return whichever the
+  // database happened to hand back first — a different one on different loads.
+  // Pick deliberately (submitted, then fullest, then oldest — the same
+  // tie-break weeks use) and retire the rest so the ambiguity doesn't persist.
+  const current = await prisma.month.findMany({
     where: { userId, isCurrent: true },
     include: monthInclude,
   });
 
-  if (existing) return existing;
+  if (current.length > 0) {
+    const [keep, ...extra] = current.sort(
+      (a, b) =>
+        Number(b.submittedAt != null) - Number(a.submittedAt != null) ||
+        b.goals.length - a.goals.length ||
+        a.createdAt.getTime() - b.createdAt.getTime(),
+    );
+    if (extra.length > 0) {
+      await prisma.month.updateMany({
+        where: { id: { in: extra.map((m) => m.id) } },
+        data: { isCurrent: false },
+      });
+    }
+    return keep;
+  }
 
   const { start, end } = getMonthBounds();
   return prisma.month.create({
