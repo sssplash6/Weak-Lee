@@ -161,12 +161,14 @@ export function ReportForm({ colleagues }: { colleagues: Colleague[] }) {
         </button>
       </div>
 
-      {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
-      {sent && (
-        <p className="mt-2 text-xs font-medium text-green-700">
-          Report sent to the admins.
-        </p>
-      )}
+      <div role="status" aria-live="polite">
+        {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
+        {sent && (
+          <p className="mt-2 text-xs font-medium text-green-700">
+            Report sent to the admins.
+          </p>
+        )}
+      </div>
     </section>
   );
 }

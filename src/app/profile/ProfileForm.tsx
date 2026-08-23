@@ -83,16 +83,21 @@ export function ProfileForm({ defaults }: { defaults: Defaults }) {
         hint="Optional. We’ll store it without the @."
       />
 
-      {state.error && (
-        <p className="rise-in rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
-          {state.error}
-        </p>
-      )}
-      {state.saved && !state.error && (
-        <p className="rise-in rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-          Saved.
-        </p>
-      )}
+      {/* The outcome of a submit is the only thing that changes on this page,
+          and it renders below the fields — announce it rather than leaving a
+          screen reader user to go looking. */}
+      <div role="status" aria-live="polite">
+        {state.error && (
+          <p className="rise-in rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
+            {state.error}
+          </p>
+        )}
+        {state.saved && !state.error && (
+          <p className="rise-in rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+            Saved.
+          </p>
+        )}
+      </div>
 
       <button
         type="submit"
