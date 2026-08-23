@@ -15,9 +15,16 @@ export type PendingSignup = {
 /**
  * Sign-ups waiting to be let in — shown to department leads (their panel) and
  * admins (team overview). Approve opens the door; Remove deletes the account
- * (they can always sign up again, which files a fresh request).
+ * (they can always sign up again, which files a fresh request) and is shown
+ * to admins only — see rejectSignup for why leads don't get it.
  */
-export function PendingSignups({ signups }: { signups: PendingSignup[] }) {
+export function PendingSignups({
+  signups,
+  canRemove,
+}: {
+  signups: PendingSignup[];
+  canRemove: boolean;
+}) {
   if (signups.length === 0) return null;
   return (
     <section className="rounded-xl border border-amber-200 bg-amber-50/40">
@@ -33,14 +40,20 @@ export function PendingSignups({ signups }: { signups: PendingSignup[] }) {
       </div>
       <ul className="flex flex-col">
         {signups.map((s) => (
-          <SignupRow key={s.id} signup={s} />
+          <SignupRow key={s.id} signup={s} canRemove={canRemove} />
         ))}
       </ul>
     </section>
   );
 }
 
-function SignupRow({ signup: s }: { signup: PendingSignup }) {
+function SignupRow({
+  signup: s,
+  canRemove,
+}: {
+  signup: PendingSignup;
+  canRemove: boolean;
+}) {
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -81,7 +94,7 @@ function SignupRow({ signup: s }: { signup: PendingSignup }) {
         >
           {isPending ? "…" : "Approve"}
         </button>
-        {confirming ? (
+        {!canRemove ? null : confirming ? (
           <span className="flex items-center gap-1 text-xs">
             <button
               type="button"

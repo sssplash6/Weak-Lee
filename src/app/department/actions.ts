@@ -63,10 +63,20 @@ export async function approveSignup(userId: string) {
  * Turn a pending sign-up away — deletes the account. Deliberately refuses to
  * touch anyone already approved (removing a real teammate stays an admin-only
  * act on /admin). If the same person signs in again a fresh request appears.
- * Lead-or-admin only.
+ *
+ * ADMIN ONLY, unlike approval. A pending account has no department yet —
+ * memberships are created during onboarding, which is itself behind the
+ * approval gate — so there is no department for a lead's authority to be
+ * scoped against, and every lead would otherwise be able to delete every
+ * sign-up in the queue. Approval stays a lead power because it is additive and
+ * an admin can reverse it; deletion can't be taken back.
  */
 export async function rejectSignup(userId: string) {
-  await requireReviewer();
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Not authenticated");
+  if (!isAdmin(session.user.email)) {
+    throw new Error("Only an admin can remove a sign-up.");
+  }
 
   const target = await prisma.user.findUnique({
     where: { id: userId },

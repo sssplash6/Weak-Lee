@@ -687,7 +687,7 @@ export default async function AdminPage({
 
       {pendingRows.length > 0 && (
         <div className="mt-6">
-          <PendingSignups signups={pendingRows} />
+          <PendingSignups signups={pendingRows} canRemove />
         </div>
       )}
 

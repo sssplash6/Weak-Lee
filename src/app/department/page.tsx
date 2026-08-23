@@ -5,6 +5,7 @@ export const metadata: Metadata = { title: "Your department" };
 import { auth } from "@/auth";
 import { assertApproved } from "@/lib/approval";
 import { prisma } from "@/lib/prisma";
+import { isAdmin } from "@/lib/admin";
 import { resolveAvatar } from "@/lib/avatar";
 import { weekPercent } from "@/lib/progress";
 import { formatDateTimeTz } from "@/lib/dates";
@@ -164,7 +165,10 @@ export default async function DepartmentPanelPage() {
 
       {pending.length > 0 && (
         <div className="mb-4">
-          <PendingSignups signups={pending} />
+          <PendingSignups
+            signups={pending}
+            canRemove={isAdmin(session.user.email)}
+          />
         </div>
       )}
 
