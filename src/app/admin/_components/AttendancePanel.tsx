@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import {
   ATTENDANCE_LABEL,
   formatMoney,
+  MEETING_LATE_PENALTY,
   type AttendanceStatus,
 } from "@/lib/penalties";
 import { setAttendance } from "../actions";
@@ -78,12 +79,27 @@ function RosterRow({
   meetingLabel: string;
 }) {
   const [isPending, startTransition] = useTransition();
+  // LATE and SKIPPED bill the person, so they ask before firing. The other two
+  // are free and stay one-click — marking a roster shouldn't need four
+  // confirmations. Nothing here is permanent: recomputeMeetingPenalties derives
+  // the fines from attendance history, so re-marking someone clears them.
+  const [pending, setPending] = useState<AttendanceStatus | null>(null);
+  const fines = (s: AttendanceStatus) => s === "LATE" || s === "SKIPPED";
 
   function mark(status: AttendanceStatus) {
     if (status === r.status) return;
     startTransition(async () => {
       await setAttendance(r.id, status);
     });
+  }
+
+  function choose(status: AttendanceStatus) {
+    if (status === r.status) return;
+    if (fines(status)) {
+      setPending(status);
+      return;
+    }
+    mark(status);
   }
 
   return (
@@ -98,11 +114,39 @@ function RosterRow({
         <p className="truncate text-sm font-medium text-ink">{r.name}</p>
         {(r.status === "SKIPPED" || r.status === "LATE") && r.fine != null && (
           <p className="text-xs font-medium text-red-600">
-            Fined {formatMoney(r.fine)}
+            {`Fined ${formatMoney(r.fine)} · re-mark them to clear it`}
           </p>
         )}
       </div>
 
+      {pending ? (
+        <div className="flex shrink-0 items-center gap-1.5">
+          <span className="text-[11px] text-muted-fg">
+            {pending === "LATE"
+              ? `Fine ${formatMoney(MEETING_LATE_PENALTY)}?`
+              : "Issue a skip fine?"}
+          </span>
+          <button
+            type="button"
+            onClick={() => setPending(null)}
+            className="rounded-lg border border-line px-2 py-1 text-xs font-medium text-muted-fg transition hover:bg-canvas"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={isPending}
+            onClick={() => {
+              const next = pending;
+              setPending(null);
+              mark(next);
+            }}
+            className="rounded-lg border border-red-300 bg-red-50 px-2 py-1 text-xs font-medium text-red-600 transition hover:bg-red-100 disabled:opacity-50"
+          >
+            {ATTENDANCE_LABEL[pending]}
+          </button>
+        </div>
+      ) : (
       <div className="flex shrink-0 items-center gap-1" role="group">
         {STATUSES.map((s) => {
           const active = r.status === s;
@@ -111,7 +155,7 @@ function RosterRow({
               key={s}
               type="button"
               disabled={isPending}
-              onClick={() => mark(s)}
+              onClick={() => choose(s)}
               aria-pressed={active}
               className={`rounded-lg px-2.5 py-1 text-xs font-medium transition disabled:opacity-50 ${
                 active
@@ -130,6 +174,7 @@ function RosterRow({
           );
         })}
       </div>
+      )}
     </li>
   );
 }
