@@ -72,6 +72,7 @@ export function AddGoalCard({
               if (e.key === "Enter") submit();
             }}
             placeholder={`Add goal ${nextIndex}…`}
+            aria-label="New goal title"
             maxLength={200}
             className="min-w-0 flex-1 bg-transparent text-base font-medium text-ink placeholder:text-muted-fg focus:outline-none"
           />

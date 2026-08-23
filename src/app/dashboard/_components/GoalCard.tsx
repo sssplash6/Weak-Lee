@@ -1059,6 +1059,7 @@ function AddSubtaskForm({
         value={value}
         onChange={(e) => setValue(e.target.value)}
         placeholder="Add a subtask"
+        aria-label="New subtask title"
         className="flex-1 rounded-lg border border-line px-3 py-1.5 text-sm text-ink placeholder:text-muted-fg focus:border-brand focus:outline-none"
       />
     </form>
