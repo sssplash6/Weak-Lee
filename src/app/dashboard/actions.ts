@@ -590,38 +590,45 @@ export async function shareSubtask(subtaskId: string, toUserId: string) {
   const existingGoal = recipientPeriod.goals.find(
     (g) => g.title === original.goal.title,
   );
-  const targetGoalId =
-    existingGoal?.id ??
-    (
-      await prisma.goal.create({
-        data: {
-          ...(isMonthly
-            ? { monthId: recipientPeriod.id }
-            : { weekId: recipientPeriod.id }),
-          title: original.goal.title,
-          position: recipientPeriod.goals.length + 1,
-        },
-      })
-    ).id;
 
-  const subtaskCount = await prisma.subtask.count({
-    where: { goalId: targetGoalId },
-  });
+  // One transaction for the whole delegation. Split up, a failure between the
+  // steps left the recipient holding an orphan goal with no subtask in it and
+  // no share record tying it back to the sender — visible to them, invisible
+  // to the person who sent it, and impossible to undo from either side.
+  await prisma.$transaction(async (tx) => {
+    const targetGoalId =
+      existingGoal?.id ??
+      (
+        await tx.goal.create({
+          data: {
+            ...(isMonthly
+              ? { monthId: recipientPeriod.id }
+              : { weekId: recipientPeriod.id }),
+            title: original.goal.title,
+            position: recipientPeriod.goals.length + 1,
+          },
+        })
+      ).id;
 
-  // Create the recipient's copy and record the share.
-  await prisma.subtask.create({
-    data: {
-      goalId: targetGoalId,
-      title: original.title,
-      position: subtaskCount + 1,
-      shareIn: {
-        create: {
-          originalSubtaskId: subtaskId,
-          fromUserId,
-          toUserId,
+    const subtaskCount = await tx.subtask.count({
+      where: { goalId: targetGoalId },
+    });
+
+    // Create the recipient's copy and record the share.
+    await tx.subtask.create({
+      data: {
+        goalId: targetGoalId,
+        title: original.title,
+        position: subtaskCount + 1,
+        shareIn: {
+          create: {
+            originalSubtaskId: subtaskId,
+            fromUserId,
+            toUserId,
+          },
         },
       },
-    },
+    });
   });
 
   revalidatePath("/dashboard");
