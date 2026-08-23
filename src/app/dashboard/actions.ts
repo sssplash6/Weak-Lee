@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { isApprovedUser } from "@/lib/approval";
 import { getOrCreateCurrentWeek, nextWeekBounds } from "@/lib/weeks";
 import { getOrCreateCurrentMonth, nextMonthBounds } from "@/lib/months";
 import { submissionTiming, weekOpensAt } from "@/lib/lateness";
@@ -32,6 +33,37 @@ async function requireUserId(): Promise<string> {
 // A goal belongs to either a week or a month; both count as the user's.
 function goalOwnedWhere(userId: string) {
   return { OR: [{ week: { userId } }, { month: { userId } }] };
+}
+
+/**
+ * The person on the receiving end of a delegation. Existing isn't enough: a
+ * pending sign-up can't reach the dashboard, so anything delegated to them
+ * lands in a period nobody will ever see, and approval is the same gate every
+ * signed-in page enforces — reuse it rather than restate it.
+ */
+async function requireShareRecipient(toUserId: string) {
+  const recipient = await prisma.user.findUnique({
+    where: { id: toUserId },
+    select: { id: true, name: true, email: true },
+  });
+  if (!recipient) throw new Error("Recipient not found");
+  if (!(await isApprovedUser(recipient))) {
+    throw new Error("That person hasn't been approved yet.");
+  }
+  return recipient;
+}
+
+/**
+ * Refuse to write into a period its owner has already submitted. The sender
+ * can't see the recipient's lock, so this is the only place it can be caught —
+ * without it a delegation silently edits a period that is closed for its owner.
+ */
+function assertRecipientPeriodOpen(period: { goalsLocked: boolean }) {
+  if (period.goalsLocked) {
+    throw new Error(
+      "They've already submitted this period — it can't take anything new.",
+    );
+  }
 }
 
 /** Confirm a goal belongs to the signed-in user; returns it or throws. */
@@ -538,8 +570,7 @@ export async function shareSubtask(subtaskId: string, toUserId: string) {
   });
   if (!original) throw new Error("Subtask not found");
 
-  const recipient = await prisma.user.findUnique({ where: { id: toUserId } });
-  if (!recipient) throw new Error("Recipient not found");
+  await requireShareRecipient(toUserId);
 
   // Don't share the same subtask to the same person twice.
   const already = await prisma.subtaskShare.findUnique({
@@ -553,6 +584,7 @@ export async function shareSubtask(subtaskId: string, toUserId: string) {
   const recipientPeriod = isMonthly
     ? await getOrCreateCurrentMonth(toUserId)
     : await getOrCreateCurrentWeek(toUserId);
+  assertRecipientPeriodOpen(recipientPeriod);
 
   // Find a goal with the same title in the recipient's period, or create one.
   const existingGoal = recipientPeriod.goals.find(
@@ -614,8 +646,7 @@ export async function shareGoal(goalId: string, toUserId: string) {
   });
   if (!original) throw new Error("Goal not found");
 
-  const recipient = await prisma.user.findUnique({ where: { id: toUserId } });
-  if (!recipient) throw new Error("Recipient not found");
+  await requireShareRecipient(toUserId);
 
   // Don't share the same goal to the same person twice.
   const already = await prisma.goalShare.findUnique({
@@ -627,6 +658,7 @@ export async function shareGoal(goalId: string, toUserId: string) {
   const recipientPeriod = isMonthly
     ? await getOrCreateCurrentMonth(toUserId)
     : await getOrCreateCurrentWeek(toUserId);
+  assertRecipientPeriodOpen(recipientPeriod);
 
   const sender = await prisma.user.findUnique({
     where: { id: fromUserId },
