@@ -283,6 +283,7 @@ export function PayrollForm({
                   value={e.label}
                   onChange={(ev) => patchExpense(e.key, { label: ev.target.value })}
                   placeholder={`Expense ${i + 1} — e.g. taxi to a partner meeting`}
+                  aria-label={`Expense ${i + 1} description`}
                   maxLength={120}
                   className="min-w-40 flex-1 rounded-lg border border-line px-3 py-2 text-sm text-ink placeholder:text-muted-fg focus:border-brand focus:outline-none"
                 />
@@ -294,6 +295,7 @@ export function PayrollForm({
                     value={e.amount}
                     onChange={(ev) => patchExpense(e.key, { amount: ev.target.value })}
                     placeholder="0"
+                    aria-label={`Expense ${i + 1} amount in dollars`}
                     className="w-14 bg-transparent text-sm tabular-nums text-ink placeholder:text-muted-fg focus:outline-none"
                   />
                 </div>
@@ -384,6 +386,7 @@ export function PayrollForm({
               value={cardNumber}
               onChange={(e) => setCardNumber(e.target.value)}
               placeholder="Card number"
+              aria-label="Card number"
               maxLength={23}
               className="w-56 rounded-lg border border-line px-3 py-2 text-sm tabular-nums text-ink placeholder:text-muted-fg focus:border-brand focus:outline-none"
             />
@@ -392,6 +395,7 @@ export function PayrollForm({
               value={cardHolder}
               onChange={(e) => setCardHolder(e.target.value)}
               placeholder="Cardholder name"
+              aria-label="Cardholder name"
               maxLength={120}
               className="min-w-40 flex-1 rounded-lg border border-line px-3 py-2 text-sm text-ink placeholder:text-muted-fg focus:border-brand focus:outline-none"
             />
@@ -404,6 +408,7 @@ export function PayrollForm({
               value={wiseEmail}
               onChange={(e) => setWiseEmail(e.target.value)}
               placeholder="Wise account email"
+              aria-label="Wise account email"
               maxLength={200}
               className="w-72 max-w-full rounded-lg border border-line px-3 py-2 text-sm text-ink placeholder:text-muted-fg focus:border-brand focus:outline-none"
             />
