@@ -335,36 +335,53 @@ export async function reconcileDailyReportReminders(
     },
   });
   const unsent = users.filter((u) => u.dailyReports.length === 0);
-  if (unsent.length === 0) return;
+  if (unsent.length === 0) return; // nobody to nudge — the claim is spent
 
   const label = dayLabel(toYmd(day));
   const appUrl = process.env.AUTH_URL ?? "https://www.freshweek.org";
-  await notify(
-    prisma,
-    unsent.map((u) => u.id),
-    "REPORT",
-    `Daily report for ${label} not sent yet — due by 5 AM ` +
-      `(${formatMoney(LATE_DAILY_REPORT_PENALTY)} after that, ` +
-      `${formatMoney(MISSED_DAILY_REPORT_PENALTY)} past 3 PM).`,
-  );
-  await Promise.all(
-    unsent
-      .filter((u) => u.email)
-      .map((u) =>
-        sendEmail({
-          to: u.email!,
-          subject: `Reminder: daily report for ${label}`,
-          text:
-            `Hi ${dailyReporterFirstName(u.email, u.name)},\n\n` +
-            `Your daily report for ${label} hasn't been sent yet. It's due ` +
-            `by 5:00 AM Tashkent — after that it's a ` +
-            `${formatMoney(LATE_DAILY_REPORT_PENALTY)} fine, and ` +
-            `${formatMoney(MISSED_DAILY_REPORT_PENALTY)} if it's still not ` +
-            `in by 3 PM.\n\n` +
-            `Send it here: ${appUrl}/daily-reports\n\n— FreshWeek`,
-        }),
-      ),
-  );
+
+  // The reminder row above is the claim that keeps racing page loads from all
+  // sending this. Kept after a failed delivery it would suppress this day's
+  // only nudge — before a deadline that fines people — so it's deleted again
+  // and the next load retries. A retry can re-nudge someone the first attempt
+  // reached; that's much cheaper than never warning someone at all.
+  try {
+    await notify(
+      prisma,
+      unsent.map((u) => u.id),
+      "REPORT",
+      `Daily report for ${label} not sent yet — due by 5 AM ` +
+        `(${formatMoney(LATE_DAILY_REPORT_PENALTY)} after that, ` +
+        `${formatMoney(MISSED_DAILY_REPORT_PENALTY)} past 3 PM).`,
+    );
+    const sent = await Promise.all(
+      unsent
+        .filter((u) => u.email)
+        .map((u) =>
+          sendEmail({
+            to: u.email!,
+            subject: `Reminder: daily report for ${label}`,
+            text:
+              `Hi ${dailyReporterFirstName(u.email, u.name)},\n\n` +
+              `Your daily report for ${label} hasn't been sent yet. It's due ` +
+              `by 5:00 AM Tashkent — after that it's a ` +
+              `${formatMoney(LATE_DAILY_REPORT_PENALTY)} fine, and ` +
+              `${formatMoney(MISSED_DAILY_REPORT_PENALTY)} if it's still not ` +
+              `in by 3 PM.\n\n` +
+              `Send it here: ${appUrl}/daily-reports\n\n— FreshWeek`,
+          }),
+        ),
+    );
+    if (sent.some((ok) => !ok)) {
+      throw new Error("at least one daily-report reminder email did not go out");
+    }
+  } catch (e) {
+    console.error(
+      "reconcileDailyReportReminders: releasing the claim to retry",
+      e,
+    );
+    await prisma.dailyReportReminder.deleteMany({ where: { day } });
+  }
 }
 
 /** The day whose reminder window [21:00, next-day 5 AM) contains `now`. */

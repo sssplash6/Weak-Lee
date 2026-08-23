@@ -2,7 +2,9 @@
 // SDK dependency). Dormant until RESEND_API_KEY is set, so email-sending
 // features can ship ahead of the keys: without a key every send is skipped
 // quietly. A failed send is logged and swallowed — mail is a side channel and
-// must never take the action that triggered it down with it.
+// must never take the action that triggered it down with it — but the outcome
+// is RETURNED, so a caller that records "reminder sent" can tell whether it
+// actually was. Ignoring the result keeps the old fire-and-forget behaviour.
 
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
 
@@ -11,6 +13,7 @@ function fromAddress(): string {
   return process.env.RESEND_FROM ?? "FreshWeek <reports@freshweek.org>";
 }
 
+/** Resolves true if it went out (or email is switched off), false on failure. */
 export async function sendEmail(opts: {
   to: string;
   subject: string;
@@ -18,9 +21,11 @@ export async function sendEmail(opts: {
   /** Optional file attachments (e.g. the payroll invoice PDF). Bytes are
    * base64-encoded into the JSON body, per Resend's HTTP API. */
   attachments?: { filename: string; bytes: Uint8Array }[];
-}): Promise<void> {
+}): Promise<boolean> {
   const key = process.env.RESEND_API_KEY;
-  if (!key) return; // keys not configured yet — feature stays dormant
+  // Keys not configured yet — the feature is dormant by choice, not broken,
+  // so this counts as success: there is nothing here worth retrying.
+  if (!key) return true;
 
   try {
     const res = await fetch(RESEND_ENDPOINT, {
@@ -50,8 +55,11 @@ export async function sendEmail(opts: {
           .text()
           .catch(() => "")}`,
       );
+      return false;
     }
+    return true;
   } catch (e) {
     console.error("sendEmail failed", e);
+    return false;
   }
 }

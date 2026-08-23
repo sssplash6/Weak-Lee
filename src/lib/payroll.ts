@@ -540,33 +540,51 @@ export async function reconcilePayrollReminders(now = new Date()): Promise<void>
   ]);
   const filedIds = new Set(filed.map((s) => s.userId));
   const unfiled = employees.filter((e) => !filedIds.has(e.id));
-  if (unfiled.length === 0) return;
+  if (unfiled.length === 0) return; // nobody to remind — the claim is spent
 
   const label = payrollPeriodLabel(period.year, period.month);
   const message =
     `Payroll: file your ${label} pay request — filing closes ` +
     `${formatTashkent(period.filingClosesAt)}.`;
-  await notify(
-    prisma,
-    unfiled.map((e) => e.id),
-    "PAYROLL",
-    message,
-  );
-  await Promise.all(
-    unfiled
-      .filter((e) => e.email)
-      .map((e) =>
-        sendEmail({
-          to: e.email!,
-          subject: `Payroll: ${label} filing closes soon`,
-          text:
-            `Hi${e.name ? ` ${e.name}` : ""},\n\n` +
-            `You haven't filed your ${label} pay request yet. Filing closes ` +
-            `${formatTashkent(period.filingClosesAt)}.\n\n` +
-            `File it here: ${appUrl()}/payroll\n\n— FreshWeek`,
-        }),
-      ),
-  );
+
+  // The claim above is what stops several page loads all sending this. But a
+  // claim that survives a failed delivery doesn't lose one reminder — it
+  // suppresses the only one this period will ever get, right before a deadline
+  // people are fined against. So hand it back on failure and let the next load
+  // try again. That can re-notify someone the first attempt did reach; a
+  // duplicate nudge is the cheaper mistake by a wide margin.
+  try {
+    await notify(
+      prisma,
+      unfiled.map((e) => e.id),
+      "PAYROLL",
+      message,
+    );
+    const sent = await Promise.all(
+      unfiled
+        .filter((e) => e.email)
+        .map((e) =>
+          sendEmail({
+            to: e.email!,
+            subject: `Payroll: ${label} filing closes soon`,
+            text:
+              `Hi${e.name ? ` ${e.name}` : ""},\n\n` +
+              `You haven't filed your ${label} pay request yet. Filing closes ` +
+              `${formatTashkent(period.filingClosesAt)}.\n\n` +
+              `File it here: ${appUrl()}/payroll\n\n— FreshWeek`,
+          }),
+        ),
+    );
+    if (sent.some((ok) => !ok)) {
+      throw new Error("at least one payroll reminder email did not go out");
+    }
+  } catch (e) {
+    console.error("reconcilePayrollReminders: releasing the claim to retry", e);
+    await prisma.payrollPeriod.updateMany({
+      where: { id: period.id },
+      data: { reminderSentAt: null },
+    });
+  }
 }
 
 /** "Sun, Aug 31, 11:59 PM (Tashkent)" — deadlines always read in company time. */
