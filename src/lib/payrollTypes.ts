@@ -39,12 +39,13 @@ export const PAYROLL_METHOD_LABEL: Record<PayrollMethod, string> = {
 };
 
 /**
- * What the chosen payment method stores in `paymentDetails`. Exactly one shape
- * per method: UZCARD carries the card, WISE the account email, CASH nothing.
+ * What the chosen payment method stores in `paymentDetails`: WISE the account
+ * email, CASH and UZCARD nothing. A card number is deliberately absent — those
+ * details are arranged with finance over Telegram, so the app never holds one.
+ * Rows written before that decision may still carry card keys; nothing reads
+ * them.
  */
 export type PaymentDetails = {
-  cardNumber?: string;
-  cardHolder?: string;
   wiseEmail?: string;
 };
 
@@ -53,41 +54,22 @@ export function parsePaymentDetails(v: unknown): PaymentDetails {
   if (typeof v !== "object" || v === null || Array.isArray(v)) return {};
   const o = v as Record<string, unknown>;
   return {
-    cardNumber: typeof o.cardNumber === "string" ? o.cardNumber : undefined,
-    cardHolder: typeof o.cardHolder === "string" ? o.cardHolder : undefined,
     wiseEmail: typeof o.wiseEmail === "string" ? o.wiseEmail : undefined,
   };
 }
 
-/** One line: "UzCard · 8600 …1234 · NAME", "Wise · a@b.c", or "Cash". */
+/**
+ * How this person gets paid, in one line: "UzCard", "Wise · a@b.c", or "Cash".
+ *
+ * There is no masked/unmasked pair any more. There used to be, because UzCard
+ * stored a card number and finance needed to see all of it; now the card
+ * details are settled over Telegram and there is nothing here to hide.
+ */
 export function paymentSummary(
   method: PayrollMethod,
   details: PaymentDetails,
 ): string {
-  if (method === "UZCARD") {
-    const digits = (details.cardNumber ?? "").replace(/\D/g, "");
-    const tail = digits.length >= 4 ? `…${digits.slice(-4)}` : "";
-    return ["UzCard", tail, details.cardHolder].filter(Boolean).join(" · ");
-  }
-  if (method === "WISE") {
-    return ["Wise", details.wiseEmail].filter(Boolean).join(" · ");
-  }
-  return "Cash";
-}
-
-/** The unmasked form, for the people who actually move the money:
- * "UzCard · 8600 1234 1234 1234 · NAME", "Wise · a@b.c", or "Cash". */
-export function paymentFull(
-  method: PayrollMethod,
-  details: PaymentDetails,
-): string {
-  if (method === "UZCARD") {
-    const grouped = (details.cardNumber ?? "")
-      .replace(/\D/g, "")
-      .replace(/(.{4})/g, "$1 ")
-      .trim();
-    return ["UzCard", grouped, details.cardHolder].filter(Boolean).join(" · ");
-  }
+  if (method === "UZCARD") return "UzCard";
   if (method === "WISE") {
     return ["Wise", details.wiseEmail].filter(Boolean).join(" · ");
   }

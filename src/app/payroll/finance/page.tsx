@@ -14,11 +14,11 @@ import {
   reconcilePayrollReminders,
 } from "@/lib/payroll";
 import {
-  paymentFull,
+  parsePaymentDetails,
+  paymentSummary,
   payrollPeriodLabel,
   PAYROLL_CLOSED,
 } from "@/lib/payrollTypes";
-import { readPaymentDetails } from "@/lib/cardCrypto";
 import { PayrollComingSoon } from "../_components/PayrollComingSoon";
 import {
   bonusLineViews,
@@ -150,9 +150,9 @@ export default async function PayrollFinancePage() {
               bonuses: bonusLineViews(s.bonusLines, s.period.year),
               fines: fineLineViews(s.fineLines, s.period.year),
               expenses: s.expenses,
-              paymentLine: paymentFull(
+              paymentLine: paymentSummary(
                 s.paymentMethod,
-                readPaymentDetails(s.paymentDetails),
+                parsePaymentDetails(s.paymentDetails),
               ),
               events: eventViews(s.events, formatDateTimeTz),
             }}

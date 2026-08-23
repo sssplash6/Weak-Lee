@@ -243,23 +243,14 @@ export async function renderPayrollInvoice(
 
   // ----- Notes: how to pay this person -----
   //
-  // The card number is MASKED here even though finance needs the full one to
-  // make the transfer. This PDF is emailed — to every finance address on
-  // approval, and back to the employee on payout — so printing the full number
-  // put it through a third-party mail provider and left it sitting in inboxes
-  // indefinitely. Finance reads the unmasked number off /payroll/finance, a
-  // page gated by isFinance that they already have to open to confirm the
-  // payment. The last four are kept so the invoice can still be matched
-  // against a bank statement.
-  const cardDigits = (data.paymentDetails.cardNumber ?? "").replace(/\D/g, "");
+  // No card details. This PDF is emailed — to every finance address on
+  // approval, and back to the employee on payout — and card details are
+  // arranged directly over Telegram, so there is nothing here to print and
+  // nothing to leak through a third-party mail provider.
   const noteLines = [
     `Payment method: ${PAYROLL_METHOD_LABEL[data.paymentMethod]}`,
     ...(data.paymentMethod === "UZCARD"
-      ? [
-          `Card number: •••• ${cardDigits.slice(-4)}`,
-          `Cardholder: ${data.paymentDetails.cardHolder ?? ""}`,
-          "Full card number: on the pay request at /payroll/finance",
-        ]
+      ? ["Card details: arranged directly with finance"]
       : []),
     ...(data.paymentMethod === "WISE"
       ? [`Account email: ${data.paymentDetails.wiseEmail ?? ""}`]

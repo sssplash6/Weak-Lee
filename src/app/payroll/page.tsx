@@ -22,12 +22,12 @@ import {
   paymentSummary,
   payrollEventLabel,
   payrollMonthName,
+  parsePaymentDetails,
   payrollPeriodLabel,
   PAYROLL_CLOSED,
   PAYROLL_STATUS_BADGE,
   PAYROLL_STATUS_LABEL,
 } from "@/lib/payrollTypes";
-import { readPaymentDetails } from "@/lib/cardCrypto";
 import { formatMoney } from "@/lib/penalties";
 import { PayrollComingSoon } from "./_components/PayrollComingSoon";
 import { PayrollForm } from "./_components/PayrollForm";
@@ -139,7 +139,7 @@ export default async function PayrollPage() {
   const prefill = {
     baseSalary: latest?.baseSalary ?? null,
     method: latest?.paymentMethod ?? ("CASH" as const),
-    details: readPaymentDetails(latest?.paymentDetails),
+    details: parsePaymentDetails(latest?.paymentDetails),
   };
 
   const canFileFresh = !current && filingOpen;
@@ -228,7 +228,7 @@ export default async function PayrollPage() {
           expenses: current.expenses,
           paymentLine: paymentSummary(
             current.paymentMethod,
-            readPaymentDetails(current.paymentDetails),
+            parsePaymentDetails(current.paymentDetails),
           ),
           events: current.events.map((e) => ({
             id: e.id,
@@ -288,7 +288,7 @@ export default async function PayrollPage() {
           prefill={{
             baseSalary: current.baseSalary,
             method: current.paymentMethod,
-            details: readPaymentDetails(current.paymentDetails),
+            details: parsePaymentDetails(current.paymentDetails),
             expenses: current.expenses.map((e) => ({
               id: e.id,
               label: e.label,
