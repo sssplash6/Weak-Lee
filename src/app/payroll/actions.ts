@@ -18,6 +18,7 @@ import {
   reviewerUsers,
 } from "@/lib/payroll";
 import { renderPayrollInvoice } from "@/lib/payrollPdf";
+import { cardEncryptionReady, encryptCard } from "@/lib/cardCrypto";
 import {
   computeNet,
   MAX_PAYROLL_AMOUNT,
@@ -103,6 +104,14 @@ export async function submitPayroll(
     const cardHolder = String(formData.get("cardHolder") ?? "").trim().slice(0, 120);
     if (!/^\d{12,19}$/.test(cardNumber)) return fail("Enter a valid card number.");
     if (!cardHolder) return fail("Enter the cardholder name.");
+    // Refuse rather than quietly fall back to plaintext: a missing key is a
+    // deployment mistake, and storing the number in the clear because of one
+    // is exactly the outcome the encryption exists to prevent.
+    if (!cardEncryptionReady()) {
+      return fail(
+        "Card payments aren't configured on the server — tell tech@freshman.academy.",
+      );
+    }
     details = { cardNumber, cardHolder };
   } else if (method === "WISE") {
     const wiseEmail = String(formData.get("wiseEmail") ?? "").trim().slice(0, 200);
@@ -153,6 +162,14 @@ export async function submitPayroll(
   }
   const expensesTotal = expenses.reduce((s, e) => s + e.amount, 0);
   if (expensesTotal > MAX_PAYROLL_AMOUNT) return fail("Expenses total is too large.");
+
+  // What actually goes in the database: the card number encrypted, everything
+  // else as typed. `details` stays plaintext for this request only — the PDF
+  // below needs the last four digits, and the filer's own prefill needs the
+  // whole thing.
+  const storedDetails: PaymentDetails = details.cardNumber
+    ? { ...details, cardNumber: encryptCard(details.cardNumber) }
+    : details;
 
   // ----- Which filing path is open? -----
 
@@ -245,7 +262,7 @@ export async function submitPayroll(
         expensesTotal,
         netTotal,
         paymentMethod: method,
-        paymentDetails: details as Prisma.InputJsonValue,
+        paymentDetails: storedDetails as Prisma.InputJsonValue,
       };
 
       let submissionId: string;

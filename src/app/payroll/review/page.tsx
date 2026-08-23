@@ -18,7 +18,6 @@ import {
   reconcilePayrollReminders,
 } from "@/lib/payroll";
 import {
-  parsePaymentDetails,
   paymentFull,
   payrollPeriodLabel,
   PAYROLL_CLOSED,
@@ -26,6 +25,7 @@ import {
   PAYROLL_STATUS_LABEL,
   type PayrollStatus,
 } from "@/lib/payrollTypes";
+import { readPaymentDetails } from "@/lib/cardCrypto";
 import { PayrollComingSoon } from "../_components/PayrollComingSoon";
 import {
   bonusLineViews,
@@ -304,7 +304,7 @@ export default async function PayrollReviewPage({
                     expenses: s.expenses,
                     paymentLine: paymentFull(
                       s.paymentMethod,
-                      parsePaymentDetails(s.paymentDetails),
+                      readPaymentDetails(s.paymentDetails),
                     ),
                     events: eventViews(s.events, formatDateTimeTz),
                   }}

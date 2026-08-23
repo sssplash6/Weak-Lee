@@ -39,6 +39,13 @@ services:
       # and preview builds only; use Google sign-in on the live site.
       - key: ALLOW_DEV_LOGIN
         sync: false
+      # Encrypts payee card numbers at rest (lib/cardCrypto.ts). Any
+      # high-entropy string — it's hashed to derive the AES key — so Render
+      # generating one is fine. Filing a UzCard request is REFUSED while this
+      # is unset, rather than falling back to storing the number in the clear.
+      # Changing it makes existing stored card numbers unreadable.
+      - key: PAYROLL_CARD_KEY
+        generateValue: true
       # Optional: fill these in to enable "Continue with Google".
       - key: AUTH_GOOGLE_ID
         sync: false

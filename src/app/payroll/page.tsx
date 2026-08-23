@@ -19,7 +19,6 @@ import {
   reconcilePayrollReminders,
 } from "@/lib/payroll";
 import {
-  parsePaymentDetails,
   paymentSummary,
   payrollEventLabel,
   payrollMonthName,
@@ -28,6 +27,7 @@ import {
   PAYROLL_STATUS_BADGE,
   PAYROLL_STATUS_LABEL,
 } from "@/lib/payrollTypes";
+import { readPaymentDetails } from "@/lib/cardCrypto";
 import { formatMoney } from "@/lib/penalties";
 import { PayrollComingSoon } from "./_components/PayrollComingSoon";
 import { PayrollForm } from "./_components/PayrollForm";
@@ -139,7 +139,7 @@ export default async function PayrollPage() {
   const prefill = {
     baseSalary: latest?.baseSalary ?? null,
     method: latest?.paymentMethod ?? ("CASH" as const),
-    details: parsePaymentDetails(latest?.paymentDetails),
+    details: readPaymentDetails(latest?.paymentDetails),
   };
 
   const canFileFresh = !current && filingOpen;
@@ -228,7 +228,7 @@ export default async function PayrollPage() {
           expenses: current.expenses,
           paymentLine: paymentSummary(
             current.paymentMethod,
-            parsePaymentDetails(current.paymentDetails),
+            readPaymentDetails(current.paymentDetails),
           ),
           events: current.events.map((e) => ({
             id: e.id,
@@ -288,7 +288,7 @@ export default async function PayrollPage() {
           prefill={{
             baseSalary: current.baseSalary,
             method: current.paymentMethod,
-            details: parsePaymentDetails(current.paymentDetails),
+            details: readPaymentDetails(current.paymentDetails),
             expenses: current.expenses.map((e) => ({
               id: e.id,
               label: e.label,
