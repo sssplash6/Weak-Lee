@@ -350,7 +350,10 @@ function TaskRow({
         </button>
       )}
 
-      <span className="flex shrink-0 items-center opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
+      {/* Reorder and delete stay visible wherever there's no hover to reveal
+          them with. Gated on the pointer rather than a width breakpoint: a
+          touchscreen laptop is wide and still can't hover. */}
+      <span className="flex shrink-0 items-center transition [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:focus-within:opacity-100">
         <IconButton
           label="Move up"
           disabled={disabled || isFirst}
