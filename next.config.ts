@@ -1,6 +1,14 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // The guides are read from private/guidelines at request time. Without this
+  // the tracer can't see which files those two routes need and warns that the
+  // whole project may have to be bundled into the server trace; naming the
+  // directory keeps the deployed bundle to the PDFs that are actually served.
+  outputFileTracingIncludes: {
+    "/guidelines": ["private/guidelines/**/*"],
+    "/guidelines/file/\\[slug\\]": ["private/guidelines/**/*"],
+  },
   // Pin the workspace root (a stray lockfile exists in the home directory).
   turbopack: {
     root: __dirname,

@@ -1,3 +1,5 @@
+import path from "node:path";
+
 // The internal guides published on /guidelines. Content mirrors each PDF's own
 // cover block (title, purpose line, version, owner, approver) and its numbered
 // section list, so the page reads as a shelf of the real documents rather than a
@@ -318,6 +320,17 @@ export const ALL_GUIDES: Guide[] = [
  * authenticated handler at /guidelines/file/[slug].
  */
 export const GUIDELINES_DIR = ["private", "guidelines"] as const;
+
+/**
+ * Absolute path to one guide's PDF. The directory segments are written out as
+ * string literals rather than spread from GUIDELINES_DIR so Next's build-time
+ * file tracer can see where the reads land; given only a spread it can't tell,
+ * and warns that the entire project may need bundling into the server trace.
+ * next.config.ts names the same directory in outputFileTracingIncludes.
+ */
+export function guidePdfPath(pdf: string): string {
+  return path.join(process.cwd(), "private", "guidelines", pdf);
+}
 
 /** Look a guide up by slug — the allowlist the download route resolves against. */
 export function guideBySlug(slug: string): Guide | undefined {

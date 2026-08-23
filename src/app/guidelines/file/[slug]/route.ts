@@ -1,11 +1,10 @@
 import { readFile } from "node:fs/promises";
-import path from "node:path";
 import type { NextRequest } from "next/server";
 import { auth } from "@/auth";
 import { isAdmin } from "@/lib/admin";
 import { prisma } from "@/lib/prisma";
 import { isApprovedUser } from "@/lib/approval";
-import { canReadGuide, GUIDELINES_DIR, guideBySlug } from "@/lib/guidelines";
+import { canReadGuide, guideBySlug, guidePdfPath } from "@/lib/guidelines";
 
 /**
  * Serves a guideline PDF to a signed-in user. The documents sit in
@@ -58,7 +57,7 @@ export async function GET(
 
   let file: Buffer;
   try {
-    file = await readFile(path.join(process.cwd(), ...GUIDELINES_DIR, guide.pdf));
+    file = await readFile(guidePdfPath(guide.pdf));
   } catch {
     return new Response("That guide is missing on the server.", { status: 404 });
   }

@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { stat } from "node:fs/promises";
-import path from "node:path";
 
 export const metadata: Metadata = { title: "Guidelines" };
 import { auth } from "@/auth";
@@ -15,7 +14,7 @@ import {
   canReadGuide,
   FEATURED_GUIDE,
   GUIDE_GROUPS,
-  GUIDELINES_DIR,
+  guidePdfPath,
   guideDepartmentLabel,
   guideHref,
   type Guide,
@@ -68,9 +67,7 @@ async function guideSizes(): Promise<Map<string, string>> {
   const entries = await Promise.all(
     ALL_GUIDES.map(async (g) => {
       try {
-        const s = await stat(
-          path.join(process.cwd(), ...GUIDELINES_DIR, g.pdf),
-        );
+        const s = await stat(guidePdfPath(g.pdf));
         return [g.slug, formatBytes(s.size)] as const;
       } catch {
         return [g.slug, ""] as const;
