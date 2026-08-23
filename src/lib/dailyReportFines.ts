@@ -171,11 +171,17 @@ export async function reconcileDailyReportFines(opts?: {
       } else if (existing.paidAt == null && existing.amount < amount) {
         // Escalate an unpaid $5 to $10 at 3 PM. What's been paid stands; the
         // person owes the difference (mirrors the weekly $20 → $40 rule).
+        //
+        // The read that produced `existing` happened before this transaction.
+        // Re-assert it in the where clause so a report that landed, or a
+        // settlement recorded, in the gap wins over a price computed from
+        // state that has since moved — and say nothing if it did.
         await prisma.$transaction(async (tx) => {
-          await tx.penalty.update({
-            where: { id: existing.id },
+          const updated = await tx.penalty.updateMany({
+            where: { id: existing.id, paidAt: null, amount: existing.amount },
             data: { amount, note },
           });
+          if (updated.count === 0) return;
           await notify(
             tx,
             u.id,
@@ -191,11 +197,18 @@ export async function reconcileDailyReportFines(opts?: {
         // Re-price DOWN too: the sweep can escalate before it has seen a
         // submit that actually landed before 3 PM. Shrink only while what's
         // paid still fits; anything odder is admin territory on /penalties.
+        // Conditional for the same reason as the escalation above.
         await prisma.$transaction(async (tx) => {
-          await tx.penalty.update({
-            where: { id: existing.id },
+          const updated = await tx.penalty.updateMany({
+            where: {
+              id: existing.id,
+              paidAt: null,
+              amount: existing.amount,
+              paidAmount: { lte: amount },
+            },
             data: { amount, note },
           });
+          if (updated.count === 0) return;
           await notify(
             tx,
             u.id,

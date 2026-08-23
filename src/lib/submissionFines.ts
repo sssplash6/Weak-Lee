@@ -199,11 +199,16 @@ export async function reconcileSubmissionFines(opts?: {
       // already been settled is left alone rather than silently re-priced. A
       // part-paid one does escalate — the amount only ever goes up, so what's
       // been paid still stands and the person simply owes the difference.
+      // `existing` was read before this transaction opened. Re-assert it in
+      // the where clause so a submission that landed, or a settlement
+      // recorded, in the gap wins over a price computed from stale state —
+      // and stay quiet if it did.
       await prisma.$transaction(async (tx) => {
-        await tx.penalty.update({
-          where: { id: existing.id },
+        const updated = await tx.penalty.updateMany({
+          where: { id: existing.id, paidAt: null, amount: existing.amount },
           data: { amount, note, ...(weekId ? { weekId } : {}) },
         });
+        if (updated.count === 0) return;
         await notify(
           tx,
           u.id,
@@ -221,12 +226,19 @@ export async function reconcileSubmissionFines(opts?: {
       // turns out to have landed before the meeting (the sweep runs between
       // page loads, so it can escalate before it has seen a submit). What's
       // been paid stays paid — shrink only while paid ≤ the new amount;
-      // anything odder is admin territory on /penalties.
+      // anything odder is admin territory on /penalties. Conditional for the
+      // same reason as the escalation above.
       await prisma.$transaction(async (tx) => {
-        await tx.penalty.update({
-          where: { id: existing.id },
+        const updated = await tx.penalty.updateMany({
+          where: {
+            id: existing.id,
+            paidAt: null,
+            amount: existing.amount,
+            paidAmount: { lte: amount },
+          },
           data: { amount, note, ...(weekId ? { weekId } : {}) },
         });
+        if (updated.count === 0) return;
         await notify(
           tx,
           u.id,
