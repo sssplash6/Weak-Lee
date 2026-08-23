@@ -16,6 +16,11 @@ import {
   tashkentTodayYmd,
 } from "@/lib/dailyReportTypes";
 import { parseYmd } from "@/lib/dates";
+import {
+  ActionError,
+  actionResult,
+  type ActionResult,
+} from "@/lib/actionResult";
 import { sendEmail } from "@/lib/email";
 
 /**
@@ -28,31 +33,45 @@ import { sendEmail } from "@/lib/email";
 export async function sendDailyReport(
   dayYmd: string,
   content: string,
+): Promise<ActionResult> {
+  return actionResult(async () => {
+    await sendDailyReportBody(dayYmd, content);
+  });
+}
+
+/**
+ * The body of sendDailyReport. Every refusal here is one the writer can act on
+ * — wrong day, empty text, too long — so they're ActionErrors, which survive
+ * the trip to the client; production strips the message off anything thrown.
+ */
+async function sendDailyReportBody(
+  dayYmd: string,
+  content: string,
 ): Promise<void> {
   const session = await auth();
   const userId = session?.user?.id;
   const email = session?.user?.email;
-  if (!userId) throw new Error("Not authenticated");
+  if (!userId) throw new ActionError("Sign in to send a report.");
   if (!isDailyReporter(email)) {
-    throw new Error("This account doesn't write daily reports");
+    throw new ActionError("This account doesn't write daily reports.");
   }
 
   // parseYmd rejects impossible days (Feb 31) as well as malformed ones.
   const day = parseYmd(dayYmd);
-  if (!day) throw new Error("Invalid day");
+  if (!day) throw new ActionError("That isn't a real day.");
   // Today or a past day only — reports describe a day that's happening, and
   // nothing before the feature existed is owed.
   if (dayYmd > tashkentTodayYmd()) {
-    throw new Error("That day hasn't happened yet");
+    throw new ActionError("That day hasn't happened yet.");
   }
   if (day.getTime() < DAILY_REPORTS_EPOCH.getTime()) {
-    throw new Error("Daily reports start from 17 Aug 2026");
+    throw new ActionError("Daily reports start from 17 Aug 2026.");
   }
 
   const text = content.trim();
-  if (!text) throw new Error("Write something first");
+  if (!text) throw new ActionError("Write something first.");
   if (text.length > MAX_DAILY_REPORT) {
-    throw new Error(`Keep it under ${MAX_DAILY_REPORT} characters`);
+    throw new ActionError(`Keep it under ${MAX_DAILY_REPORT} characters.`);
   }
 
   const reporterName = dailyReporterFirstName(email, session.user.name);

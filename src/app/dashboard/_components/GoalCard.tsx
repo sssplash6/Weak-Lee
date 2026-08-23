@@ -9,6 +9,7 @@ import {
   useTransition,
 } from "react";
 import { clampPercent, subtaskPercent } from "@/lib/progress";
+import type { ActionResult } from "@/lib/actionResult";
 import { formatStamp } from "@/lib/dates";
 import { useDismissible } from "@/lib/useDismissible";
 import {
@@ -151,6 +152,7 @@ export function GoalCard({
    * boundary over one failed checkbox; caught, the card reverts and explains.
    */
   function reportError(e: unknown) {
+    if (typeof e === "string") return setError(e);
     setError(e instanceof Error ? e.message : "That change didn't save.");
   }
 
@@ -795,7 +797,7 @@ function SharePicker({
 }: {
   team: TeamMember[];
   alreadyShared: string[];
-  onShare: (toUserId: string) => Promise<void>;
+  onShare: (toUserId: string) => Promise<ActionResult>;
   onError: (e: unknown) => void;
   ariaLabel: string;
   iconClassName?: string;
@@ -815,7 +817,8 @@ function SharePicker({
       // they've already submitted — so the refusal has to reach the card
       // rather than bubble out of the transition.
       try {
-        await onShare(toUserId);
+        const result = await onShare(toUserId);
+        if (!result.ok) onError(result.error);
       } catch (e) {
         onError(e);
       }

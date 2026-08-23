@@ -41,7 +41,11 @@ export function ReportEditor({
     setError(null);
     startTransition(async () => {
       try {
-        await sendDailyReport(dayYmd, trimmed);
+        const result = await sendDailyReport(dayYmd, trimmed);
+        if (!result.ok) {
+          setError(result.error);
+          return;
+        }
         onSent?.();
       } catch (e) {
         setError(e instanceof Error ? e.message : "Couldn’t send — try again.");

@@ -28,6 +28,7 @@ export function AddGoalCard({
   // bounce animation, so repeated taps keep nudging.
   const [nudge, setNudge] = useState(0);
   const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
 
   const ready = title.trim().length > 0 && priority != null && deadline != null;
 
@@ -49,8 +50,15 @@ export function AddGoalCard({
       return;
     }
     const trimmed = title.trim();
+    setError(null);
     startTransition(async () => {
-      await addGoal({ title: trimmed, priority, deadline, scope });
+      const result = await addGoal({ title: trimmed, priority, deadline, scope });
+      // A locked period or an over-long title is a refusal, not a fault — keep
+      // what was typed so it can be fixed rather than retyped.
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
       setTitle("");
       setPriority(null);
       setDeadline(null);
@@ -99,6 +107,11 @@ export function AddGoalCard({
         </div>
       </div>
 
+      {error && (
+        <p role="alert" className="mt-2 pl-10 text-xs font-medium text-red-600">
+          {error}
+        </p>
+      )}
       {hint && (
         <p
           key={nudge}

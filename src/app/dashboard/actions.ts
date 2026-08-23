@@ -4,6 +4,11 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { isApprovedUser } from "@/lib/approval";
+import {
+  ActionError,
+  actionResult,
+  type ActionResult,
+} from "@/lib/actionResult";
 import { getOrCreateCurrentWeek, nextWeekBounds } from "@/lib/weeks";
 import { getOrCreateCurrentMonth, nextMonthBounds } from "@/lib/months";
 import { submissionTiming, weekOpensAt } from "@/lib/lateness";
@@ -51,9 +56,9 @@ async function requireShareRecipient(toUserId: string) {
     where: { id: toUserId },
     select: { id: true, name: true, email: true },
   });
-  if (!recipient) throw new Error("Recipient not found");
+  if (!recipient) throw new ActionError("That teammate no longer exists.");
   if (!(await isApprovedUser(recipient))) {
-    throw new Error("That person hasn't been approved yet.");
+    throw new ActionError("That person hasn't been approved yet.");
   }
   return recipient;
 }
@@ -65,7 +70,7 @@ async function requireShareRecipient(toUserId: string) {
  */
 function assertRecipientPeriodOpen(period: { goalsLocked: boolean }) {
   if (period.goalsLocked) {
-    throw new Error(
+    throw new ActionError(
       "They've already submitted this period — it can't take anything new.",
     );
   }
@@ -255,31 +260,37 @@ export async function addGoal(input: {
   priority: Priority;
   deadline: string;
   scope?: GoalScope;
-}) {
-  const userId = await requireUserId();
-  const title = requireText(input.title, MAX_GOAL_TITLE, "That goal title");
-  if (!title) throw new Error("A goal needs a title.");
-  if (!isPriority(input.priority)) throw new Error("A priority is required.");
-  const deadline = parseRequiredDeadline(input.deadline);
+}): Promise<ActionResult> {
+  return actionResult(async () => {
+    const userId = await requireUserId();
+    const title = requireText(input.title, MAX_GOAL_TITLE, "That goal title");
+    if (!title) throw new ActionError("A goal needs a title.");
+    if (!isPriority(input.priority)) {
+      throw new ActionError("A priority is required.");
+    }
+    const deadline = parseRequiredDeadline(input.deadline);
 
-  const period =
-    input.scope === "month"
-      ? await getOrCreateCurrentMonth(userId)
-      : await getOrCreateCurrentWeek(userId);
-  if (period.goalsLocked) {
-    throw new Error("Goals are locked. Click Edit to make changes.");
-  }
-  const position = period.goals.length + 1;
-  await prisma.goal.create({
-    data: {
-      ...(input.scope === "month" ? { monthId: period.id } : { weekId: period.id }),
-      title,
-      position,
-      priority: input.priority,
-      deadline,
-    },
+    const period =
+      input.scope === "month"
+        ? await getOrCreateCurrentMonth(userId)
+        : await getOrCreateCurrentWeek(userId);
+    if (period.goalsLocked) {
+      throw new ActionError("Goals are locked. Click Edit to make changes.");
+    }
+    const position = period.goals.length + 1;
+    await prisma.goal.create({
+      data: {
+        ...(input.scope === "month"
+          ? { monthId: period.id }
+          : { weekId: period.id }),
+        title,
+        position,
+        priority: input.priority,
+        deadline,
+      },
+    });
+    revalidatePath("/dashboard");
   });
-  revalidatePath("/dashboard");
 }
 
 /**
@@ -599,79 +610,84 @@ export async function deleteSubtask(subtaskId: string) {
  * current week, a monthly one in their current month (creating the goal there
  * if they don't have it yet).
  */
-export async function shareSubtask(subtaskId: string, toUserId: string) {
-  const fromUserId = await requireUserId();
-  if (toUserId === fromUserId) return;
+export async function shareSubtask(
+  subtaskId: string,
+  toUserId: string,
+): Promise<ActionResult> {
+  return actionResult(async () => {
+    const fromUserId = await requireUserId();
+    if (toUserId === fromUserId) return;
 
-  // Load the original subtask (owned by sender) along with its goal title.
-  const original = await prisma.subtask.findFirst({
-    where: { id: subtaskId, goal: goalOwnedWhere(fromUserId) },
-    include: { goal: true },
-  });
-  if (!original) throw new Error("Subtask not found");
-
-  await requireShareRecipient(toUserId);
-
-  // Don't share the same subtask to the same person twice.
-  const already = await prisma.subtaskShare.findUnique({
-    where: {
-      originalSubtaskId_toUserId: { originalSubtaskId: subtaskId, toUserId },
-    },
-  });
-  if (already) return;
-
-  const isMonthly = original.goal.monthId != null;
-  const recipientPeriod = isMonthly
-    ? await getOrCreateCurrentMonth(toUserId)
-    : await getOrCreateCurrentWeek(toUserId);
-  assertRecipientPeriodOpen(recipientPeriod);
-
-  // Find a goal with the same title in the recipient's period, or create one.
-  const existingGoal = recipientPeriod.goals.find(
-    (g) => g.title === original.goal.title,
-  );
-
-  // One transaction for the whole delegation. Split up, a failure between the
-  // steps left the recipient holding an orphan goal with no subtask in it and
-  // no share record tying it back to the sender — visible to them, invisible
-  // to the person who sent it, and impossible to undo from either side.
-  await prisma.$transaction(async (tx) => {
-    const targetGoalId =
-      existingGoal?.id ??
-      (
-        await tx.goal.create({
-          data: {
-            ...(isMonthly
-              ? { monthId: recipientPeriod.id }
-              : { weekId: recipientPeriod.id }),
-            title: original.goal.title,
-            position: recipientPeriod.goals.length + 1,
-          },
-        })
-      ).id;
-
-    const subtaskCount = await tx.subtask.count({
-      where: { goalId: targetGoalId },
+    // Load the original subtask (owned by sender) along with its goal title.
+    const original = await prisma.subtask.findFirst({
+      where: { id: subtaskId, goal: goalOwnedWhere(fromUserId) },
+      include: { goal: true },
     });
+    if (!original) throw new ActionError("That subtask is gone.");
 
-    // Create the recipient's copy and record the share.
-    await tx.subtask.create({
-      data: {
-        goalId: targetGoalId,
-        title: original.title,
-        position: subtaskCount + 1,
-        shareIn: {
-          create: {
-            originalSubtaskId: subtaskId,
-            fromUserId,
-            toUserId,
-          },
-        },
+    await requireShareRecipient(toUserId);
+
+    // Don't share the same subtask to the same person twice.
+    const already = await prisma.subtaskShare.findUnique({
+      where: {
+        originalSubtaskId_toUserId: { originalSubtaskId: subtaskId, toUserId },
       },
     });
-  });
+    if (already) return;
 
-  revalidatePath("/dashboard");
+    const isMonthly = original.goal.monthId != null;
+    const recipientPeriod = isMonthly
+      ? await getOrCreateCurrentMonth(toUserId)
+      : await getOrCreateCurrentWeek(toUserId);
+    assertRecipientPeriodOpen(recipientPeriod);
+
+    // Find a goal with the same title in the recipient's period, or create one.
+    const existingGoal = recipientPeriod.goals.find(
+      (g) => g.title === original.goal.title,
+    );
+
+    // One transaction for the whole delegation. Split up, a failure between the
+    // steps left the recipient holding an orphan goal with no subtask in it and
+    // no share record tying it back to the sender — visible to them, invisible
+    // to the person who sent it, and impossible to undo from either side.
+    await prisma.$transaction(async (tx) => {
+      const targetGoalId =
+        existingGoal?.id ??
+        (
+          await tx.goal.create({
+            data: {
+              ...(isMonthly
+                ? { monthId: recipientPeriod.id }
+                : { weekId: recipientPeriod.id }),
+              title: original.goal.title,
+              position: recipientPeriod.goals.length + 1,
+            },
+          })
+        ).id;
+
+      const subtaskCount = await tx.subtask.count({
+        where: { goalId: targetGoalId },
+      });
+
+      // Create the recipient's copy and record the share.
+      await tx.subtask.create({
+        data: {
+          goalId: targetGoalId,
+          title: original.title,
+          position: subtaskCount + 1,
+          shareIn: {
+            create: {
+              originalSubtaskId: subtaskId,
+              fromUserId,
+              toUserId,
+            },
+          },
+        },
+      });
+    });
+
+    revalidatePath("/dashboard");
+  });
 }
 
 /**
@@ -682,68 +698,73 @@ export async function shareSubtask(subtaskId: string, toUserId: string) {
  * a weekly goal lands in the recipient's current week, a monthly one in their
  * current month. The recipient is notified.
  */
-export async function shareGoal(goalId: string, toUserId: string) {
-  const fromUserId = await requireUserId();
-  if (toUserId === fromUserId) return;
+export async function shareGoal(
+  goalId: string,
+  toUserId: string,
+): Promise<ActionResult> {
+  return actionResult(async () => {
+    const fromUserId = await requireUserId();
+    if (toUserId === fromUserId) return;
 
-  // Load the original goal (owned by sender) along with its subtasks.
-  const original = await prisma.goal.findFirst({
-    where: { id: goalId, ...goalOwnedWhere(fromUserId) },
-    include: { subtasks: { orderBy: { position: "asc" } } },
-  });
-  if (!original) throw new Error("Goal not found");
-
-  await requireShareRecipient(toUserId);
-
-  // Don't share the same goal to the same person twice.
-  const already = await prisma.goalShare.findUnique({
-    where: { originalGoalId_toUserId: { originalGoalId: goalId, toUserId } },
-  });
-  if (already) return;
-
-  const isMonthly = original.monthId != null;
-  const recipientPeriod = isMonthly
-    ? await getOrCreateCurrentMonth(toUserId)
-    : await getOrCreateCurrentWeek(toUserId);
-  assertRecipientPeriodOpen(recipientPeriod);
-
-  const sender = await prisma.user.findUnique({
-    where: { id: fromUserId },
-    select: { name: true, email: true },
-  });
-
-  await prisma.$transaction(async (tx) => {
-    // Create the recipient's copy — progress starts fresh (subtasks unchecked,
-    // no completion or manual percent carried over) and record the share.
-    await tx.goal.create({
-      data: {
-        ...(isMonthly
-          ? { monthId: recipientPeriod.id }
-          : { weekId: recipientPeriod.id }),
-        title: original.title,
-        position: recipientPeriod.goals.length + 1,
-        priority: original.priority,
-        deadline: original.deadline,
-        subtasks: {
-          create: original.subtasks.map((s, i) => ({
-            title: s.title,
-            position: i + 1,
-          })),
-        },
-        shareIn: {
-          create: { originalGoalId: goalId, fromUserId, toUserId },
-        },
-      },
+    // Load the original goal (owned by sender) along with its subtasks.
+    const original = await prisma.goal.findFirst({
+      where: { id: goalId, ...goalOwnedWhere(fromUserId) },
+      include: { subtasks: { orderBy: { position: "asc" } } },
     });
-    await notify(
-      tx,
-      toUserId,
-      "TASK_ASSIGNED",
-      `${sender?.name ?? sender?.email ?? "A teammate"} delegated a goal to you: “${original.title}”.`,
-    );
-  });
+    if (!original) throw new ActionError("That goal is gone.");
 
-  revalidatePath("/dashboard");
+    await requireShareRecipient(toUserId);
+
+    // Don't share the same goal to the same person twice.
+    const already = await prisma.goalShare.findUnique({
+      where: { originalGoalId_toUserId: { originalGoalId: goalId, toUserId } },
+    });
+    if (already) return;
+
+    const isMonthly = original.monthId != null;
+    const recipientPeriod = isMonthly
+      ? await getOrCreateCurrentMonth(toUserId)
+      : await getOrCreateCurrentWeek(toUserId);
+    assertRecipientPeriodOpen(recipientPeriod);
+
+    const sender = await prisma.user.findUnique({
+      where: { id: fromUserId },
+      select: { name: true, email: true },
+    });
+
+    await prisma.$transaction(async (tx) => {
+      // Create the recipient's copy — progress starts fresh (subtasks unchecked,
+      // no completion or manual percent carried over) and record the share.
+      await tx.goal.create({
+        data: {
+          ...(isMonthly
+            ? { monthId: recipientPeriod.id }
+            : { weekId: recipientPeriod.id }),
+          title: original.title,
+          position: recipientPeriod.goals.length + 1,
+          priority: original.priority,
+          deadline: original.deadline,
+          subtasks: {
+            create: original.subtasks.map((s, i) => ({
+              title: s.title,
+              position: i + 1,
+            })),
+          },
+          shareIn: {
+            create: { originalGoalId: goalId, fromUserId, toUserId },
+          },
+        },
+      });
+      await notify(
+        tx,
+        toUserId,
+        "TASK_ASSIGNED",
+        `${sender?.name ?? sender?.email ?? "A teammate"} delegated a goal to you: “${original.title}”.`,
+      );
+    });
+
+    revalidatePath("/dashboard");
+  });
 }
 
 /**
