@@ -87,6 +87,7 @@ export function GoalCard({
   locked: boolean;
 }) {
   const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
   const [tasksOpen, setTasksOpen] = useState(true);
   const [confirmComplete, setConfirmComplete] = useState(false);
   // The completion rate typed in the confirm prompt (0–100). Seeded to 100 when
@@ -142,13 +143,38 @@ export function GoalCard({
   // state.
   const percent = manualPercent ?? (completed ? 100 : subtaskPercent(subtasks));
 
-  function onToggle(id: string, isDone: boolean) {
+  /**
+   * Run one optimistic mutation. useOptimistic already snaps the card back to
+   * the server's state when the transition settles, so the missing half was
+   * never the rollback — it was saying anything at all. Unhandled, a rejected
+   * action escapes the transition and takes the whole dashboard to the error
+   * boundary over one failed checkbox; caught, the card reverts and explains.
+   */
+  function reportError(e: unknown) {
+    setError(e instanceof Error ? e.message : "That change didn't save.");
+  }
+
+  function run(optimistic: () => void, action: () => Promise<unknown>) {
+    setError(null);
     startTransition(async () => {
-      applyOptimistic({ type: "toggle", id, isDone });
-      // The server clears any manual percent on toggle — mirror it optimistically.
-      applyManualPercent(null);
-      await toggleSubtask(id, isDone);
+      optimistic();
+      try {
+        await action();
+      } catch (e) {
+        reportError(e);
+      }
     });
+  }
+
+  function onToggle(id: string, isDone: boolean) {
+    run(
+      () => {
+        applyOptimistic({ type: "toggle", id, isDone });
+        // The server clears any manual percent on toggle — mirror it here.
+        applyManualPercent(null);
+      },
+      () => toggleSubtask(id, isDone),
+    );
 
     // When checking a subtask just brought every subtask to done — and the goal
     // isn't already marked complete — prompt the user to confirm completion.
@@ -165,26 +191,28 @@ export function GoalCard({
     setConfirmComplete(false);
     if (completed) return;
     const rate = clampPercent(Number(completeRate.trim()) || 0);
-    startTransition(async () => {
-      applyCompleted(true);
-      // Completing also records the rate as the goal's percent.
-      applyManualPercent(rate);
-      await setGoalCompleted(goal.id, true, rate);
-    });
+    run(
+      () => {
+        applyCompleted(true);
+        // Completing also records the rate as the goal's percent.
+        applyManualPercent(rate);
+      },
+      () => setGoalCompleted(goal.id, true, rate),
+    );
   }
 
   function onRenameSubtask(id: string, title: string) {
-    startTransition(async () => {
-      applyOptimistic({ type: "rename", id, title });
-      await renameSubtask(id, title);
-    });
+    run(
+      () => applyOptimistic({ type: "rename", id, title }),
+      () => renameSubtask(id, title),
+    );
   }
 
   function onDeleteSubtask(id: string) {
-    startTransition(async () => {
-      applyOptimistic({ type: "delete", id });
-      await deleteSubtask(id);
-    });
+    run(
+      () => applyOptimistic({ type: "delete", id }),
+      () => deleteSubtask(id),
+    );
   }
 
   function onToggleCompleted() {
@@ -195,31 +223,31 @@ export function GoalCard({
       setConfirmComplete(true);
       return;
     }
-    startTransition(async () => {
-      applyCompleted(false);
-      await setGoalCompleted(goal.id, false);
-    });
+    run(
+      () => applyCompleted(false),
+      () => setGoalCompleted(goal.id, false),
+    );
   }
 
   function onSetDeadline(next: string | null) {
-    startTransition(async () => {
-      applyDeadline(next);
-      await setGoalDeadline(goal.id, next);
-    });
+    run(
+      () => applyDeadline(next),
+      () => setGoalDeadline(goal.id, next),
+    );
   }
 
   function onSetPriority(next: Priority | null) {
-    startTransition(async () => {
-      applyPriority(next);
-      await setGoalPriority(goal.id, next);
-    });
+    run(
+      () => applyPriority(next),
+      () => setGoalPriority(goal.id, next),
+    );
   }
 
   function onSetPercent(next: number) {
-    startTransition(async () => {
-      applyManualPercent(next);
-      await setGoalPercent(goal.id, next);
-    });
+    run(
+      () => applyManualPercent(next),
+      () => setGoalPercent(goal.id, next),
+    );
   }
 
   // Close the completion prompt on Escape and lock body scroll while it's
@@ -253,8 +281,19 @@ export function GoalCard({
           <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-soft text-xs font-bold text-brand">
             {index}
           </span>
-          <GoalTitle goalId={goal.id} title={goal.title} readOnly={locked} />
+          <GoalTitle
+            goalId={goal.id}
+            title={goal.title}
+            readOnly={locked}
+            onError={reportError}
+          />
         </div>
+
+        {error && (
+          <p role="alert" className="pl-10 text-xs font-medium text-red-600">
+            {error}
+          </p>
+        )}
 
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pl-10">
           {/* Nothing to collapse until a first subtask exists — no "0 tasks". */}
@@ -340,6 +379,7 @@ export function GoalCard({
               team={team}
               alreadyShared={goal.sharedTo}
               onShare={(toUserId) => shareGoal(goal.id, toUserId)}
+              onError={reportError}
               ariaLabel="Delegate goal"
               iconClassName="h-3.5 w-3.5"
               align="left"
@@ -348,7 +388,7 @@ export function GoalCard({
           </span>
           {!locked && (
             <span className="shrink-0">
-              <DeleteGoalButton goalId={goal.id} />
+              <DeleteGoalButton goalId={goal.id} onError={reportError} />
             </span>
           )}
         </div>
@@ -396,6 +436,7 @@ export function GoalCard({
                   onToggle={onToggle}
                   onRename={onRenameSubtask}
                   onDelete={onDeleteSubtask}
+                  onError={reportError}
                 />
               ))}
             </ul>
@@ -408,6 +449,7 @@ export function GoalCard({
               onOptimisticAdd={(id, title) =>
                 startTransition(() => applyOptimistic({ type: "add", id, title }))
               }
+              onError={reportError}
             />
           )}
         </div>
@@ -632,6 +674,7 @@ function SubtaskRow({
   onToggle,
   onRename,
   onDelete,
+  onError,
 }: {
   subtask: SubtaskView;
   team: TeamMember[];
@@ -639,6 +682,7 @@ function SubtaskRow({
   onToggle: (id: string, isDone: boolean) => void;
   onRename: (id: string, title: string) => void;
   onDelete: (id: string) => void;
+  onError: (e: unknown) => void;
 }) {
   const isTemp = s.id.startsWith("temp-");
 
@@ -687,6 +731,7 @@ function SubtaskRow({
             team={team}
             alreadyShared={s.sharedTo}
             onShare={(toUserId) => shareSubtask(s.id, toUserId)}
+            onError={onError}
             ariaLabel="Delegate subtask"
           />
         </span>
@@ -742,6 +787,7 @@ function SharePicker({
   team,
   alreadyShared,
   onShare,
+  onError,
   ariaLabel,
   iconClassName = "h-4 w-4",
   align = "right",
@@ -750,6 +796,7 @@ function SharePicker({
   team: TeamMember[];
   alreadyShared: string[];
   onShare: (toUserId: string) => Promise<void>;
+  onError: (e: unknown) => void;
   ariaLabel: string;
   iconClassName?: string;
   align?: "left" | "right";
@@ -764,7 +811,14 @@ function SharePicker({
 
   function share(toUserId: string) {
     startTransition(async () => {
-      await onShare(toUserId);
+      // Delegation can legitimately refuse — an unapproved recipient, a period
+      // they've already submitted — so the refusal has to reach the card
+      // rather than bubble out of the transition.
+      try {
+        await onShare(toUserId);
+      } catch (e) {
+        onError(e);
+      }
       setOpen(false);
     });
   }
@@ -826,17 +880,19 @@ function GoalTitle({
   goalId,
   title,
   readOnly,
+  onError,
 }: {
   goalId: string;
   title: string;
   readOnly: boolean;
+  onError: (e: unknown) => void;
 }) {
   return (
     <EditableText
       value={title}
       readOnly={readOnly}
       ariaLabel="Goal title"
-      onCommit={(next) => renameGoal(goalId, next)}
+      onCommit={(next) => renameGoal(goalId, next).catch(onError)}
       className="min-w-0 flex-1 text-base font-semibold text-ink"
     />
   );
@@ -921,7 +977,13 @@ function EditableText({
   );
 }
 
-function DeleteGoalButton({ goalId }: { goalId: string }) {
+function DeleteGoalButton({
+  goalId,
+  onError,
+}: {
+  goalId: string;
+  onError: (e: unknown) => void;
+}) {
   const [confirming, setConfirming] = useState(false);
 
   if (confirming) {
@@ -929,7 +991,7 @@ function DeleteGoalButton({ goalId }: { goalId: string }) {
       <span className="flex items-center gap-1 text-xs">
         <button
           type="button"
-          onClick={() => deleteGoal(goalId)}
+          onClick={() => void deleteGoal(goalId).catch(onError)}
           className="rounded bg-red-500 px-2 py-1 font-medium text-white hover:bg-red-600"
         >
           Delete
@@ -962,10 +1024,12 @@ function AddSubtaskForm({
   goalId,
   disabled,
   onOptimisticAdd,
+  onError,
 }: {
   goalId: string;
   disabled: boolean;
   onOptimisticAdd: (tempId: string, title: string) => void;
+  onError: (e: unknown) => void;
 }) {
   const [value, setValue] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -976,7 +1040,7 @@ function AddSubtaskForm({
     if (!title) return;
     setValue("");
     onOptimisticAdd(`temp-${Date.now()}`, title);
-    void addSubtask(goalId, title);
+    void addSubtask(goalId, title).catch(onError);
     inputRef.current?.focus();
   }
 
