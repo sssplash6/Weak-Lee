@@ -289,6 +289,12 @@ export default async function PayrollPage() {
             baseSalary: current.baseSalary,
             method: current.paymentMethod,
             details: parsePaymentDetails(current.paymentDetails),
+            expenses: current.expenses.map((e) => ({
+              id: e.id,
+              label: e.label,
+              amount: e.amount,
+              receiptName: e.receipt?.filename ?? null,
+            })),
           }}
           resubmit={{
             deadlineIso: current.resubmitDeadline.toISOString(),

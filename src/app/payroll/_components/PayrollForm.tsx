@@ -18,9 +18,20 @@ import { ResubmitCountdown } from "./ResubmitCountdown";
 
 type ExpenseDraft = {
   key: number;
+  /** Set when the line came back from a declined submission — resubmitting
+   * keeps that row (and its stored receipt) instead of recreating it. */
+  existingId: string | null;
+  existingReceiptName: string | null;
   label: string;
   amount: string;
   file: File | null;
+};
+
+export type PrefillExpense = {
+  id: string;
+  label: string;
+  amount: number;
+  receiptName: string | null;
 };
 
 const METHODS: PayrollMethod[] = ["CASH", "UZCARD", "WISE"];
@@ -51,6 +62,8 @@ export function PayrollForm({
     baseSalary: number | null;
     method: PayrollMethod;
     details: PaymentDetails;
+    /** The declined submission's expense lines, back on the reopened form. */
+    expenses?: PrefillExpense[];
   };
   resubmit: {
     deadlineIso: string;
@@ -61,8 +74,17 @@ export function PayrollForm({
   const [base, setBase] = useState(
     prefill.baseSalary != null ? String(prefill.baseSalary) : "",
   );
-  const [expenses, setExpenses] = useState<ExpenseDraft[]>([]);
-  const nextKey = useRef(1);
+  const [expenses, setExpenses] = useState<ExpenseDraft[]>(() =>
+    (prefill.expenses ?? []).map((e, i) => ({
+      key: i + 1,
+      existingId: e.id,
+      existingReceiptName: e.receiptName,
+      label: e.label,
+      amount: String(e.amount),
+      file: null,
+    })),
+  );
+  const nextKey = useRef((prefill.expenses?.length ?? 0) + 1);
   const [method, setMethod] = useState<PayrollMethod>(prefill.method);
   const [cardNumber, setCardNumber] = useState(prefill.details.cardNumber ?? "");
   const [cardHolder, setCardHolder] = useState(prefill.details.cardHolder ?? "");
@@ -150,7 +172,11 @@ export function PayrollForm({
     fd.set(
       "expenses",
       JSON.stringify(
-        expenses.map((e) => ({ label: e.label.trim(), amount: Number(e.amount) })),
+        expenses.map((e) => ({
+          ...(e.existingId ? { id: e.existingId } : {}),
+          label: e.label.trim(),
+          amount: Number(e.amount),
+        })),
       ),
     );
     expenses.forEach((e, i) => {
@@ -276,6 +302,10 @@ export function PayrollForm({
                     <span className="max-w-32 truncate align-middle">
                       {e.file.name}
                     </span>
+                  ) : e.existingReceiptName ? (
+                    <span className="max-w-32 truncate align-middle">
+                      {e.existingReceiptName}
+                    </span>
                   ) : (
                     "Receipt (optional)"
                   )}
@@ -306,7 +336,14 @@ export function PayrollForm({
             onClick={() =>
               setExpenses((prev) => [
                 ...prev,
-                { key: nextKey.current++, label: "", amount: "", file: null },
+                {
+                  key: nextKey.current++,
+                  existingId: null,
+                  existingReceiptName: null,
+                  label: "",
+                  amount: "",
+                  file: null,
+                },
               ])
             }
             className="mt-2 rounded-lg border border-dashed border-line px-3 py-2 text-xs font-semibold text-brand transition hover:border-brand/40 hover:bg-canvas"

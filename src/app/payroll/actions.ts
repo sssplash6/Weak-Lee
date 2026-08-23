@@ -40,6 +40,9 @@ export type SubmitPayrollResult = { ok: true } | { ok: false; error: string };
 const fail = (error: string): SubmitPayrollResult => ({ ok: false, error });
 
 type ParsedExpense = {
+  /** Set when this line survives from the declined submission — its stored
+   * receipt is kept unless a new file replaces it. */
+  existingId: string | null;
   label: string;
   amount: number;
   receipt: {
@@ -107,7 +110,7 @@ export async function submitPayroll(
     details = { wiseEmail };
   }
 
-  let expenseMeta: { label: unknown; amount: unknown }[];
+  let expenseMeta: { id?: unknown; label: unknown; amount: unknown }[];
   try {
     expenseMeta = JSON.parse(String(formData.get("expenses") ?? "[]"));
     if (!Array.isArray(expenseMeta)) throw new Error();
@@ -141,7 +144,12 @@ export async function submitPayroll(
         bytes: new Uint8Array(await file.arrayBuffer()),
       };
     }
-    expenses.push({ label, amount, receipt });
+    expenses.push({
+      existingId: typeof raw.id === "string" ? raw.id : null,
+      label,
+      amount,
+      receipt,
+    });
   }
   const expensesTotal = expenses.reduce((s, e) => s + e.amount, 0);
   if (expensesTotal > MAX_PAYROLL_AMOUNT) return fail("Expenses total is too large.");
@@ -225,11 +233,13 @@ export async function submitPayroll(
         });
       } else {
         submissionId = existing!.id;
-        // A resubmission replaces the snapshot wholesale — lines, expenses
-        // (receipts cascade), totals — and regenerates the PDF below.
+        // A resubmission replaces the ledger snapshot wholesale and
+        // regenerates the PDF below. Expenses are reconciled, not wiped: a
+        // kept line updates in place so its stored receipt survives — the
+        // person shouldn't re-upload a photo because the base salary was
+        // wrong (a new file on a kept line replaces the old receipt).
         await tx.payrollBonusLine.deleteMany({ where: { submissionId } });
         await tx.payrollFineLine.deleteMany({ where: { submissionId } });
-        await tx.payrollExpense.deleteMany({ where: { submissionId } });
         await tx.payrollSubmission.update({
           where: { id: submissionId },
           data: money,
@@ -253,14 +263,44 @@ export async function submitPayroll(
           data: snapshot.fineLines.map((l) => ({ ...l, submissionId })),
         });
       }
+
+      // Reconcile expense rows. `existingId` claims are honored only for rows
+      // that really belong to THIS submission — a forged id can't touch
+      // someone else's data.
+      const oldRows = await tx.payrollExpense.findMany({
+        where: { submissionId },
+        select: { id: true },
+      });
+      const oldIds = new Set(oldRows.map((r) => r.id));
+      const keptIds = new Set(
+        expenses
+          .map((e) => e.existingId)
+          .filter((id): id is string => id !== null && oldIds.has(id)),
+      );
+      const dropIds = oldRows.filter((r) => !keptIds.has(r.id)).map((r) => r.id);
+      if (dropIds.length > 0) {
+        await tx.payrollExpense.deleteMany({ where: { id: { in: dropIds } } });
+      }
       for (const [i, e] of expenses.entries()) {
-        const row = await tx.payrollExpense.create({
-          data: { submissionId, label: e.label, amount: e.amount, position: i + 1 },
-          select: { id: true },
-        });
+        const kept = e.existingId !== null && keptIds.has(e.existingId);
+        let expenseId: string;
+        if (kept) {
+          expenseId = e.existingId!;
+          await tx.payrollExpense.update({
+            where: { id: expenseId },
+            data: { label: e.label, amount: e.amount, position: i + 1 },
+          });
+        } else {
+          const row = await tx.payrollExpense.create({
+            data: { submissionId, label: e.label, amount: e.amount, position: i + 1 },
+            select: { id: true },
+          });
+          expenseId = row.id;
+        }
         if (e.receipt) {
+          await tx.payrollReceipt.deleteMany({ where: { expenseId } });
           await tx.payrollReceipt.create({
-            data: { expenseId: row.id, ...e.receipt },
+            data: { expenseId, ...e.receipt },
           });
         }
       }
