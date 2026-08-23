@@ -78,7 +78,7 @@ export function ReportForm({ colleagues }: { colleagues: Colleague[] }) {
           <button
             type="button"
             onClick={() => setOpen((v) => !v)}
-            aria-haspopup="listbox"
+            aria-haspopup="true"
             aria-expanded={open}
             className="flex items-center gap-2 rounded-lg border border-line bg-surface px-3 py-2 text-sm font-medium text-ink transition hover:border-brand/40"
           >
@@ -110,10 +110,16 @@ export function ReportForm({ colleagues }: { colleagues: Colleague[] }) {
             </span>
           </button>
 
+          {/* Real checkboxes rather than a hand-rolled listbox. The roles that
+              used to be here (listbox/option, on <button>s) promised arrow-key
+              navigation, active-descendant tracking and Home/End that none of
+              this implemented — and an option isn't allowed to be a button in
+              the first place. A checkbox group is what this control actually
+              is, and the browser handles the keyboard for free. */}
           {open && (
             <ul
-              role="listbox"
-              aria-multiselectable="true"
+              role="group"
+              aria-label="Colleagues to report"
               className="pop-in absolute right-0 z-10 mt-2 max-h-72 w-64 overflow-y-auto rounded-xl border border-line bg-surface p-1 shadow-lg"
             >
               {colleagues.length === 0 && (
@@ -121,38 +127,25 @@ export function ReportForm({ colleagues }: { colleagues: Colleague[] }) {
                   No other colleagues yet.
                 </li>
               )}
-              {colleagues.map((c) => {
-                const isOn = selected.has(c.id);
-                return (
-                  <li key={c.id}>
-                    <button
-                      type="button"
-                      role="option"
-                      aria-selected={isOn}
-                      onClick={() => toggle(c.id)}
-                      className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-sm text-ink transition hover:bg-canvas"
+              {colleagues.map((c) => (
+                <li key={c.id}>
+                  <label className="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-sm text-ink transition hover:bg-canvas">
+                    <input
+                      type="checkbox"
+                      checked={selected.has(c.id)}
+                      onChange={() => toggle(c.id)}
+                      className="h-4 w-4 shrink-0 rounded border-line accent-brand focus:ring-brand"
+                    />
+                    <span
+                      className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-sm ${c.bg}`}
+                      aria-hidden="true"
                     >
-                      <span
-                        className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[10px] transition ${
-                          isOn
-                            ? "border-brand bg-brand text-white"
-                            : "border-line text-transparent"
-                        }`}
-                        aria-hidden="true"
-                      >
-                        ✓
-                      </span>
-                      <span
-                        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-sm ${c.bg}`}
-                        aria-hidden="true"
-                      >
-                        {c.emoji}
-                      </span>
-                      <span className="min-w-0 flex-1 truncate">{c.name}</span>
-                    </button>
-                  </li>
-                );
-              })}
+                      {c.emoji}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate">{c.name}</span>
+                  </label>
+                </li>
+              ))}
             </ul>
           )}
         </div>
