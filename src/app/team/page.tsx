@@ -22,8 +22,13 @@ export default async function TeamPage() {
   if (!session?.user?.id) redirect("/signin");
   await assertApproved(session.user);
 
+  // Approved teammates only. Keyed off a name alone, the directory also listed
+  // sign-ups still waiting in the queue — people who can't reach any page but
+  // /pending — handing their name and email to the whole company as though they
+  // already worked here. Everyone predating the approval gate was backfilled as
+  // approved by its migration, so nobody real drops off.
   const members = await prisma.user.findMany({
-    where: { name: { not: null } },
+    where: { name: { not: null }, approvedAt: { not: null } },
     select: {
       id: true,
       name: true,
