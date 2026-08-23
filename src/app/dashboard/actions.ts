@@ -460,24 +460,59 @@ export async function setGoalPriority(goalId: string, priority: Priority | null)
   revalidatePath("/dashboard");
 }
 
+/** How long one person waits between messages. */
+const FEEDBACK_COOLDOWN_MS = 60_000;
+const MAX_FEEDBACK = 5000;
+
+export type FeedbackResult = { ok: true } | { ok: false; error: string };
+
 /**
  * Record a piece of product feedback (destined for tech@freshman.academy).
  * Stored in the database — there's no mail provider — with the submitter's
- * email captured so it can be followed up. Returns false on an empty message.
+ * email captured so it can be followed up.
+ *
+ * Sign-in required. The button only exists on the dashboard, which is behind
+ * both auth and approval, so nobody loses the ability to send anything — but
+ * the action itself is a reachable write endpoint, and it was the one place in
+ * the app where an unauthenticated caller could create rows. A per-person
+ * cooldown bounds how fast a signed-in one can, too.
  */
-export async function submitFeedback(message: string): Promise<boolean> {
+export async function submitFeedback(message: string): Promise<FeedbackResult> {
   const session = await auth();
+  const userId = session?.user?.id;
+  if (!userId) return { ok: false, error: "Sign in to send feedback." };
+
   const trimmed = message.trim();
-  if (!trimmed) return false;
+  if (!trimmed) return { ok: false, error: "Write something first." };
+  if (trimmed.length > MAX_FEEDBACK) {
+    return {
+      ok: false,
+      error: `Keep it under ${MAX_FEEDBACK} characters.`,
+    };
+  }
+
+  const recent = await prisma.feedback.findFirst({
+    where: {
+      userId,
+      createdAt: { gt: new Date(Date.now() - FEEDBACK_COOLDOWN_MS) },
+    },
+    select: { id: true },
+  });
+  if (recent) {
+    return {
+      ok: false,
+      error: "You just sent feedback — give it a minute before the next one.",
+    };
+  }
 
   await prisma.feedback.create({
     data: {
-      message: trimmed.slice(0, 5000),
-      userId: session?.user?.id ?? null,
-      userEmail: session?.user?.email ?? null,
+      message: trimmed,
+      userId,
+      userEmail: session.user.email ?? null,
     },
   });
-  return true;
+  return { ok: true };
 }
 
 export async function deleteGoal(goalId: string) {

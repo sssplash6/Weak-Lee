@@ -14,6 +14,7 @@ export function FeedbackButton() {
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [sent, setSent] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const canSend = message.trim().length > 0;
@@ -22,6 +23,7 @@ export function FeedbackButton() {
     setOpen(false);
     setMessage("");
     setSent(false);
+    setError(null);
   }
 
   // Close on Escape and lock body scroll while the modal is open.
@@ -41,9 +43,11 @@ export function FeedbackButton() {
 
   function submit() {
     if (!canSend) return;
+    setError(null);
     startTransition(async () => {
-      const ok = await submitFeedback(message);
-      if (ok) setSent(true);
+      const result = await submitFeedback(message);
+      if (result.ok) setSent(true);
+      else setError(result.error);
     });
   }
 
@@ -103,6 +107,12 @@ export function FeedbackButton() {
               placeholder="What's on your mind?"
               className="mt-4 w-full resize-y rounded-lg border border-line px-3 py-2 text-sm text-ink placeholder:text-muted-fg focus:border-brand focus:outline-none"
             />
+
+            {error && (
+              <p role="alert" className="mt-2 text-sm text-red-600">
+                {error}
+              </p>
+            )}
 
             <div className="mt-5 flex items-center justify-end gap-2">
               <button
