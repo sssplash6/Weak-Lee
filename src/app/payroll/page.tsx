@@ -32,6 +32,7 @@ import { formatMoney } from "@/lib/penalties";
 import { PayrollComingSoon } from "./_components/PayrollComingSoon";
 import { PayrollForm } from "./_components/PayrollForm";
 import type { LedgerLineView } from "./_components/LedgerBreakdown";
+import { EditableSubmission } from "./_components/EditableSubmission";
 import {
   SubmissionView,
   type SubmissionViewModel,
@@ -144,11 +145,14 @@ export default async function PayrollPage() {
 
   const canFileFresh = !current && filingOpen;
   const canResubmit = current?.status === "DECLINED"; // lapsed ones were swept above
+  // Still in the queue and untouched by a reviewer, so the filer can change it.
+  // No deadline of its own: an admin acting on it is what closes the window.
+  const canEdit = current?.status === "SUBMITTED";
   const blocking = canFileFresh ? await inFlightSubmission(prisma, me.id) : null;
 
   const dateOf = (d: Date) => formatYmd(toYmd(d), period.year);
   const snapshot =
-    (canFileFresh && !blocking) || canResubmit
+    (canFileFresh && !blocking) || canResubmit || canEdit
       ? await pullLedgerSnapshot(prisma, me.id).then((s) => ({
           bonuses: s.bonusLines.map((l) => ({
             id: l.bonusId,
@@ -296,7 +300,8 @@ export default async function PayrollPage() {
               receiptName: e.receipt?.filename ?? null,
             })),
           }}
-          resubmit={{
+          mode={{
+            kind: "refile",
             deadlineIso: current.resubmitDeadline.toISOString(),
             deadlineLabel: formatTashkent(current.resubmitDeadline),
             note: declineNote,
@@ -304,7 +309,35 @@ export default async function PayrollPage() {
         />
       )}
 
-      {view && <SubmissionView heading={`Your ${label} request`} view={view} />}
+      {view && !canEdit && (
+        <SubmissionView heading={`Your ${label} request`} view={view} />
+      )}
+
+      {canEdit && view && snapshot && current && (
+        <EditableSubmission
+          heading={`Your ${label} request`}
+          view={view}
+          form={
+            <PayrollForm
+              periodLabel={label}
+              closesLabel={formatTashkent(period.filingClosesAt)}
+              snapshot={snapshot}
+              prefill={{
+                baseSalary: current.baseSalary,
+                method: current.paymentMethod,
+                details: parsePaymentDetails(current.paymentDetails),
+                expenses: current.expenses.map((e) => ({
+                  id: e.id,
+                  label: e.label,
+                  amount: e.amount,
+                  receiptName: e.receipt?.filename ?? null,
+                })),
+              }}
+              mode={{ kind: "edit" }}
+            />
+          }
+        />
+      )}
 
       {canFileFresh && blocking && (
         <section className="rounded-xl border border-line bg-surface p-4 sm:p-5">
@@ -329,7 +362,7 @@ export default async function PayrollPage() {
           closesLabel={formatTashkent(period.filingClosesAt)}
           snapshot={snapshot}
           prefill={prefill}
-          resubmit={null}
+          mode={{ kind: "file" }}
         />
       )}
 

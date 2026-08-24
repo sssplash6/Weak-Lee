@@ -4,7 +4,7 @@
 // lib/submissionFines.ts pattern), and the money write-back at PROCESSED.
 //
 //   DRAFT → SUBMITTED → (DECLINED → SUBMITTED)* → APPROVED_BY_ADMIN → PROCESSED
-//                            └───────────────▶ EXPIRED
+//              ↺ (filer edits)   └───────────────▶ EXPIRED
 //
 // Server actions own authorization and notifications; this module owns the
 // rules — every transition goes through applyTransition so no status change
@@ -158,7 +158,9 @@ export async function ensureCurrentPeriod(db: Db = prisma, now = new Date()) {
 
 const TRANSITIONS: Record<PayrollStatus, readonly PayrollStatus[]> = {
   DRAFT: ["SUBMITTED"],
-  SUBMITTED: ["DECLINED", "APPROVED_BY_ADMIN"],
+  // SUBMITTED → SUBMITTED is the filer editing a request nobody has acted on
+  // yet: same status, fresh snapshot, and an audit event recording the change.
+  SUBMITTED: ["SUBMITTED", "DECLINED", "APPROVED_BY_ADMIN"],
   DECLINED: ["SUBMITTED", "EXPIRED"],
   APPROVED_BY_ADMIN: ["SUBMITTED", "PROCESSED"], // send-back | paid
   EXPIRED: [],

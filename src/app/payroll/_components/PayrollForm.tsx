@@ -40,15 +40,16 @@ const METHODS: PayrollMethod[] = ["CASH", "UZCARD", "WISE"];
  * The monthly filing form: self-reported base salary, the read-only ledger
  * snapshot preview, repeatable expense lines with optional receipts, the
  * payment method, and the running arithmetic — base + bonuses − fines +
- * expenses — shown as sums, not just a result. One submit files (or, after a
- * decline, refiles) the request and generates the invoice PDF.
+ * expenses — shown as sums, not just a result. One submit files the request
+ * and generates the invoice PDF; the same form reopens to refile after a
+ * decline, or to edit a request the admins haven't reached yet (see `mode`).
  */
 export function PayrollForm({
   periodLabel,
   closesLabel,
   snapshot,
   prefill,
-  resubmit,
+  mode,
 }: {
   periodLabel: string;
   closesLabel: string;
@@ -65,11 +66,21 @@ export function PayrollForm({
     /** The declined submission's expense lines, back on the reopened form. */
     expenses?: PrefillExpense[];
   };
-  resubmit: {
-    deadlineIso: string;
-    deadlineLabel: string;
-    note: string | null;
-  } | null;
+  /**
+   * Which of the three ways this form is open:
+   *  - file   — nothing filed for this period yet
+   *  - refile — the admins declined it; there's a clock and a reason
+   *  - edit   — it's filed and nobody has reviewed it, so it can still change
+   */
+  mode:
+    | { kind: "file" }
+    | {
+        kind: "refile";
+        deadlineIso: string;
+        deadlineLabel: string;
+        note: string | null;
+      }
+    | { kind: "edit" };
 }) {
   const [base, setBase] = useState(
     prefill.baseSalary != null ? String(prefill.baseSalary) : "",
@@ -195,28 +206,46 @@ export function PayrollForm({
 
   return (
     <section className="rounded-xl border border-line bg-surface p-4 sm:p-5">
-      {resubmit && (
+      {mode.kind === "refile" && (
         <div className="mb-4 rounded-lg border border-red-200 bg-red-50/60 p-3">
           <p className="text-sm font-semibold text-red-700">
             Declined — fix it and resend
           </p>
-          {resubmit.note && (
-            <p className="mt-1 text-xs text-ink">“{resubmit.note}”</p>
+          {mode.note && (
+            <p className="mt-1 text-xs text-ink">“{mode.note}”</p>
           )}
           <div className="mt-1.5">
             <ResubmitCountdown
-              deadlineIso={resubmit.deadlineIso}
-              deadlineLabel={resubmit.deadlineLabel}
+              deadlineIso={mode.deadlineIso}
+              deadlineLabel={mode.deadlineLabel}
             />
           </div>
         </div>
       )}
 
+      {/* No countdown here on purpose: an edit is bounded by the review, not
+          by a clock. It stops being possible the moment an admin acts. */}
+      {mode.kind === "edit" && (
+        <div className="mb-4 rounded-lg border border-brand/30 bg-brand-soft p-3">
+          <p className="text-sm font-semibold text-brand">
+            In review — you can still change it
+          </p>
+          <p className="mt-1 text-xs text-ink">
+            Resending replaces what the admins see and tells them it changed.
+            Once someone approves or declines it, this closes.
+          </p>
+        </div>
+      )}
+
       <div className="flex items-baseline justify-between gap-3">
         <h2 className="text-sm font-semibold text-ink">
-          {resubmit ? `Refile for ${periodLabel}` : `File for ${periodLabel}`}
+          {mode.kind === "file"
+            ? `File for ${periodLabel}`
+            : mode.kind === "refile"
+              ? `Refile for ${periodLabel}`
+              : `Edit your ${periodLabel} request`}
         </h2>
-        {!resubmit && (
+        {mode.kind === "file" && (
           <span className="shrink-0 text-[11px] text-muted-fg">
             Filing closes {closesLabel}
           </span>
@@ -422,12 +451,16 @@ export function PayrollForm({
         >
           {isPending
             ? "Submitting…"
-            : resubmit
-              ? "Resubmit pay request"
-              : "Submit pay request"}
+            : mode.kind === "file"
+              ? "Submit pay request"
+              : mode.kind === "refile"
+                ? "Resubmit pay request"
+                : "Save and resend"}
         </button>
         <p className="text-xs text-muted-fg">
-          Generates your invoice PDF and sends it to the admins for review.
+          {mode.kind === "edit"
+            ? "Rebuilds your invoice PDF and tells the admins it changed."
+            : "Generates your invoice PDF and sends it to the admins for review."}
         </p>
       </div>
       {error && <p className="mt-2 text-xs text-red-600">{error}</p>}

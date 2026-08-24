@@ -27,6 +27,7 @@ import {
   payrollMonthName,
   payrollPeriodLabel,
   PAYROLL_CLOSED,
+  PAYROLL_STATUS_LABEL,
   type PaymentDetails,
   type PayrollMethod,
 } from "@/lib/payrollTypes";
@@ -162,7 +163,12 @@ export async function submitPayroll(
     select: { id: true, status: true, resubmitDeadline: true },
   });
 
-  let mode: "create" | "resubmit";
+  // "edit" is the filer changing a request that is still sitting in the queue.
+  // It's bounded by the review itself rather than by a clock: the moment an
+  // admin declines or approves, the window shuts on its own — a decline has
+  // its own timed resubmit path, and an approval can't be silently altered
+  // underneath the person who gave it.
+  let mode: "create" | "resubmit" | "edit";
   if (!existing) {
     if (now > period.filingClosesAt) {
       return fail(
@@ -181,8 +187,12 @@ export async function submitPayroll(
       return fail("The resubmit window has closed — this filing rolls into next month's cycle.");
     }
     mode = "resubmit";
+  } else if (existing.status === "SUBMITTED") {
+    mode = "edit";
   } else {
-    return fail(`You've already filed for ${label}.`);
+    return fail(
+      `Your ${label} request is ${PAYROLL_STATUS_LABEL[existing.status].toLowerCase()} — it can't be changed now.`,
+    );
   }
 
   // ----- Write it all atomically -----
@@ -210,11 +220,14 @@ export async function submitPayroll(
           );
         }
       } else {
+        // An edit must still be unreviewed and a refile must still be
+        // declined; either way a reviewer may have acted since the check above.
+        const expected = mode === "edit" ? "SUBMITTED" : "DECLINED";
         const still = await tx.payrollSubmission.findUnique({
           where: { id: existing!.id },
           select: { status: true },
         });
-        if (still?.status !== "DECLINED") {
+        if (still?.status !== expected) {
           throw new SubmitError(
             "That request has already moved on — reload to see where it is.",
           );
@@ -260,7 +273,7 @@ export async function submitPayroll(
         });
       } else {
         submissionId = existing!.id;
-        // A resubmission replaces the ledger snapshot wholesale and
+        // A resubmission or an edit replaces the ledger snapshot wholesale and
         // regenerates the PDF below. Expenses are reconciled, not wiped: a
         // kept line updates in place so its stored receipt survives — the
         // person shouldn't re-upload a photo because the base salary was
@@ -273,7 +286,11 @@ export async function submitPayroll(
         });
         await applyTransition(tx, {
           submissionId,
-          from: "DECLINED",
+          // An edit is SUBMITTED → SUBMITTED: the status doesn't move, but the
+          // event still lands so the queue can see the request changed under
+          // it, and `submittedAt` is untouched so lateness is still judged by
+          // the original filing.
+          from: mode === "edit" ? "SUBMITTED" : "DECLINED",
           to: "SUBMITTED",
           actorId: userId,
           data: { lastSubmittedAt: now },
@@ -372,7 +389,7 @@ export async function submitPayroll(
         tx,
         admins.map((a) => a.id).filter((id) => id !== userId),
         "PAYROLL",
-        `${me.name ?? me.email}: ${label} pay request ${mode === "resubmit" ? "resubmitted" : "filed"} — ${formatMoney(netTotal)} net.`,
+        `${me.name ?? me.email}: ${label} pay request ${NOTICE[mode].verb} — ${formatMoney(netTotal)} net.`,
       );
     });
   } catch (e) {
@@ -392,9 +409,9 @@ export async function submitPayroll(
       .map((to) =>
         sendEmail({
           to,
-          subject: `Payroll: ${who} ${mode === "resubmit" ? "resubmitted" : "filed"} for ${label}`,
+          subject: `Payroll: ${who} ${NOTICE[mode].subject(label)}`,
           text:
-            `${who} ${mode === "resubmit" ? "resubmitted their" : "filed a"} ${label} pay request — ${formatMoney(netTotal)} net.\n\n` +
+            `${who} ${NOTICE[mode].sentence(label)} — ${formatMoney(netTotal)} net.\n\n` +
             `Review it: ${appUrl()}/payroll/review\n\n— FreshWeek`,
         }),
       ),
@@ -404,6 +421,30 @@ export async function submitPayroll(
   revalidatePath("/payroll/review");
   return { ok: true };
 }
+
+/**
+ * How each filing path is announced to the admins. An edit has to read
+ * differently from a fresh filing: the request is already sitting in their
+ * queue, and what changed is the very thing they were about to review.
+ */
+const NOTICE = {
+  create: {
+    verb: "filed",
+    subject: (label: string) => `filed for ${label}`,
+    sentence: (label: string) => `filed a ${label} pay request`,
+  },
+  resubmit: {
+    verb: "resubmitted",
+    subject: (label: string) => `resubmitted for ${label}`,
+    sentence: (label: string) => `resubmitted their ${label} pay request`,
+  },
+  edit: {
+    verb: "edited",
+    subject: (label: string) => `edited their ${label} request`,
+    sentence: (label: string) =>
+      `edited their ${label} pay request while it was in review`,
+  },
+} as const;
 
 /** An expected, user-facing refusal thrown from inside the transaction. */
 class SubmitError extends Error {}

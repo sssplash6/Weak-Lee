@@ -123,6 +123,7 @@ export function payrollEventLabel(
   if (to === "SUBMITTED") {
     if (from === "DECLINED") return "Resubmitted";
     if (from === "APPROVED_BY_ADMIN") return "Sent back by finance";
+    if (from === "SUBMITTED") return "Edited and resent";
     return "Filed";
   }
   if (to === "DECLINED") return "Declined";
