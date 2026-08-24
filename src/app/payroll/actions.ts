@@ -208,7 +208,11 @@ export async function submitPayroll(
       // help: it only stops two filings for the SAME period. A per-user
       // advisory lock does, and needs no schema change — Postgres holds it for
       // the life of the transaction and drops it on commit or rollback.
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(${PAYROLL_LOCK_NAMESPACE}::int4, hashtext(${userId}))`;
+      // Projected through a subquery because pg_advisory_xact_lock returns
+      // `void`, and Prisma's raw-query decoder can't deserialize a void column
+      // — it throws before the lock is ever of any use. The outer SELECT hands
+      // it an int instead.
+      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(${PAYROLL_LOCK_NAMESPACE}::int4, hashtext(${userId}))) AS _lock`;
 
       // Re-assert what decided `mode`, now that nothing else can be filing for
       // this person. Whoever held the lock first may have just used it up.
