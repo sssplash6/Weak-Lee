@@ -10,8 +10,10 @@ import { SubmissionView, type SubmissionViewModel } from "./SubmissionView";
  * Editing is an option rather than the default state — most visits to this
  * page are to check where the request got to, not to change it, and swapping
  * the summary out for a form would cost the status banner and the timeline
- * that answer that question. The form itself is rendered on the server and
- * passed in, so opening it costs no round trip.
+ * that answer that question. The form arrives as a prop rather than being
+ * fetched on click — it's a client component, so the RSC payload already
+ * carries its module reference and its props, and opening it costs no round
+ * trip even though nothing of it is in the server-rendered HTML.
  */
 export function EditableSubmission({
   heading,
