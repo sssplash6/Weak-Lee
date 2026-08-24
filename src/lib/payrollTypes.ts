@@ -4,13 +4,14 @@
 // the server action then stores. All money is whole-dollar USD app-wide.
 
 /**
- * Payroll is closed: every route under /payroll shows the coming-soon screen
- * instead of its content (employees and both reviewer stages alike), the lazy
- * sweeps stay quiet so nothing expires or emails a reminder while it's shut,
- * and every action refuses. Rows already in the database are left exactly as
- * they are — flipping this to `false` reopens the feature mid-flight.
+ * The kill switch for the whole payroll feature. While true every route under
+ * /payroll shows the coming-soon screen (employees and both reviewer stages
+ * alike), the lazy sweeps stay quiet so nothing expires or emails a reminder,
+ * and every action refuses. Rows in the database are untouched either way, so
+ * this can be flipped in both directions mid-flight — set it back to `true` to
+ * shut the feature off again without losing anything.
  */
-export const PAYROLL_CLOSED = true;
+export const PAYROLL_CLOSED = false;
 
 export type PayrollStatus =
   | "DRAFT"
