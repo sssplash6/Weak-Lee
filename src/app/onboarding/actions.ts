@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { normalizeTelegram } from "@/lib/profile";
+import { isApprovedUser } from "@/lib/approval";
 import { AVATAR_EMOJIS } from "@/lib/avatar";
 import { parseYmd } from "@/lib/dates";
 import { claimVacantMiniLeads, miniLeadNotice } from "@/lib/miniDepartments";
@@ -28,6 +29,13 @@ export async function completeProfile(
   const session = await auth();
   if (!session?.user?.id) return { error: "You're not signed in." };
   const userId = session.user.id;
+
+  // The /onboarding page gates on approval, but this action is reachable
+  // without it — and it hands out department seats, one of which can now be a
+  // mini department's lead seat (see lib/miniDepartments.ts). Gate it here too.
+  if (!(await isApprovedUser({ id: userId, email: session.user.email }))) {
+    return { error: "Your account is still waiting for approval." };
+  }
 
   const name = String(formData.get("name") ?? "").trim();
   const workPhone = String(formData.get("workPhone") ?? "").trim();

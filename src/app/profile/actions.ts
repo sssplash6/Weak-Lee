@@ -12,6 +12,7 @@ import { parseYmd } from "@/lib/dates";
 import { AVATAR_EMOJIS } from "@/lib/avatar";
 import { notify } from "@/lib/notifications";
 import { claimVacantMiniLeads, miniLeadNotice } from "@/lib/miniDepartments";
+import { isApprovedUser } from "@/lib/approval";
 
 export type ProfileState = { error: string | null; saved: boolean };
 
@@ -51,6 +52,11 @@ export async function joinDepartment(departmentId: string) {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Not authenticated");
   const userId = session.user.id;
+  // Joining can hand out a mini department's lead seat, so this action needs
+  // the approval gate its page has rather than trusting the page to hold it.
+  if (!(await isApprovedUser({ id: userId, email: session.user.email }))) {
+    throw new Error("Your account is still waiting for approval.");
+  }
 
   const department = await prisma.department.findUnique({
     where: { id: departmentId },

@@ -72,7 +72,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
         const [leads, admins] = await Promise.all([
           prisma.departmentMembership.findMany({
-            where: { role: "LEAD" },
+            // Mini-department heads can't review sign-ups (see
+            // requireReviewer in app/department/actions.ts), so paging them
+            // would only be noise.
+            where: { role: "LEAD", department: { mini: false } },
             select: { userId: true },
             distinct: ["userId"],
           }),

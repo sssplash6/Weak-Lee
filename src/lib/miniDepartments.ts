@@ -14,10 +14,16 @@
 import type { Prisma } from "@/generated/prisma/client";
 
 /**
+ * Namespace for the per-department claim lock, so it can't collide with any
+ * other advisory lock the app takes (see PAYROLL_LOCK_NAMESPACE). Arbitrary
+ * but fixed.
+ */
+const MINI_LEAD_LOCK_NAMESPACE = 5_207_884;
+
+/**
  * Promote this person to LEAD in every mini department among `departmentIds`
  * that has no lead yet, and say which ones they took. Expects their
- * memberships to exist already. Runs inside the caller's transaction so two
- * people joining an empty mini department at once can't both claim it.
+ * memberships to exist already, and must run inside a transaction.
  */
 export async function claimVacantMiniLeads(
   tx: Prisma.TransactionClient,
@@ -33,6 +39,19 @@ export async function claimVacantMiniLeads(
 
   const claimed: { id: string; name: string }[] = [];
   for (const d of mini) {
+    // Serialize the claim on this department. A transaction alone does NOT do
+    // it: at READ COMMITTED two joiners insert different membership rows, so
+    // nothing locks them against each other, both count zero leads, and both
+    // promote themselves — a mini department with two heads (reproduced before
+    // this lock existed). Postgres holds the lock for the life of the
+    // transaction and drops it on commit or rollback.
+    // Projected through a subquery because pg_advisory_xact_lock returns
+    // `void`, which Prisma's raw-query decoder can't deserialize — it throws
+    // before the lock is any use. The outer SELECT hands it an int instead.
+    await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(${MINI_LEAD_LOCK_NAMESPACE}::int4, hashtext(${d.id}))) AS _lock`;
+
+    // Re-read behind the lock: whoever held it first may have just taken the
+    // seat this call was about to claim.
     const leads = await tx.departmentMembership.count({
       where: { departmentId: d.id, role: "LEAD" },
     });

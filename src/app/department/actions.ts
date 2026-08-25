@@ -9,13 +9,23 @@ import { notify } from "@/lib/notifications";
 /**
  * Only department leads and admins review sign-ups. Returns the reviewer's
  * session; throws for anyone else.
+ *
+ * A MINI department's lead seat does not count. Approving a sign-up is an
+ * org-wide power (it lets any Google account onto the platform), while a mini
+ * department's head is self-appointed — whoever joined it first, with no admin
+ * in the loop (see lib/miniDepartments.ts). Letting that seat confer this
+ * would turn one click on /profile into the right to admit strangers.
  */
 async function requireReviewer() {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Not authenticated");
   if (isAdmin(session.user.email)) return session;
   const leadSeat = await prisma.departmentMembership.findFirst({
-    where: { userId: session.user.id, role: "LEAD" },
+    where: {
+      userId: session.user.id,
+      role: "LEAD",
+      department: { mini: false },
+    },
     select: { id: true },
   });
   if (!leadSeat) throw new Error("Not authorized");
