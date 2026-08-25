@@ -639,24 +639,39 @@ enum PayrollStatus {
 
 // How the person wants to be paid. UZCARD carries card number + holder name in
 // paymentDetails, WISE the account email, CASH nothing.
+// How someone is paid. These mirror the "Source" column of the finance team's
+// accounting sheet one-for-one, so a filed payroll row can be reconciled
+// against it without translation. Labels live in lib/payrollTypes.ts.
 enum PayrollMethod {
-  CASH
-  UZCARD
-  WISE
+  CASH_SINGAPORE
+  CASH_UZBEKISTAN
+  WISE_USD
+  UZS_CARD
+  STRIPE
+  SG_CASH
+  SG_BANK
+  KAPITAL_BANK
+  VARIOUS
 }
 
 // One calendar month of payroll, boundaries in Asia/Tashkent (stored as UTC
-// instants). The cutoff is DATA (`filingClosesAt`), not arithmetic repeated at
-// call sites: 23:59:59 on the month's last day. `remindAt` is 09:00 three days
-// before the last day; `reminderSentAt` is the lazy reminder sweep's
-// once-per-period claim (same no-cron pattern as lib/submissionFines.ts).
-// Rows exist only from the feature's launch month onward, created on demand.
+// instants). The filing window is DATA (`filingOpensAt` … `filingClosesAt`),
+// not arithmetic repeated at call sites: it opens 00:00:00 on the third-last
+// day of the month and closes 23:59:59 on the FIRST day of the next one — four
+// days, so everyone files against a nearly-final ledger and finance reviews one
+// batch. Because it crosses the month boundary, the 1st of a month still
+// belongs to the month before it (see periodBoundsFor in lib/payroll.ts).
+// `remindAt` is 09:00 on the opening day, inside the window; `reminderSentAt`
+// is the lazy reminder sweep's once-per-period claim (same no-cron pattern as
+// lib/submissionFines.ts). Rows exist only from the feature's launch month
+// onward, created on demand — each keeps the window it was created with.
 model PayrollPeriod {
   id             String    @id @default(cuid())
   year           Int
   month          Int // 1–12
   startsAt       DateTime
   endsAt         DateTime
+  filingOpensAt  DateTime
   filingClosesAt DateTime
   remindAt       DateTime
   reminderSentAt DateTime?
@@ -697,9 +712,12 @@ model PayrollSubmission {
   submittedAt     DateTime?
   lastSubmittedAt DateTime?
 
-  // Set on decline: min(declinedAt + 24h, filingClosesAt + 24h). The past-cutoff
-  // day is granted once per period (`graceDayUsed`), so a re-decline after the
-  // cutoff never extends the window further.
+  // Set on decline: the period's filing cutoff, plus 24h ONLY when the decline
+  // lands on the window's last day (see resubmitWindowFor in lib/payroll.ts).
+  // A decline never shortens the deadline the filer already had — being turned
+  // back on the 27th leaves the normal cutoff in place. The past-cutoff day is
+  // granted once per period (`graceDayUsed`), and the rule is two-valued and
+  // monotone in time, so a re-decline can never extend the window further.
   resubmitDeadline DateTime?
   graceDayUsed     Boolean   @default(false)
 

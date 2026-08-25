@@ -7,7 +7,10 @@ import {
   computeNet,
   MAX_PAYROLL_EXPENSES,
   MAX_RECEIPT_BYTES,
+  methodIsCash,
+  methodNeedsWiseEmail,
   PAYROLL_METHOD_LABEL,
+  PAYROLL_METHODS,
   RECEIPT_MIME_TYPES,
   type PaymentDetails,
   type PayrollMethod,
@@ -33,8 +36,6 @@ export type PrefillExpense = {
   amount: number;
   receiptName: string | null;
 };
-
-const METHODS: PayrollMethod[] = ["CASH", "UZCARD", "WISE"];
 
 /**
  * The monthly filing form: self-reported base salary, the read-only ledger
@@ -150,7 +151,10 @@ export function PayrollForm({
         return;
       }
     }
-    if (method === "WISE" && !/^\S+@\S+\.\S+$/.test(wiseEmail.trim())) {
+    if (
+      methodNeedsWiseEmail(method) &&
+      !/^\S+@\S+\.\S+$/.test(wiseEmail.trim())
+    ) {
       setError("Enter a valid Wise account email.");
       return;
     }
@@ -163,7 +167,7 @@ export function PayrollForm({
     const fd = new FormData();
     fd.set("baseSalary", String(baseValue));
     fd.set("paymentMethod", method);
-    if (method === "WISE") fd.set("wiseEmail", wiseEmail);
+    if (methodNeedsWiseEmail(method)) fd.set("wiseEmail", wiseEmail);
     fd.set(
       "expenses",
       JSON.stringify(
@@ -368,39 +372,35 @@ export function PayrollForm({
         )}
       </div>
 
-      {/* Payment method */}
+      {/* Preferred payment method */}
       <div className="mt-5">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-fg">
-          Payment method
-        </p>
-        <div role="radiogroup" className="mt-2 flex flex-wrap gap-2">
-          {METHODS.map((m) => (
-            <button
-              key={m}
-              type="button"
-              role="radio"
-              aria-checked={method === m}
-              onClick={() => setMethod(m)}
-              className={`whitespace-nowrap rounded-lg border px-3.5 py-2 text-sm font-medium transition ${
-                method === m
-                  ? "border-brand bg-brand-soft text-brand"
-                  : "border-line text-ink hover:border-brand/40"
-              }`}
-            >
-              {PAYROLL_METHOD_LABEL[m]}
-            </button>
-          ))}
+        <label
+          htmlFor="payroll-method"
+          className="text-[11px] font-semibold uppercase tracking-wide text-muted-fg"
+        >
+          Preferred payment method
+        </label>
+        {/* A dropdown rather than the pills this used to be: the list mirrors
+            the accounting sheet's "Source" column, and nine pills wrap into a
+            wall of buttons. Options come straight from PAYROLL_METHODS, so a
+            tenth source appears here without touching this file. */}
+        <div className="mt-1.5">
+          <select
+            id="payroll-method"
+            value={method}
+            onChange={(e) => setMethod(e.target.value as PayrollMethod)}
+            className="w-72 max-w-full rounded-lg border border-line px-3 py-2 text-sm text-ink focus:border-brand focus:outline-none"
+          >
+            {PAYROLL_METHODS.map((m) => (
+              <option key={m} value={m}>
+                {PAYROLL_METHOD_LABEL[m]}
+              </option>
+            ))}
+          </select>
         </div>
-        {/* No card fields. Card details are arranged directly with finance
-            over Telegram, so the app has no reason to hold a card number —
-            and every reason not to, given the invoice is emailed. */}
-        {method === "UZCARD" && (
-          <p className="rise-in mt-2 text-xs text-muted-fg">
-            Finance will arrange the card details with you directly — nothing to
-            enter here.
-          </p>
-        )}
-        {method === "WISE" && (
+        {/* Wise is the only method with something to type — the server
+            requires this address, so it's validated before submit too. */}
+        {methodNeedsWiseEmail(method) && (
           <div className="rise-in mt-2">
             <input
               type="email"
@@ -413,9 +413,19 @@ export function PayrollForm({
             />
           </div>
         )}
-        {method === "CASH" && (
-          <p className="mt-2 text-xs text-muted-fg">
+        {methodIsCash(method) && (
+          <p className="rise-in mt-2 text-xs text-muted-fg">
             Nothing else needed — you&rsquo;ll be paid in cash.
+          </p>
+        )}
+        {/* Everything else — UZS card, Stripe, SG Bank, Kapital Bank, Various.
+            No card or account fields. Those details are arranged directly with
+            finance over Telegram, so the app has no reason to hold a card
+            number — and every reason not to, given the invoice is emailed. */}
+        {!methodNeedsWiseEmail(method) && !methodIsCash(method) && (
+          <p className="rise-in mt-2 text-xs text-muted-fg">
+            Finance will arrange the details with you directly — nothing to
+            enter here.
           </p>
         )}
       </div>

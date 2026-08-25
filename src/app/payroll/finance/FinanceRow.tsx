@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition, type ReactNode } from "react";
+import { PanelFlags, type PanelFlag } from "../_components/PanelFlags";
 import { processApproved, sendBackToAdmins } from "./actions";
 
 export type FinanceRowSummary = {
@@ -10,12 +11,16 @@ export type FinanceRowSummary = {
   bg: string;
   metaLine: string | null;
   netLabel: string;
+  /** Attention marks (waited too long, unusually large) — computed server-side. */
+  flags: PanelFlag[];
+  /** The payment source, shown on the row so a payout run can be read off it. */
+  sourceLabel: string;
 };
 
 /**
- * One request in the finance queue: expands to the full detail (children),
+ * One request in the finance panel: expands to the full detail (children),
  * with finance's two moves — confirm the payment, or send it back to the
- * admin queue with a required note. Mirrors ReviewRow; the moves differ.
+ * admin panel with a required note. Mirrors ReviewRow; the moves differ.
  */
 export function FinanceRow({
   submissionId,
@@ -84,6 +89,12 @@ export function FinanceRow({
             {[summary.deptLine, summary.metaLine].filter(Boolean).join(" · ") || "—"}
           </span>
         </span>
+        <PanelFlags flags={summary.flags} />
+        {/* Finance pays out per source, so it belongs on the row itself and
+            not only in the detail — a run of rows reads as a payout list. */}
+        <span className="shrink-0 rounded-full bg-canvas px-2 py-0.5 text-[11px] font-semibold text-muted-fg">
+          {summary.sourceLabel}
+        </span>
         <span className="shrink-0 text-sm font-semibold tabular-nums text-ink">
           {summary.netLabel}
         </span>
@@ -137,7 +148,7 @@ export function FinanceRow({
               Send {summary.name}&rsquo;s request back to review
             </h3>
             <p className="mt-1 text-xs text-muted-fg">
-              It returns to the admin queue with your note in the audit trail.
+              It returns to the admin panel with your note in the audit trail.
             </p>
             <textarea
               value={note}

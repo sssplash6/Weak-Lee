@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition, type ReactNode } from "react";
+import { PanelFlags, type PanelFlag } from "../_components/PanelFlags";
 import { confirmSubmission, declineSubmission } from "./actions";
 
 export type ReviewRowSummary = {
@@ -12,10 +13,12 @@ export type ReviewRowSummary = {
   statusBadge: string;
   netLabel: string;
   metaLine: string | null;
+  /** Attention marks (waited too long, unusually large) — computed server-side. */
+  flags: PanelFlag[];
 };
 
 /**
- * One request in the admin queue: a header row that expands in place to the
+ * One request in the admin panel: a header row that expands in place to the
  * full server-rendered detail (passed as children), plus the two admin moves —
  * approve to finance, or decline with a required note (a small modal). The
  * revalidated page moves the row on success; this component only holds the
@@ -88,6 +91,7 @@ export function ReviewRow({
             {[summary.deptLine, summary.metaLine].filter(Boolean).join(" · ") || "—"}
           </span>
         </span>
+        <PanelFlags flags={summary.flags} />
         <span
           className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold ${summary.statusBadge}`}
         >
@@ -147,8 +151,8 @@ export function ReviewRow({
               Decline {summary.name}&rsquo;s request
             </h3>
             <p className="mt-1 text-xs text-muted-fg">
-              The note goes to them with a 24-hour window to fix and resubmit
-              (never more than a day past the month&rsquo;s cutoff).
+              The note reopens their form until the filing deadline &mdash;
+              declining on the window&rsquo;s last day adds one more day.
             </p>
             <textarea
               value={note}

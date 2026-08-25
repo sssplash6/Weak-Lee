@@ -12,6 +12,8 @@ import {
   appUrl,
   ensureCurrentPeriod,
   expireLapsedSubmissions,
+  filingWindowState,
+  formatTashkent,
   inFlightSubmission,
   payrollAdminEmails,
   pullLedgerSnapshot,
@@ -26,6 +28,8 @@ import {
   RECEIPT_MIME_TYPES,
   payrollMonthName,
   payrollPeriodLabel,
+  isPayrollMethod,
+  methodNeedsWiseEmail,
   PAYROLL_CLOSED,
   PAYROLL_STATUS_LABEL,
   type PaymentDetails,
@@ -61,6 +65,10 @@ type ParsedExpense = {
  * its details, an `expenses` JSON array, and one optional `receipt_<i>` file
  * per expense. Snapshots the ledger, computes the net, renders the invoice
  * PDF, moves the request to SUBMITTED, and tells the payroll admins.
+ *
+ * Filing and editing are only allowed inside the period's filing window;
+ * refiling after a decline runs on the decline's own clock instead. See the
+ * "Which filing path is open?" section below.
  */
 export async function submitPayroll(
   formData: FormData,
@@ -94,14 +102,15 @@ export async function submitPayroll(
     return fail("Enter a valid base salary (whole dollars).");
   }
 
-  const method = String(formData.get("paymentMethod") ?? "") as PayrollMethod;
-  if (method !== "CASH" && method !== "UZCARD" && method !== "WISE") {
-    return fail("Pick a payment method.");
+  const rawMethod = formData.get("paymentMethod");
+  if (!isPayrollMethod(rawMethod)) {
+    return fail("Pick a preferred payment method.");
   }
-  // UZCARD carries nothing: the card details are arranged with finance over
-  // Telegram, so the app never sees a card number and can't leak one.
+  const method: PayrollMethod = rawMethod;
+  // Only Wise carries anything. Card and bank details are arranged with
+  // finance over Telegram, so the app never sees a number and can't leak one.
   let details: PaymentDetails = {};
-  if (method === "WISE") {
+  if (methodNeedsWiseEmail(method)) {
     const wiseEmail = String(formData.get("wiseEmail") ?? "").trim().slice(0, 200);
     if (!/^\S+@\S+\.\S+$/.test(wiseEmail)) return fail("Enter a valid Wise account email.");
     details = { wiseEmail };
@@ -163,16 +172,27 @@ export async function submitPayroll(
     select: { id: true, status: true, resubmitDeadline: true },
   });
 
+  // The filing window (last three days of the month plus the 1st of the next
+  // one — see periodBoundsFor). The page hides the form outside it, but the
+  // action stays POST-reachable and a page left open across the boundary would
+  // still submit, so this is where the window is actually enforced.
+  const filingWindow = filingWindowState(period, now);
+
   // "edit" is the filer changing a request that is still sitting in the queue.
-  // It's bounded by the review itself rather than by a clock: the moment an
-  // admin declines or approves, the window shuts on its own — a decline has
-  // its own timed resubmit path, and an approval can't be silently altered
+  // Inside the window it is bounded by the review as well as the clock: the
+  // moment an admin declines or approves, it shuts early — a decline has its
+  // own timed resubmit path, and an approval can't be silently altered
   // underneath the person who gave it.
   let mode: "create" | "resubmit" | "edit";
   if (!existing) {
-    if (now > period.filingClosesAt) {
+    if (filingWindow === "BEFORE") {
       return fail(
-        `Filing for ${label} has closed — no penalty, you'll simply file in next month's cycle.`,
+        `Filing for ${label} opens ${formatTashkent(period.filingOpensAt)} — the request pulls in the whole month, so it can't be filed before the month is nearly over.`,
+      );
+    }
+    if (filingWindow === "CLOSED") {
+      return fail(
+        `Filing for ${label} closed ${formatTashkent(period.filingClosesAt)} — no penalty, you'll simply file in next month's cycle.`,
       );
     }
     const blocking = await inFlightSubmission(prisma, userId);
@@ -183,11 +203,30 @@ export async function submitPayroll(
     }
     mode = "create";
   } else if (existing.status === "DECLINED") {
+    // Deliberately NOT window-gated: a decline carries its own deadline, and
+    // that deadline is allowed to run one day past the cutoff (the grace day
+    // in resubmitWindowFor). Refusing here would strand anyone declined late
+    // on the window's last day.
     if (!existing.resubmitDeadline || now > existing.resubmitDeadline) {
       return fail("The resubmit window has closed — this filing rolls into next month's cycle.");
     }
     mode = "resubmit";
   } else if (existing.status === "SUBMITTED") {
+    // An edit rewrites the whole request, so it is a filing and lives under the
+    // same window. Either way the request stands as filed; an admin who wants
+    // it changed declines it, which opens the resubmit path above. (BEFORE is
+    // reachable for requests filed under the old whole-month rule, so it gets
+    // its own wording rather than being told the window "closed".)
+    if (filingWindow === "CLOSED") {
+      return fail(
+        `Filing for ${label} closed ${formatTashkent(period.filingClosesAt)} — your request stays in review exactly as filed. If something needs changing, ask an admin to send it back.`,
+      );
+    }
+    if (filingWindow === "BEFORE") {
+      return fail(
+        `Filing for ${label} isn't open until ${formatTashkent(period.filingOpensAt)} — your request stays in review exactly as filed until then.`,
+      );
+    }
     mode = "edit";
   } else {
     return fail(

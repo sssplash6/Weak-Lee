@@ -11,6 +11,7 @@ import {
   canViewPayrollStats,
   ensureCurrentPeriod,
   expireLapsedSubmissions,
+  filingWindowState,
   formatTashkent,
   inFlightSubmission,
   isFinance,
@@ -43,8 +44,13 @@ export const metadata: Metadata = { title: "Payroll" };
 /**
  * The employee's payroll home: file this month's pay request (or refile after
  * a decline), watch it move through review, and reach every past invoice.
- * One request per calendar month; missing the cutoff carries no penalty — the
- * next month's snapshot sweeps up whatever is still unpaid.
+ *
+ * One request per calendar month, and filing is only open for a four-day
+ * window — the last three days of the month plus the 1st of the next one (see
+ * periodBoundsFor). Outside it this page says when the window opens or that it
+ * closed, rather than showing a form the action would only reject. Missing the
+ * window carries no penalty: the next month's snapshot sweeps up whatever is
+ * still unpaid.
  */
 export default async function PayrollPage() {
   const session = await auth();
@@ -72,7 +78,14 @@ export default async function PayrollPage() {
   await reconcilePayrollReminders(now);
   const period = await ensureCurrentPeriod(prisma, now);
   const label = payrollPeriodLabel(period.year, period.month);
-  const filingOpen = now <= period.filingClosesAt;
+  // Where we are in the filing window. Everything the page offers to DO keys
+  // off this; the server action re-checks it, so this only decides what is
+  // worth showing.
+  const filingWindow = filingWindowState(period, now);
+  const filingOpen = filingWindow === "OPEN";
+  // The window's closing day falls in the FOLLOWING month, so name that month
+  // in the copy — "the 1st" on its own reads as this month's. December wraps.
+  const nextMonthName = payrollMonthName(period.month === 12 ? 1 : period.month + 1);
 
   const current = await prisma.payrollSubmission.findUnique({
     where: { userId_periodId: { userId: me.id, periodId: period.id } },
@@ -139,15 +152,20 @@ export default async function PayrollPage() {
   });
   const prefill = {
     baseSalary: latest?.baseSalary ?? null,
-    method: latest?.paymentMethod ?? ("CASH" as const),
+    // A first-time filer has no previous method to copy. The team is
+    // Tashkent-based and most people are paid in cash there, so that is the
+    // one that needs changing least often — and it is the value the old CASH
+    // enum member migrated onto, so returning filers land where they were.
+    method: latest?.paymentMethod ?? ("CASH_UZBEKISTAN" as const),
     details: parsePaymentDetails(latest?.paymentDetails),
   };
 
   const canFileFresh = !current && filingOpen;
   const canResubmit = current?.status === "DECLINED"; // lapsed ones were swept above
-  // Still in the queue and untouched by a reviewer, so the filer can change it.
-  // No deadline of its own: an admin acting on it is what closes the window.
-  const canEdit = current?.status === "SUBMITTED";
+  // Still in the queue, untouched by a reviewer, and the window is still open.
+  // The review is the other bound: an admin acting on it closes editing early,
+  // whatever the clock says.
+  const canEdit = current?.status === "SUBMITTED" && filingOpen;
   const blocking = canFileFresh ? await inFlightSubmission(prisma, me.id) : null;
 
   const dateOf = (d: Date) => formatYmd(toYmd(d), period.year);
@@ -188,7 +206,13 @@ export default async function PayrollPage() {
             current.status === "SUBMITTED"
               ? {
                   tone: "border-brand/30 bg-brand-soft text-brand",
-                  text: "Awaiting admin review — you'll get a notification when it moves.",
+                  // Editing follows the filing window, so say so here rather
+                  // than letting the Edit button quietly go missing.
+                  text: `Awaiting admin review — you'll get a notification when it moves.${
+                    filingOpen
+                      ? ""
+                      : " Filing is closed, so it stands exactly as filed; an admin can send it back if something needs changing."
+                  }`,
                 }
               : current.status === "APPROVED_BY_ADMIN"
                 ? {
@@ -264,7 +288,7 @@ export default async function PayrollPage() {
               href="/payroll/review"
               className="whitespace-nowrap rounded-xl border border-line bg-surface px-4 py-2 text-sm font-semibold text-brand shadow-sm transition hover:bg-canvas"
             >
-              Review queue
+              Review panel
             </Link>
           )}
           {isFinance(me.email) && (
@@ -272,7 +296,7 @@ export default async function PayrollPage() {
               href="/payroll/finance"
               className="whitespace-nowrap rounded-xl border border-line bg-surface px-4 py-2 text-sm font-semibold text-brand shadow-sm transition hover:bg-canvas"
             >
-              Finance queue
+              Finance panel
             </Link>
           )}
           <Link
@@ -366,7 +390,18 @@ export default async function PayrollPage() {
         />
       )}
 
-      {!current && !filingOpen && (
+      {!current && filingWindow === "BEFORE" && (
+        <section className="rounded-xl border border-line bg-surface p-4 sm:p-5">
+          <h2 className="text-sm font-semibold text-ink">
+            {label} filing opens {formatTashkent(period.filingOpensAt)}
+          </h2>
+          <p className="mt-2 text-sm text-muted-fg">
+            {`The window is the last three days of ${payrollMonthName(period.month)} plus the 1st of ${nextMonthName} — open until ${formatTashkent(period.filingClosesAt)}. Your request snapshots the whole month's bonuses and fines, so it's filed once the month is nearly over. You'll get a reminder the morning it opens.`}
+          </p>
+        </section>
+      )}
+
+      {!current && filingWindow === "CLOSED" && (
         <section className="rounded-xl border border-line bg-surface p-4 sm:p-5">
           <h2 className="text-sm font-semibold text-ink">
             {label} filing has closed

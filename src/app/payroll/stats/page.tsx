@@ -345,7 +345,7 @@ export default async function PayrollStatsPage({
 
         <section className="rounded-xl border border-line bg-surface p-4">
           <h2 className="text-sm font-semibold text-ink">
-            Payment methods — {label}
+            Preferred payment methods — {label}
           </h2>
           <p className="mb-3 mt-0.5 text-xs text-muted-fg">
             How the filed requests want to be paid{dept ? ` · ${dept}` : ""}.

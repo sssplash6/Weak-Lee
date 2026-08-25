@@ -16,6 +16,8 @@ import { PDFDocument, type PDFFont, rgb } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import { PENALTY_LABEL, type PenaltyType } from "@/lib/penalties";
 import {
+  methodIsCash,
+  methodNeedsWiseEmail,
   PAYROLL_METHOD_LABEL,
   type PayrollMethod,
   type PaymentDetails,
@@ -243,19 +245,24 @@ export async function renderPayrollInvoice(
 
   // ----- Notes: how to pay this person -----
   //
-  // No card details. This PDF is emailed — to every finance address on
-  // approval, and back to the employee on payout — and card details are
+  // No card or bank numbers. This PDF is emailed — to every finance address on
+  // approval, and back to the employee on payout — and those details are
   // arranged directly over Telegram, so there is nothing here to print and
   // nothing to leak through a third-party mail provider.
-  const noteLines = [
-    `Payment method: ${PAYROLL_METHOD_LABEL[data.paymentMethod]}`,
-    ...(data.paymentMethod === "UZCARD"
-      ? ["Card details: arranged directly with finance"]
-      : []),
-    ...(data.paymentMethod === "WISE"
-      ? [`Account email: ${data.paymentDetails.wiseEmail ?? ""}`]
-      : []),
-  ];
+  //
+  // "Preferred" because the method is what the employee asked for, not what
+  // finance is bound to: the same wording the employee sees on the form.
+  const method = data.paymentMethod;
+  const noteLines = [`Preferred payment method: ${PAYROLL_METHOD_LABEL[method]}`];
+  if (methodNeedsWiseEmail(method)) {
+    // Wise is the only method that carries something the employee typed.
+    noteLines.push(`Account email: ${data.paymentDetails.wiseEmail ?? ""}`);
+  } else if (!methodIsCash(method)) {
+    // Every other non-cash route — card, bank transfer, Stripe, "various" —
+    // is settled off-app, so finance reads this as "you already know where".
+    // Cash needs no second line: there is nothing to send it to.
+    noteLines.push("Account details: arranged directly with finance");
+  }
   ensureRoom(15 + noteLines.length * 14 + 10, false);
   text("Notes:", MARGIN_X, y, { color: GRAY });
   y -= 15;

@@ -21,7 +21,34 @@ export type PayrollStatus =
   | "APPROVED_BY_ADMIN"
   | "PROCESSED";
 
-export type PayrollMethod = "CASH" | "UZCARD" | "WISE";
+/**
+ * How someone is paid. These mirror the "Source" column of the finance team's
+ * accounting sheet one-for-one, so a filed row reconciles against that sheet
+ * without translation.
+ */
+export type PayrollMethod =
+  | "CASH_SINGAPORE"
+  | "CASH_UZBEKISTAN"
+  | "WISE_USD"
+  | "UZS_CARD"
+  | "STRIPE"
+  | "SG_CASH"
+  | "SG_BANK"
+  | "KAPITAL_BANK"
+  | "VARIOUS";
+
+/** Every method, in the order the accounting sheet lists them. */
+export const PAYROLL_METHODS: PayrollMethod[] = [
+  "CASH_SINGAPORE",
+  "CASH_UZBEKISTAN",
+  "WISE_USD",
+  "UZS_CARD",
+  "STRIPE",
+  "SG_CASH",
+  "SG_BANK",
+  "KAPITAL_BANK",
+  "VARIOUS",
+];
 
 /** How each status reads in the UI — phrased for the employee's point of view. */
 export const PAYROLL_STATUS_LABEL: Record<PayrollStatus, string> = {
@@ -34,17 +61,46 @@ export const PAYROLL_STATUS_LABEL: Record<PayrollStatus, string> = {
 };
 
 export const PAYROLL_METHOD_LABEL: Record<PayrollMethod, string> = {
-  CASH: "Cash",
-  UZCARD: "UzCard",
-  WISE: "Wise",
+  CASH_SINGAPORE: "Cash Singapore",
+  CASH_UZBEKISTAN: "Cash Uzbekistan",
+  WISE_USD: "Wise USD",
+  UZS_CARD: "UZS card",
+  STRIPE: "Stripe",
+  SG_CASH: "SG Cash",
+  SG_BANK: "SG Bank",
+  KAPITAL_BANK: "Kapital Bank",
+  VARIOUS: "Various",
 };
 
+/** True for a value the enum actually holds — use on anything caller-supplied. */
+export function isPayrollMethod(v: unknown): v is PayrollMethod {
+  return typeof v === "string" && (PAYROLL_METHODS as string[]).includes(v);
+}
+
 /**
- * What the chosen payment method stores in `paymentDetails`: WISE the account
- * email, CASH and UZCARD nothing. A card number is deliberately absent — those
- * details are arranged with finance over Telegram, so the app never holds one.
- * Rows written before that decision may still carry card keys; nothing reads
- * them.
+ * The one method that needs something typed alongside it. Everything else is
+ * either cash or is arranged with finance directly, so the app holds no
+ * account or card number for it.
+ */
+export function methodNeedsWiseEmail(method: PayrollMethod): boolean {
+  return method === "WISE_USD";
+}
+
+/** Whether this method is paid in physical cash — nothing else to collect. */
+export function methodIsCash(method: PayrollMethod): boolean {
+  return (
+    method === "CASH_SINGAPORE" ||
+    method === "CASH_UZBEKISTAN" ||
+    method === "SG_CASH"
+  );
+}
+
+/**
+ * What the chosen payment method stores in `paymentDetails`: WISE_USD the
+ * account email, every other method nothing. A card or account number is
+ * deliberately absent — those details are arranged with finance over Telegram,
+ * so the app never holds one. Rows written before that decision may still
+ * carry card keys; nothing reads them.
  */
 export type PaymentDetails = {
   wiseEmail?: string;
@@ -60,21 +116,23 @@ export function parsePaymentDetails(v: unknown): PaymentDetails {
 }
 
 /**
- * How this person gets paid, in one line: "UzCard", "Wise · a@b.c", or "Cash".
+ * How this person gets paid, in one line: "UZS card", "Wise USD · a@b.c",
+ * "Cash Singapore" — the sheet's own wording, plus the Wise address when
+ * there is one.
  *
- * There is no masked/unmasked pair any more. There used to be, because UzCard
- * stored a card number and finance needed to see all of it; now the card
- * details are settled over Telegram and there is nothing here to hide.
+ * There is no masked/unmasked pair any more. There used to be, because the
+ * card method stored a card number and finance needed to see all of it; now
+ * those details are settled over Telegram and there is nothing here to hide.
  */
 export function paymentSummary(
   method: PayrollMethod,
   details: PaymentDetails,
 ): string {
-  if (method === "UZCARD") return "UzCard";
-  if (method === "WISE") {
-    return ["Wise", details.wiseEmail].filter(Boolean).join(" · ");
+  const label = PAYROLL_METHOD_LABEL[method];
+  if (methodNeedsWiseEmail(method)) {
+    return [label, details.wiseEmail].filter(Boolean).join(" · ");
   }
-  return "Cash";
+  return label;
 }
 
 /** The one formula: base + bonuses − fines + expenses. Shown, not just stored. */

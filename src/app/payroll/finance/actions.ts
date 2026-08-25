@@ -19,7 +19,7 @@ import { payrollPeriodLabel, PAYROLL_CLOSED } from "@/lib/payrollTypes";
 export type FinanceActionResult = { ok: true } | { ok: false; error: string };
 const fail = (error: string): FinanceActionResult => ({ ok: false, error });
 
-function revalidateQueues() {
+function revalidatePanels() {
   revalidatePath("/payroll");
   revalidatePath("/payroll/review");
   revalidatePath("/payroll/finance");
@@ -106,12 +106,12 @@ export async function processApproved(
     });
   }
 
-  revalidateQueues();
+  revalidatePanels();
   return { ok: true };
 }
 
 /**
- * Return an approved request to the admin queue with a required note —
+ * Return an approved request to the admin panel with a required note —
  * finance's recovery path for admin mistakes and for the snapshot-drift
  * refusal above. The request goes back to SUBMITTED; the note lives in the
  * audit trail and reaches both admins.
@@ -159,12 +159,12 @@ export async function sendBackToAdmins(
         to,
         subject: `Payroll: ${who}'s ${label} request sent back by finance`,
         text:
-          `Finance returned ${who}'s ${label} pay request to the review queue:\n\n“${cleanNote}”\n\n` +
+          `Finance returned ${who}'s ${label} pay request to the review panel:\n\n“${cleanNote}”\n\n` +
           `Review it: ${appUrl()}/payroll/review\n\n— FreshWeek`,
       }),
     ),
   );
 
-  revalidateQueues();
+  revalidatePanels();
   return { ok: true };
 }

@@ -108,36 +108,88 @@ export async function reviewerUsers(
   });
 }
 
-// ----- The calendar month, in Tashkent -----
+// ----- The calendar month, and its filing window, in Tashkent -----
 
 const TASHKENT_UTC_OFFSET_HOURS = 5; // Asia/Tashkent is UTC+5, no DST
 const OFFSET_MS = TASHKENT_UTC_OFFSET_HOURS * 3_600_000;
+const DAY_MS = 24 * 3_600_000;
+
+/**
+ * Which Tashkent calendar day an instant falls on, as a bare day count since
+ * the epoch. Two instants are on the same Tashkent date exactly when their
+ * counts match — no formatting, no per-comparison Date, and no second place
+ * for the offset arithmetic to drift out of step with periodBoundsFor.
+ */
+function tashkentDayNumber(at: Date): number {
+  return Math.floor((at.getTime() + OFFSET_MS) / DAY_MS);
+}
 
 export type PayrollPeriodBounds = {
   year: number;
   month: number; // 1–12
   startsAt: Date;
   endsAt: Date;
+  filingOpensAt: Date;
   filingClosesAt: Date;
   remindAt: Date;
 };
 
 /**
  * The payroll period `now` falls in, all boundaries as UTC instants of
- * Tashkent wall-clock times: the month runs [1st 00:00, next 1st 00:00),
- * filing closes 23:59:59 on the last day, and the reminder fires 09:00 three
- * days before the last day (Aug 31st → Aug 28th).
+ * Tashkent wall-clock times.
+ *
+ * The month itself runs [1st 00:00, next 1st 00:00). Filing is deliberately
+ * NOT open for all of it — the window is the last three days of the month plus
+ * the first day of the next one:
+ *
+ *   opens  00:00:00 on (last day − 2)  … Aug 29th, for a 31-day August
+ *   closes 23:59:59 on the 1st of M+1  … Sep 1st
+ *
+ * Four days, so everyone files against a nearly-final ledger (a request filed
+ * on the 3rd would snapshot none of the month's later bonuses and fines) and
+ * finance reviews one batch instead of a month-long trickle.
+ *
+ * Because that window crosses the month boundary, the 1st of a month still
+ * belongs to the month BEFORE it as far as payroll is concerned — hence the
+ * day-1 step-back below. Without it, /payroll would flip to the new month on
+ * the very day the old month's window is meant to be closing, and the last day
+ * of the window would be unreachable.
+ *
+ * `remindAt` is 09:00 on the opening day — nine hours into the window, not
+ * before it: a nudge to file is only worth sending while filing can be done.
  */
 export function periodBoundsFor(now: Date): PayrollPeriodBounds {
   const tash = new Date(now.getTime() + OFFSET_MS);
-  const year = tash.getUTCFullYear();
-  const m0 = tash.getUTCMonth();
+  // Date.UTC normalizes a month of −1 into the previous December, so a January
+  // 1st rolls back to the year before on its own — but only if the year is
+  // read off the NORMALIZED anchor rather than off `tash`.
+  const anchor = new Date(
+    Date.UTC(
+      tash.getUTCFullYear(),
+      tash.getUTCMonth() - (tash.getUTCDate() === 1 ? 1 : 0),
+      1,
+    ),
+  );
+  const year = anchor.getUTCFullYear();
+  const m0 = anchor.getUTCMonth();
   const startsAt = new Date(Date.UTC(year, m0, 1) - OFFSET_MS);
   const endsAt = new Date(Date.UTC(year, m0 + 1, 1) - OFFSET_MS);
-  const filingClosesAt = new Date(endsAt.getTime() - 1_000);
+  // Day 0 of the next month is this month's last day — 28, 29, 30 or 31, so
+  // the window is measured from the end and never lands on a missing date.
   const lastDay = new Date(Date.UTC(year, m0 + 1, 0)).getUTCDate();
-  const remindAt = new Date(Date.UTC(year, m0, lastDay - 3, 9) - OFFSET_MS);
-  return { year, month: m0 + 1, startsAt, endsAt, filingClosesAt, remindAt };
+  const filingOpensAt = new Date(Date.UTC(year, m0, lastDay - 2) - OFFSET_MS);
+  // 23:59:59 on the 1st of M+1 is midnight starting its 2nd, less one second.
+  const filingClosesAt = new Date(Date.UTC(year, m0 + 1, 2) - OFFSET_MS - 1_000);
+  const remindAt = new Date(Date.UTC(year, m0, lastDay - 2, 9) - OFFSET_MS);
+  return {
+    year,
+    month: m0 + 1,
+    startsAt,
+    endsAt,
+    filingOpensAt,
+    filingClosesAt,
+    remindAt,
+  };
 }
 
 /**
@@ -152,6 +204,23 @@ export async function ensureCurrentPeriod(db: Db = prisma, now = new Date()) {
     update: {},
     create: b,
   });
+}
+
+/**
+ * Where `now` sits relative to a period's filing window. The bounds are read
+ * off the row, never recomputed here: a period keeps the window it was created
+ * with, so a rule change can't retroactively reopen or shut a month people
+ * already filed under.
+ */
+export type FilingWindowState = "BEFORE" | "OPEN" | "CLOSED";
+
+export function filingWindowState(
+  period: { filingOpensAt: Date; filingClosesAt: Date },
+  now: Date,
+): FilingWindowState {
+  if (now < period.filingOpensAt) return "BEFORE";
+  if (now > period.filingClosesAt) return "CLOSED";
+  return "OPEN";
 }
 
 // ----- Status machine -----
@@ -220,20 +289,49 @@ export async function applyTransition(
 }
 
 /**
- * The resubmit window a decline at `now` grants: 24 hours, allowed to run past
- * the month's filing cutoff by at most one day — min(now + 24h,
- * filingClosesAt + 24h) — so a decline late on the last day still leaves a
- * full day to fix and resend, but a re-decline after the cutoff never extends
- * further. Returns whether that window reaches past the cutoff (the
- * once-per-period grace day).
+ * The deadline a decline at `now` leaves the filer, and whether it runs past
+ * the month's filing cutoff (the once-per-period grace day).
+ *
+ * A decline does NOT start a fresh 24-hour clock. The filer already has a
+ * deadline — the cutoff their period closes on — and being sent back to fix a
+ * note is no reason to shorten it. The old min(now + 24h, cutoff + 24h) did
+ * exactly that: declining on the 27th handed back a deadline of the 28th and
+ * quietly took days of runway off someone who still had the whole window. So
+ * the ordinary case hands the cutoff back unchanged.
+ *
+ * The one exception is a decline ON the window's last day — the 1st of M+1,
+ * where filingClosesAt sits, NOT the last day of the month itself (see
+ * periodBoundsFor). A decline at 22:00 that day would leave two hours to redo
+ * a whole pay request, so the deadline runs one day past the cutoff instead.
+ * That is the grace day, and `usesGraceDay` reports it so the caller can spend
+ * the once-per-period flag.
+ *
+ * "Last day" is a Tashkent calendar-day test, never a UTC one: 00:30 on the
+ * 1st in Tashkent is still the 31st in UTC, so five hours out of every day
+ * would be judged against the wrong date — the exact hours a late-night
+ * decline is most likely to land in.
+ *
+ * The result therefore only ever takes two values, cutoff or cutoff + 24h, and
+ * as time passes it moves from the first to the second and never back. That is
+ * what makes re-declines safe: a second decline can neither push the deadline
+ * further out once the grace day is spent, nor claw back a deadline it already
+ * granted — so the caller needs no `graceDayUsed` input to stay idempotent.
+ *
+ * This clock is the reason refiling a DECLINED request is NOT gated by the
+ * filing window: the grace day exists precisely to run past it.
  */
 export function resubmitWindowFor(
   now: Date,
   filingClosesAt: Date,
 ): { deadline: Date; usesGraceDay: boolean } {
-  const deadline = new Date(
-    Math.min(now.getTime() + 24 * 3_600_000, filingClosesAt.getTime() + 24 * 3_600_000),
-  );
+  // >= and not ===: nothing expires a SUBMITTED request, so an admin can
+  // decline days after the cutoff. Such a decline belongs with the last-day
+  // case (already past the deadline it would otherwise be handed), never with
+  // the shorter one.
+  const onLastDay = tashkentDayNumber(now) >= tashkentDayNumber(filingClosesAt);
+  // Copied, not aliased — the caller's `filingClosesAt` is a live Prisma row
+  // field and this value is written straight onto another row.
+  const deadline = new Date(filingClosesAt.getTime() + (onLastDay ? DAY_MS : 0));
   return { deadline, usesGraceDay: deadline.getTime() > filingClosesAt.getTime() };
 }
 
@@ -511,8 +609,10 @@ export function appUrl(): string {
 }
 
 /**
- * The filing reminder: 09:00 Tashkent three days before the month's last day,
+ * The filing reminder: 09:00 Tashkent on the day the filing window opens,
  * in-app + email to every eligible employee who hasn't submitted this period.
+ * It lands INSIDE the window on purpose — the window is only four days long,
+ * so the one reminder people get should be one they can act on immediately.
  * No cron exists — this runs lazily on payroll/dashboard loads, and the
  * optimistic claim on `reminderSentAt` makes it fire exactly once per period
  * however many requests race it. Declined and expired people are not nagged:

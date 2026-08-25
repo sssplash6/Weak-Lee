@@ -1,7 +1,8 @@
 // The reviewer's expanded view of one pay request: the arithmetic, the frozen
-// snapshot, expenses with receipts, the UNMASKED payment details (reviewers
-// move the money), the invoice PDF, and the audit trail. Server-rendered and
-// passed into the interactive queue rows as children.
+// snapshot, expenses with receipts, the payment source (nothing is withheld
+// here — reviewers move the money, and since card numbers left the app there
+// is nothing left to mask), the invoice PDF, and the audit trail.
+// Server-rendered and passed into the interactive panel rows as children.
 
 import { formatMoney } from "@/lib/penalties";
 import { LedgerBreakdown, type LedgerLineView } from "./LedgerBreakdown";
@@ -95,8 +96,15 @@ export function SubmissionDetail({ view }: { view: SubmissionDetailModel }) {
       )}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs text-muted-fg">
-          Pay to: <span className="font-medium text-ink">{view.paymentLine}</span>
+        {/* "Source" is the accounting sheet's own column name. The panels
+            group by it and finance reconciles against it line by line, so the
+            detail names it the same way instead of inventing a synonym, and
+            gives it a chip rather than burying it in grey body text. */}
+        <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-fg">
+          Source
+          <span className="rounded-full bg-brand-soft px-2 py-0.5 text-xs font-semibold text-brand">
+            {view.paymentLine}
+          </span>
         </p>
         <a
           href={`/payroll/submissions/${view.id}/pdf`}

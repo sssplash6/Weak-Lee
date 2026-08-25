@@ -22,8 +22,8 @@ import { payrollPeriodLabel, PAYROLL_CLOSED } from "@/lib/payrollTypes";
 export type ReviewActionResult = { ok: true } | { ok: false; error: string };
 const fail = (error: string): ReviewActionResult => ({ ok: false, error });
 
-/** The views a queue action changes, refreshed together. */
-function revalidateQueues() {
+/** The views a panel action changes, refreshed together. */
+function revalidatePanels() {
   revalidatePath("/payroll");
   revalidatePath("/payroll/review");
   revalidatePath("/payroll/finance");
@@ -47,10 +47,15 @@ async function loadForReview(submissionId: string) {
 
 /**
  * Decline a submitted pay request back to its owner. The note is the whole
- * point — it's what the employee fixes — so it's required. The resubmit
- * window is min(now + 24h, filingClosesAt + 24h): a decline late in the month
- * still leaves a real day to fix and resend (the once-per-period grace day),
- * but repeat declines past the cutoff never extend it further.
+ * point — it's what the employee fixes — so it's required.
+ *
+ * Declining takes nothing off the filer's clock: the resubmit deadline is the
+ * period's filing cutoff, exactly the deadline they already had. Only a
+ * decline on the window's last day moves it, one day past the cutoff, and that
+ * spends the once-per-period grace day — ORed in below because the flag
+ * records that the period ever ran past its cutoff, not that this particular
+ * decline did. resubmitWindowFor returns the same deadline for every later
+ * decline, so a re-decline can't extend the window or cut it short.
  */
 export async function declineSubmission(
   submissionId: string,
@@ -91,7 +96,7 @@ export async function declineSubmission(
       "PAYROLL",
       `Your ${label} pay request was declined — “${cleanNote}”. Resubmit by ${formatTashkent(window.deadline)}.`,
     );
-    // The other admin sees it in their feed so the queue isn't handled twice —
+    // The other admin sees it in their feed so the panel isn't handled twice —
     // in-app only, no email (the employee gets both).
     const admins = await reviewerUsers(tx, payrollAdminEmails());
     await notify(
@@ -113,12 +118,12 @@ export async function declineSubmission(
     });
   }
 
-  revalidateQueues();
+  revalidatePanels();
   return { ok: true };
 }
 
 /**
- * Approve a submitted request into the finance queue. Valera gets an in-app
+ * Approve a submitted request into the finance panel. Valera gets an in-app
  * notification and an email with the invoice PDF attached — the payment stage
  * works from the invoice, not the app state.
  */
@@ -174,6 +179,6 @@ export async function confirmSubmission(
     ),
   );
 
-  revalidateQueues();
+  revalidatePanels();
   return { ok: true };
 }
