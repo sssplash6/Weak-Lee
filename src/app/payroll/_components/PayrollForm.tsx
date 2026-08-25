@@ -349,7 +349,7 @@ export function PayrollForm({
             ))}
           </ul>
         )}
-        {expenses.length < MAX_PAYROLL_EXPENSES && (
+        {expenses.length < MAX_PAYROLL_EXPENSES ? (
           <button
             type="button"
             onClick={() =>
@@ -369,6 +369,12 @@ export function PayrollForm({
           >
             + Add an expense
           </button>
+        ) : (
+          // At the cap the button used to just vanish, which reads as the form
+          // breaking rather than as a limit — say so instead.
+          <p className="mt-2 text-xs text-muted-fg">
+            {`That's the maximum of ${MAX_PAYROLL_EXPENSES} expense lines — combine a few, or put the rest on next month's request.`}
+          </p>
         )}
       </div>
 
