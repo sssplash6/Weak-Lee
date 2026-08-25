@@ -6,11 +6,7 @@ import {
   formatMoney,
   PENALTY_CURRENCY,
 } from "@/lib/penalties";
-import {
-  addBonus,
-  addManualPenalty,
-  assignTask,
-} from "../../admin/actions";
+import { addBonus, addManualPenalty, assignTask } from "../../admin/actions";
 
 export type LeadMember = {
   id: string;
@@ -22,11 +18,17 @@ export type LeadMember = {
   /** The viewer's own row. They're in their team list, but can't act on it. */
   isSelf: boolean;
   /**
-   * Whether the viewer may assign/fine/bonus this person. False for
-   * themselves and for a peer lead; see manageableUserIds in lib/manage.ts,
-   * which the actions re-check server-side.
+   * Whether the viewer may assign this person a task. False for themselves —
+   * a lead sets their own goals on the dashboard — and for a peer lead.
    */
-  manageable: boolean;
+  canAssign: boolean;
+  /**
+   * Whether the viewer may fine or bonus this person. Same as canAssign plus
+   * themselves: a lead can settle their own fine or bonus from here. Both
+   * come from manageableUserIds in lib/manage.ts, which the actions re-check
+   * server-side, so a button can't offer what the action would refuse.
+   */
+  canMoney: boolean;
   goalCount: number;
   weekPercent: number;
   submittedAtLabel: string | null;
@@ -44,7 +46,10 @@ export function LeadRoster({ departments }: { departments: LeadDepartment[] }) {
   return (
     <div className="flex flex-col gap-4">
       {departments.map((d) => (
-        <section key={d.id} className="rounded-xl border border-line bg-surface">
+        <section
+          key={d.id}
+          className="rounded-xl border border-line bg-surface"
+        >
           <div className="flex items-baseline gap-2 border-b border-line px-4 py-3">
             <h2 className="text-sm font-bold text-ink">{d.name}</h2>
             <span className="rounded-full bg-canvas px-2 py-0.5 text-[11px] font-bold tabular-nums text-muted-fg">
@@ -53,8 +58,8 @@ export function LeadRoster({ departments }: { departments: LeadDepartment[] }) {
           </div>
           {d.people.length === 0 ? (
             <p className="px-4 py-4 text-sm text-muted-fg">
-              Nobody in this department yet — people join it at onboarding,
-              from their profile, or an admin adds them on the Departments page.
+              Nobody in this department yet — people join it at onboarding, from
+              their profile, or an admin adds them on the Departments page.
             </p>
           ) : (
             <ul className="flex flex-col">
@@ -121,35 +126,41 @@ function MemberRow({ member: p }: { member: LeadMember }) {
           </p>
         </div>
 
-        {/* No controls on a row the viewer can't act on — their own, or a
-            peer lead's. Rendering disabled buttons would advertise a power
-            that doesn't exist here; the row is still listed, just inert. */}
-        {p.manageable && (
+        {/* Only the controls this row actually permits. A peer lead's row has
+            none; the viewer's own has Fine and Bonus but no Assign. Rendering
+            a disabled button would advertise a power that isn't there. */}
+        {(p.canAssign || p.canMoney) && (
           <div className="flex shrink-0 items-center gap-2">
-            <button
-              type="button"
-              onClick={() => toggle("assign")}
-              aria-expanded={panel === "assign"}
-              className="shrink-0 rounded-lg border border-line px-2.5 py-1 text-xs font-medium text-brand transition hover:bg-brand-soft/60"
-            >
-              Assign
-            </button>
-            <button
-              type="button"
-              onClick={() => toggle("fine")}
-              aria-expanded={panel === "fine"}
-              className="shrink-0 rounded-lg border border-red-200 px-2.5 py-1 text-xs font-medium text-red-600 transition hover:bg-red-50"
-            >
-              Fine
-            </button>
-            <button
-              type="button"
-              onClick={() => toggle("bonus")}
-              aria-expanded={panel === "bonus"}
-              className="shrink-0 rounded-lg border border-green-200 px-2.5 py-1 text-xs font-medium text-green-700 transition hover:bg-green-50"
-            >
-              Bonus
-            </button>
+            {p.canAssign && (
+              <button
+                type="button"
+                onClick={() => toggle("assign")}
+                aria-expanded={panel === "assign"}
+                className="shrink-0 rounded-lg border border-line px-2.5 py-1 text-xs font-medium text-brand transition hover:bg-brand-soft/60"
+              >
+                Assign
+              </button>
+            )}
+            {p.canMoney && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => toggle("fine")}
+                  aria-expanded={panel === "fine"}
+                  className="shrink-0 rounded-lg border border-red-200 px-2.5 py-1 text-xs font-medium text-red-600 transition hover:bg-red-50"
+                >
+                  Fine
+                </button>
+                <button
+                  type="button"
+                  onClick={() => toggle("bonus")}
+                  aria-expanded={panel === "bonus"}
+                  className="shrink-0 rounded-lg border border-green-200 px-2.5 py-1 text-xs font-medium text-green-700 transition hover:bg-green-50"
+                >
+                  Bonus
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>

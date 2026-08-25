@@ -108,10 +108,15 @@ export default async function DepartmentPanelPage() {
   // Who the viewer may actually act on. Straight from lib/manage.ts, which is
   // what assignTask/addManualPenalty/addBonus re-check, so a row can never
   // show a button whose action would then refuse it.
-  const scope = await manageableUserIds({
-    id: userId,
-    email: session.user.email,
-  });
+  //
+  // Two scopes, because the powers no longer travel together: a lead may fine
+  // and bonus themselves, but not assign themselves a task. Same function,
+  // same flag the actions pass.
+  const actor = { id: userId, email: session.user.email };
+  const [assignScope, moneyScope] = await Promise.all([
+    manageableUserIds(actor),
+    manageableUserIds(actor, { allowSelf: true }),
+  ]);
 
   const pending = pendingUsers.map((u) => {
     const av = resolveAvatar(u.avatar, u.email ?? u.id);
@@ -145,7 +150,8 @@ export default async function DepartmentPanelPage() {
         bg: av.bg,
         lead: role === "LEAD",
         isSelf: u.id === userId,
-        manageable: scope === "all" || scope.has(u.id),
+        canAssign: assignScope === "all" || assignScope.has(u.id),
+        canMoney: moneyScope === "all" || moneyScope.has(u.id),
         goalCount: week?.goals.length ?? 0,
         weekPercent: week ? weekPercent(week.goals) : 0,
         submittedAtLabel: week?.submittedAt

@@ -198,7 +198,8 @@ export async function addManualPenalty(
   note: string,
 ) {
   const session = await auth();
-  await requireCanManage(session, [userId]);
+  // allowSelf: a lead may fine themselves from their own department panel.
+  await requireCanManage(session, [userId], { allowSelf: true });
   const value = Math.round(Number(amount));
   if (!Number.isFinite(value) || value <= 0 || value > MAX_PENALTY) {
     throw new Error("Enter a valid fine amount.");
@@ -573,7 +574,10 @@ export async function undoSettlement(batchId: string) {
  */
 export async function addBonus(userId: string, amount: number, note: string) {
   const session = await auth();
-  await requireCanManage(session, [userId]);
+  // allowSelf: a lead may award themselves from their own department panel.
+  // Deliberate — it's money, and it lands in the same ledgers and payroll
+  // snapshot as any other bonus, so it's visible on /admin and /penalties.
+  await requireCanManage(session, [userId], { allowSelf: true });
   const value = Math.round(Number(amount));
   if (!Number.isFinite(value) || value <= 0 || value > MAX_PENALTY) {
     throw new Error("Enter a valid bonus amount.");
