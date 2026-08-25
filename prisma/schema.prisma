@@ -707,6 +707,20 @@ model PayrollSubmission {
   paymentMethod  PayrollMethod
   paymentDetails Json          @default("{}")
 
+  // The payout figures, filled in by finance on /payroll/sheet as they settle
+  // each request. They mirror the accounting sheet's own columns, which is
+  // where these numbers live today: the app knows the USD arithmetic
+  // (salary/bonus/penalty/net) but not what actually left which account.
+  //
+  // UNITS ARE IN THE NAMES on purpose. UZS has no subunit in practice so it's
+  // whole som, but SGD and the Wise fee carry cents in the sheet ($50.00), and
+  // the rest of this app is whole-dollar Int — a bare `amountSgd` would be
+  // read as dollars by the next person and be wrong by 100x.
+  // Null means "not settled/recorded yet", which is not the same as zero.
+  amountUzs      Int?
+  amountSgdCents Int?
+  wiseFeeCents   Int?
+
   // First submit, never overwritten (the Week.submittedAt convention);
   // lastSubmittedAt moves with every resubmit and is the snapshot instant.
   submittedAt     DateTime?

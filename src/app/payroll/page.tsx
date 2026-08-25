@@ -299,6 +299,15 @@ export default async function PayrollPage() {
               Finance panel
             </Link>
           )}
+          {/* The month as a register — the same shape as the finance team's
+              accounting sheet, so a month can be read (and exported) in one
+              table instead of row by row. Same audience as Stats. */}
+          <Link
+            href="/payroll/sheet"
+            className="whitespace-nowrap rounded-xl border border-line bg-surface px-4 py-2 text-sm font-semibold text-brand shadow-sm transition hover:bg-canvas"
+          >
+            Sheet
+          </Link>
           <Link
             href="/payroll/stats"
             className="whitespace-nowrap rounded-xl border border-line bg-surface px-4 py-2 text-sm font-semibold text-brand shadow-sm transition hover:bg-canvas"
