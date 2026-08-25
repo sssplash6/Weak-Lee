@@ -17,7 +17,7 @@ import {
 } from "@/lib/payroll";
 import {
   payrollPeriodLabel,
-  PAYROLL_CLOSED,
+  isPayrollOpenFor,
   PAYROLL_METHOD_LABEL,
   type PayrollStatus,
 } from "@/lib/payrollTypes";
@@ -78,7 +78,7 @@ export default async function PayrollSheetPage({
   if (!session?.user?.id) redirect("/signin");
   await assertApproved(session.user);
   // Closed: reviewers see the same screen employees do, before any sweep runs.
-  if (PAYROLL_CLOSED) return <PayrollComingSoon />;
+  if (!isPayrollOpenFor(session.user.email)) return <PayrollComingSoon />;
   // Reading the register is for everyone who reviews money; recording a figure
   // is narrower (see below), and the action enforces that side independently.
   if (!canViewPayrollStats(session.user.email)) redirect("/dashboard");

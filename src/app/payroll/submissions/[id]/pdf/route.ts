@@ -6,15 +6,18 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { isFinance, isPayrollAdmin } from "@/lib/payroll";
-import { payrollPeriodLabel, PAYROLL_CLOSED } from "@/lib/payrollTypes";
+import { payrollPeriodLabel, isPayrollOpenFor } from "@/lib/payrollTypes";
 
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  if (PAYROLL_CLOSED) return new Response("Payroll is closed", { status: 404 });
   const session = await auth();
   if (!session?.user) return new Response("Sign in required", { status: 401 });
+  // Payroll off, or this account isn't in the restricted rollout yet.
+  if (!isPayrollOpenFor(session.user.email)) {
+    return new Response("Payroll is closed", { status: 404 });
+  }
 
   const { id } = await params;
   const submission = await prisma.payrollSubmission.findUnique({

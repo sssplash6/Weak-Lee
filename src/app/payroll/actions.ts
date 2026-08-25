@@ -30,7 +30,7 @@ import {
   payrollPeriodLabel,
   isPayrollMethod,
   methodNeedsWiseEmail,
-  PAYROLL_CLOSED,
+  isPayrollOpenFor,
   PAYROLL_STATUS_LABEL,
   type PaymentDetails,
   type PayrollMethod,
@@ -73,11 +73,14 @@ type ParsedExpense = {
 export async function submitPayroll(
   formData: FormData,
 ): Promise<SubmitPayrollResult> {
-  // The page renders the coming-soon screen while payroll is closed, but the
-  // action stays POST-reachable — refuse here too.
-  if (PAYROLL_CLOSED) return fail("Payroll is closed right now.");
   const session = await auth();
   if (!session?.user?.id) throw new Error("Not authenticated");
+  // The page renders the coming-soon screen when payroll is off or this
+  // account isn't in the restricted rollout, but the action stays
+  // POST-reachable — refuse here too.
+  if (!isPayrollOpenFor(session.user.email)) {
+    return fail("Payroll is closed right now.");
+  }
   if (!(await isApprovedUser(session.user))) throw new Error("Not authorized");
   const userId = session.user.id;
 

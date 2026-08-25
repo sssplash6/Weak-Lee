@@ -21,7 +21,7 @@ import {
   parsePaymentDetails,
   paymentSummary,
   payrollPeriodLabel,
-  PAYROLL_CLOSED,
+  isPayrollOpenFor,
   PAYROLL_STATUS_BADGE,
   PAYROLL_STATUS_LABEL,
   type PayrollStatus,
@@ -86,7 +86,7 @@ export default async function PayrollReviewPage({
   if (!session?.user?.id) redirect("/signin");
   await assertApproved(session.user);
   // Closed: reviewers see the same screen employees do, before any sweep runs.
-  if (PAYROLL_CLOSED) return <PayrollComingSoon />;
+  if (!isPayrollOpenFor(session.user.email)) return <PayrollComingSoon />;
   if (!isPayrollAdmin(session.user.email)) redirect("/payroll");
 
   const now = new Date();

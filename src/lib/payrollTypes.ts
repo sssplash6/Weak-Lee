@@ -13,6 +13,35 @@
  */
 export const PAYROLL_CLOSED = false;
 
+/**
+ * Restricted rollout. While this list is non-empty, payroll is open ONLY to
+ * these accounts; every other account sees exactly what the kill switch shows.
+ * Empty the list to open payroll to the whole team again.
+ *
+ * This is deliberately a second, narrower switch rather than a change to
+ * PAYROLL_CLOSED: the kill switch answers "is the feature on at all", this
+ * answers "who can reach it yet", and a soft launch needs both to be true.
+ * Everything keys off the same helper below — routes, server actions, the PDF
+ * and receipt routes, and the two lazy sweeps — so there is no surface where
+ * the list is enforced in one place and forgotten in another.
+ */
+export const PAYROLL_OPEN_TO: readonly string[] = ["tech@freshman.academy"];
+
+/**
+ * Whether payroll is available to this account. The kill switch wins over the
+ * allowlist, and an empty allowlist means everyone.
+ */
+export function isPayrollOpenFor(email: string | null | undefined): boolean {
+  if (PAYROLL_CLOSED) return false;
+  if (PAYROLL_OPEN_TO.length === 0) return true;
+  return !!email && PAYROLL_OPEN_TO.includes(email.toLowerCase());
+}
+
+/** The allowlist, lowercased — for the sweeps, which work in bulk. */
+export function payrollOpenToEmails(): string[] {
+  return PAYROLL_OPEN_TO.map((e) => e.toLowerCase());
+}
+
 export type PayrollStatus =
   | "DRAFT"
   | "SUBMITTED"

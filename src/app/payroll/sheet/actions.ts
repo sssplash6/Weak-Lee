@@ -5,7 +5,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/admin";
 import { isFinance } from "@/lib/payroll";
-import { PAYROLL_CLOSED } from "@/lib/payrollTypes";
+import { isPayrollOpenFor } from "@/lib/payrollTypes";
 
 export type SheetResult = { ok: true } | { ok: false; error: string };
 
@@ -93,8 +93,10 @@ export async function setSheetFigures(
     wiseFeeCents?: string | null;
   },
 ): Promise<SheetResult> {
-  if (PAYROLL_CLOSED) return fail("Payroll is closed right now.");
-  await requireSheetEditor();
+  const session = await requireSheetEditor();
+  if (!isPayrollOpenFor(session.user?.email)) {
+    return fail("Payroll is closed right now.");
+  }
 
   const uzs = readFigure(parseFigure(figures.amountUzs, MAX_UZS, "The UZS amount"));
   if ("error" in uzs) return fail(uzs.error);

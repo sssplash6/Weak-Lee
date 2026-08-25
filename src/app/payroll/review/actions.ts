@@ -17,7 +17,7 @@ import {
   resubmitWindowFor,
   reviewerUsers,
 } from "@/lib/payroll";
-import { payrollPeriodLabel, PAYROLL_CLOSED } from "@/lib/payrollTypes";
+import { payrollPeriodLabel, isPayrollOpenFor } from "@/lib/payrollTypes";
 
 export type ReviewActionResult = { ok: true } | { ok: false; error: string };
 const fail = (error: string): ReviewActionResult => ({ ok: false, error });
@@ -61,8 +61,10 @@ export async function declineSubmission(
   submissionId: string,
   note: string,
 ): Promise<ReviewActionResult> {
-  if (PAYROLL_CLOSED) return fail("Payroll is closed right now.");
   const session = await auth();
+  if (!isPayrollOpenFor(session?.user?.email)) {
+    return fail("Payroll is closed right now.");
+  }
   const actorId = await requirePayrollAdmin(session);
 
   const cleanNote = note.trim().slice(0, 1000);
@@ -130,8 +132,10 @@ export async function declineSubmission(
 export async function confirmSubmission(
   submissionId: string,
 ): Promise<ReviewActionResult> {
-  if (PAYROLL_CLOSED) return fail("Payroll is closed right now.");
   const session = await auth();
+  if (!isPayrollOpenFor(session?.user?.email)) {
+    return fail("Payroll is closed right now.");
+  }
   const actorId = await requirePayrollAdmin(session);
   await expireLapsedSubmissions();
 

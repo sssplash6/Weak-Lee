@@ -21,6 +21,8 @@ import {
 import {
   payrollPeriodLabel,
   PAYROLL_CLOSED,
+  isPayrollOpenFor,
+  payrollOpenToEmails,
   PAYROLL_STATUS_LABEL,
 } from "@/lib/payrollTypes";
 import { notify } from "@/lib/notifications";
@@ -345,8 +347,17 @@ export async function expireLapsedSubmissions(now = new Date()): Promise<void> {
   // Closed: a decline window that lapses while nobody can refile isn't the
   // employee's fault, so nothing expires until payroll reopens.
   if (PAYROLL_CLOSED) return;
+  // Same reasoning per-account during a restricted rollout: someone outside
+  // the allowlist can't reach the form, so their window must not tick down.
+  const allowed = payrollOpenToEmails();
   const lapsed = await prisma.payrollSubmission.findMany({
-    where: { status: "DECLINED", resubmitDeadline: { lt: now } },
+    where: {
+      status: "DECLINED",
+      resubmitDeadline: { lt: now },
+      ...(allowed.length > 0
+        ? { user: { email: { in: allowed, mode: "insensitive" as const } } }
+        : {}),
+    },
     select: { id: true },
   });
   for (const s of lapsed) {
@@ -641,7 +652,11 @@ export async function reconcilePayrollReminders(now = new Date()): Promise<void>
     }),
   ]);
   const filedIds = new Set(filed.map((s) => s.userId));
-  const unfiled = employees.filter((e) => !filedIds.has(e.id));
+  // Only people who can actually reach the form. During a restricted rollout
+  // everyone else would get an email pointing at a coming-soon screen.
+  const unfiled = employees.filter(
+    (e) => !filedIds.has(e.id) && isPayrollOpenFor(e.email),
+  );
   if (unfiled.length === 0) return; // nobody to remind — the claim is spent
 
   const label = payrollPeriodLabel(period.year, period.month);

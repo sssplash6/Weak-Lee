@@ -25,7 +25,7 @@ import {
   payrollMonthName,
   parsePaymentDetails,
   payrollPeriodLabel,
-  PAYROLL_CLOSED,
+  isPayrollOpenFor,
   PAYROLL_STATUS_BADGE,
   PAYROLL_STATUS_LABEL,
 } from "@/lib/payrollTypes";
@@ -57,7 +57,7 @@ export default async function PayrollPage() {
   if (!session?.user?.id) redirect("/signin");
   await assertApproved(session.user);
   // Closed: bail before the sweeps so nothing expires or emails while shut.
-  if (PAYROLL_CLOSED) return <PayrollComingSoon />;
+  if (!isPayrollOpenFor(session.user.email)) return <PayrollComingSoon />;
 
   const me = await prisma.user.findUnique({
     where: { id: session.user.id },
