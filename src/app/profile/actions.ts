@@ -11,6 +11,7 @@ import {
 import { parseYmd } from "@/lib/dates";
 import { AVATAR_EMOJIS } from "@/lib/avatar";
 import { notify } from "@/lib/notifications";
+import { claimVacantMiniLeads, miniLeadNotice } from "@/lib/miniDepartments";
 
 export type ProfileState = { error: string | null; saved: boolean };
 
@@ -41,13 +42,15 @@ async function notifyDepartmentLeads(departmentId: string, message: string) {
 
 /**
  * Join a department as a member — self-service, from the profile page. Lead
- * roles are never self-assigned (admins hand those out on /departments), and
- * an existing membership is left exactly as it is. The department's lead(s)
- * are told someone joined.
+ * roles are never self-assigned (admins hand those out on /departments) with
+ * one exception: a mini department with no head yet is led by whoever joins it
+ * first (see lib/miniDepartments.ts). An existing membership is left exactly as
+ * it is. The department's lead(s) are told someone joined.
  */
 export async function joinDepartment(departmentId: string) {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Not authenticated");
+  const userId = session.user.id;
 
   const department = await prisma.department.findUnique({
     where: { id: departmentId },
@@ -57,19 +60,27 @@ export async function joinDepartment(departmentId: string) {
 
   const existing = await prisma.departmentMembership.findUnique({
     where: {
-      userId_departmentId: { userId: session.user.id, departmentId },
+      userId_departmentId: { userId, departmentId },
     },
     select: { id: true },
   });
   if (existing) return; // already in it — nothing to do
 
-  await prisma.departmentMembership.create({
-    data: { userId: session.user.id, departmentId },
+  const claimed = await prisma.$transaction(async (tx) => {
+    await tx.departmentMembership.create({ data: { userId, departmentId } });
+    return claimVacantMiniLeads(tx, userId, [departmentId]);
   });
-  await notifyDepartmentLeads(
-    departmentId,
-    `${session.user.name ?? session.user.email ?? "Someone"} joined ${department.name} as a member.`,
-  );
+
+  // A mini department's first joiner heads it — tell them, rather than
+  // announcing them to themselves as a new member.
+  if (claimed.length > 0) {
+    await notify(prisma, userId, "OTHER", miniLeadNotice(department.name));
+  } else {
+    await notifyDepartmentLeads(
+      departmentId,
+      `${session.user.name ?? session.user.email ?? "Someone"} joined ${department.name} as a member.`,
+    );
+  }
   revalidateMembershipViews();
 }
 

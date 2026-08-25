@@ -22,6 +22,7 @@ export default async function DepartmentsPage() {
       select: {
         id: true,
         name: true,
+        mini: true,
         memberships: {
           // Leads first (enum order), then alphabetically.
           orderBy: [
@@ -70,6 +71,7 @@ export default async function DepartmentsPage() {
   const deptViews = departments.map((d) => ({
     id: d.id,
     name: d.name,
+    mini: d.mini,
     people: d.memberships.map((m) => toPerson(m.user, m.role === "LEAD")),
   }));
 
@@ -102,7 +104,8 @@ export default async function DepartmentsPage() {
             another — and each seat carries its own role. Leads owe Monday
             meetings and weekly/monthly submissions; members owe neither. New
             joiners pick their first department at onboarding and can join more
-            from their profile.
+            from their profile. A mini department is the exception: its head is
+            simply whoever joined first, and owes nothing.
           </p>
         </div>
         <BackLink href="/admin" label="Team overview" />

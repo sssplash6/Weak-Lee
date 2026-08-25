@@ -8,6 +8,7 @@ import {
   deleteDepartment,
   removeMembership,
   renameDepartment,
+  setDepartmentMini,
   setMembershipRole,
 } from "../actions";
 
@@ -24,6 +25,8 @@ export type Person = {
 export type DepartmentView = {
   id: string;
   name: string;
+  /** A mini department: its head owes nothing, and is whoever joined first. */
+  mini: boolean;
   people: Person[];
 };
 
@@ -207,13 +210,38 @@ function DepartmentCard({
             <span className="rounded-full bg-canvas px-2 py-0.5 text-[11px] font-bold tabular-nums text-muted-fg">
               {d.people.length}
             </span>
+            {d.mini && (
+              <span
+                className="shrink-0 rounded-full bg-canvas px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted-fg"
+                title="Mini department — its head owes no meeting and no weekly submission, so no fines, and the first person to join a headless one leads it."
+              >
+                Mini
+              </span>
+            )}
             <span className="min-w-0 flex-1 truncate text-xs text-muted-fg">
               {leads.length > 0 ? (
-                `Lead: ${leads.map((l) => l.name).join(", ")}`
+                `${d.mini ? "Head" : "Lead"}: ${leads.map((l) => l.name).join(", ")}`
+              ) : d.mini ? (
+                <span className="text-muted-fg">
+                  No head yet — the first to join becomes it
+                </span>
               ) : (
                 <span className="text-amber-700">No lead yet</span>
               )}
             </span>
+            <button
+              type="button"
+              disabled={isPending}
+              onClick={() => run(() => setDepartmentMini(d.id, !d.mini))}
+              title={
+                d.mini
+                  ? "Make it a full department — its lead takes on the Monday meeting and the weekly deadline."
+                  : "Make it a mini department — its lead stops owing the Monday meeting and the weekly deadline."
+              }
+              className="shrink-0 rounded-lg border border-line px-2.5 py-1 text-xs font-medium text-muted-fg transition hover:bg-canvas hover:text-ink disabled:opacity-50"
+            >
+              {d.mini ? "Make full" : "Make mini"}
+            </button>
             <button
               type="button"
               onClick={() => setRenaming(true)}

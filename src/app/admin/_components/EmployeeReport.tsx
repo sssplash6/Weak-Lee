@@ -258,9 +258,11 @@ export function EmployeeReport({
       >
         {e.reporting.expected === 0 ? (
           <Empty>
-            {e.lead
+            {e.expectedLead
               ? "No report was due in this range."
-              : "Members don't owe weekly reports — only department leads do."}
+              : e.lead
+                ? "A mini department's head doesn't owe weekly reports."
+                : "Members don't owe weekly reports — only department leads do."}
           </Empty>
         ) : (
           <>

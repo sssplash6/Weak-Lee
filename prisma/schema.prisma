@@ -33,6 +33,15 @@ model Department {
   name      String   @unique
   createdAt DateTime @default(now())
 
+  // A mini department (Alumni Council is the first): real for structure,
+  // onboarding and reporting, but it runs itself. Leading one carries none of
+  // the lead expectations — no Monday meeting seat, no weekly submission
+  // deadline — so no fine can ever arise from it (see isExpectedLead in
+  // lib/team.ts), and it has no admin-appointed head: the first person to take
+  // a seat becomes its lead (see lib/miniDepartments.ts). Someone who ALSO
+  // leads a normal department still owes everything through that seat.
+  mini Boolean @default(false)
+
   memberships DepartmentMembership[]
 }
 

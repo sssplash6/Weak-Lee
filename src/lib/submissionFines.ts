@@ -8,11 +8,12 @@
 // are never fined; people who submitted late keep the $20 they earned.
 //
 // The deadline only governs department leads (role LEAD — the ops director is
-// one). Members may set and submit goals like anyone else, but nothing is owed,
-// so they're never fined; any late-submission fine a member is still carrying
-// (from before roles existed) is released on the next sweep. Accounts on the
-// submission-exempt list (see lib/submissionExempt.ts) are skipped the same
-// way regardless of role.
+// one), and only through a normal department: leading a mini one (Alumni
+// Council, Department.mini) owes nothing. Members may set and submit goals
+// like anyone else, but nothing is owed, so they're never fined; any
+// late-submission fine a member is still carrying (from before roles existed)
+// is released on the next sweep. Accounts on the submission-exempt list (see
+// lib/submissionExempt.ts) are skipped the same way regardless of role.
 
 import { prisma } from "@/lib/prisma";
 import { notify } from "@/lib/notifications";
@@ -72,10 +73,12 @@ export async function reconcileSubmissionFines(opts?: {
 
   const users = await prisma.user.findMany({
     where: {
-      // Only department leads — anyone holding a LEAD membership somewhere —
-      // are expected to submit, and only ones who were around before the
-      // deadline (new joiners get a pass this cycle).
-      memberships: { some: { role: "LEAD" } },
+      // Only department leads — anyone holding a LEAD membership in a normal
+      // (non-mini) department — are expected to submit, and only ones who were
+      // around before the deadline (new joiners get a pass this cycle).
+      memberships: {
+        some: { role: "LEAD", department: { mini: false } },
+      },
       createdAt: { lt: submissionDeadline },
       ...(opts?.userId ? { id: opts.userId } : {}),
     },
@@ -254,17 +257,24 @@ export async function reconcileSubmissionFines(opts?: {
  * Drop any untouched late-submission fine held by someone the deadline doesn't
  * govern: an exempt account, or a member (only department leads owe weekly
  * submissions — a member's fine either predates the roles or predates their
- * demotion). Fines with money against them are left alone (it already moved;
- * an admin can reopen one on /penalties if it was wrong). Pass a `userId` to
- * limit this to one person, matching the sweep above.
+ * demotion). Leading only mini departments counts as a member here, so moving
+ * someone to one releases their fine on the next load. Fines with money
+ * against them are left alone (it already moved; an admin can reopen one on
+ * /penalties if it was wrong). Pass a `userId` to limit this to one person,
+ * matching the sweep above.
  */
 async function releaseUnexpectedSubmissionFines(userId?: string): Promise<void> {
   const unexpected = await prisma.user.findMany({
     where: {
       OR: [
         { email: { in: submissionExemptEmails(), mode: "insensitive" } },
-        // Leads no department at all — a member everywhere they belong.
-        { memberships: { none: { role: "LEAD" } } },
+        // Leads no department the deadline governs — a member everywhere they
+        // belong, or a lead of mini departments only.
+        {
+          memberships: {
+            none: { role: "LEAD", department: { mini: false } },
+          },
+        },
       ],
       ...(userId ? { id: userId } : {}),
     },

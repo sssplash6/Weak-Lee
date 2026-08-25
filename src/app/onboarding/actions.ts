@@ -7,6 +7,8 @@ import { prisma } from "@/lib/prisma";
 import { normalizeTelegram } from "@/lib/profile";
 import { AVATAR_EMOJIS } from "@/lib/avatar";
 import { parseYmd } from "@/lib/dates";
+import { claimVacantMiniLeads, miniLeadNotice } from "@/lib/miniDepartments";
+import { notify } from "@/lib/notifications";
 
 export type OnboardingState = { error: string | null };
 
@@ -14,8 +16,10 @@ export type OnboardingState = { error: string | null };
  * Save the onboarding profile (full name, work phone, Telegram handle,
  * departments picked from the existing list — one or more, and the animal
  * they'll wear across the app) for the signed-in user, then send them to the
- * dashboard. Every field is required. New joiners always start as a MEMBER in
- * each picked department — an admin promotes department leads on /departments.
+ * dashboard. Every field is required. New joiners start as a MEMBER in each
+ * picked department — an admin promotes department leads on /departments — the
+ * one exception being a mini department with no head yet, which its first
+ * joiner leads (see lib/miniDepartments.ts).
  */
 export async function completeProfile(
   _prev: OnboardingState,
@@ -70,25 +74,35 @@ export async function completeProfile(
   }
 
   try {
-    await prisma.user.update({
-      where: { id: userId },
-      data: {
-        name,
-        workPhone,
-        telegramUsername,
-        avatar: avatar || undefined,
-        birthday: birthdayDate,
-        // Their first seats, always as members. Upsert-shaped so re-running
-        // onboarding can never demote a lead membership an admin granted.
-        memberships: {
-          connectOrCreate: departmentIds.map((departmentId) => ({
-            where: {
-              userId_departmentId: { userId, departmentId },
-            },
-            create: { departmentId },
-          })),
+    // One transaction so the mini-department promotion can't land without the
+    // seat it promotes, and so two people joining an empty mini department at
+    // once can't both come out as its lead.
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: userId },
+        data: {
+          name,
+          workPhone,
+          telegramUsername,
+          avatar: avatar || undefined,
+          birthday: birthdayDate,
+          // Their first seats, always as members. Upsert-shaped so re-running
+          // onboarding can never demote a lead membership an admin granted.
+          memberships: {
+            connectOrCreate: departmentIds.map((departmentId) => ({
+              where: {
+                userId_departmentId: { userId, departmentId },
+              },
+              create: { departmentId },
+            })),
+          },
         },
-      },
+      });
+      const claimed = await claimVacantMiniLeads(tx, userId, departmentIds);
+      // They arrive on the dashboard already leading it — say why.
+      for (const d of claimed) {
+        await notify(tx, userId, "OTHER", miniLeadNotice(d.name));
+      }
     });
   } catch (e) {
     // One animal per person is a DB constraint: two people finishing sign-up

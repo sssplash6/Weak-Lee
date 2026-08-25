@@ -53,6 +53,46 @@ export async function createDepartment(name: string) {
   revalidateStructure();
 }
 
+/**
+ * Flip a department between normal and mini. A mini department's head owes
+ * nothing — no Monday meeting, no weekly submission, so no fine — and the
+ * first person to join a headless one leads it. Turning a department mini
+ * releases its lead's untouched submission fines on the next page load (the
+ * sweep in lib/submissionFines.ts does that); turning one back to normal puts
+ * its lead back on the hook from the next deadline. Admin-only.
+ */
+export async function setDepartmentMini(departmentId: string, mini: boolean) {
+  await requireAdmin();
+
+  const dept = await prisma.department.findUnique({
+    where: { id: departmentId },
+    select: { id: true, mini: true, name: true },
+  });
+  if (!dept) throw new Error("Department not found");
+  if (dept.mini === mini) return;
+
+  await prisma.department.update({
+    where: { id: departmentId },
+    data: { mini },
+  });
+
+  const leads = await prisma.departmentMembership.findMany({
+    where: { departmentId, role: "LEAD" },
+    select: { userId: true },
+  });
+  if (leads.length > 0) {
+    await notify(
+      prisma,
+      leads.map((l) => l.userId),
+      "OTHER",
+      mini
+        ? `${dept.name} is now a mini department — leading it no longer carries the Monday meeting or the weekly submission deadline.`
+        : `${dept.name} is a full department again — leading it now carries the Monday meeting and the weekly submission deadline.`,
+    );
+  }
+  revalidateStructure();
+}
+
 /** Rename a department. Every seat in it is untouched. Admin-only. */
 export async function renameDepartment(departmentId: string, name: string) {
   await requireAdmin();

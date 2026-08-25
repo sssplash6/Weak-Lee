@@ -22,7 +22,7 @@ import {
 } from "@/lib/dates";
 import { formatMoney, PENALTY_LABEL } from "@/lib/penalties";
 import { resolveAvatar } from "@/lib/avatar";
-import { departmentLine, isLead } from "@/lib/team";
+import { departmentLine, isExpectedLead } from "@/lib/team";
 import { monthLabel } from "@/lib/months";
 import { AdminTabs, type AdminTab } from "./_components/AdminTabs";
 import { AssignedTasksPanel } from "./_components/AssignedTasksPanel";
@@ -122,7 +122,10 @@ export default async function AdminPage({
         name: true,
         email: true,
         memberships: {
-          select: { role: true, department: { select: { name: true } } },
+          select: {
+            role: true,
+            department: { select: { name: true, mini: true } },
+          },
         },
         avatar: true,
         // The most recent weeks, newest first — enough to pick out the current
@@ -182,10 +185,15 @@ export default async function AdminPage({
     }),
     prisma.week.findMany({
       // Only leads owe the deadline; a member's historical Late flag (from
-      // before roles existed) shouldn't keep them on this list.
+      // before roles existed) shouldn't keep them on this list, and neither
+      // should a mini department's head, who owes no deadline at all.
       where: {
         submittedLate: true,
-        user: { memberships: { some: { role: "LEAD" } } },
+        user: {
+          memberships: {
+            some: { role: "LEAD", department: { mini: false } },
+          },
+        },
       },
       orderBy: { createdAt: "desc" },
       take: 25,
@@ -288,7 +296,10 @@ export default async function AdminPage({
             name: true,
             email: true,
             memberships: {
-              select: { role: true, department: { select: { name: true } } },
+              select: {
+                role: true,
+                department: { select: { name: true, mini: true } },
+              },
             },
             avatar: true,
             createdAt: true,
@@ -395,7 +406,7 @@ export default async function AdminPage({
       id: u.id,
       name: u.name,
       email: u.email,
-      lead: isLead(u.memberships),
+      lead: isExpectedLead(u.memberships),
       department: departmentLine(u.memberships),
       avatar: u.avatar,
       weekLabel: fields.label,
@@ -499,7 +510,7 @@ export default async function AdminPage({
     return baseUser(u, {
       label: wk ? fmtRange(wk.startDate, wk.endDate) : null,
       // Members owe no deadline, so nothing of theirs reads as late.
-      late: isLead(u.memberships) && (wk?.submittedLate ?? false),
+      late: isExpectedLead(u.memberships) && (wk?.submittedLate ?? false),
       submittedAt: wk?.submittedAt ?? null,
       aheadLabel: ahead,
       goals: wk?.goals ?? [],
@@ -513,10 +524,10 @@ export default async function AdminPage({
     const closed = currentWeekOf(u.weeks) != null;
     return baseUser(u, {
       label: wk ? fmtRange(wk.startDate, wk.endDate) : null,
-      late: isLead(u.memberships) && (wk?.submittedLate ?? false),
+      late: isExpectedLead(u.memberships) && (wk?.submittedLate ?? false),
       submittedAt: wk?.submittedAt ?? null,
       // "Didn't close" is a broken expectation, so it's a lead-only flag too.
-      notClosed: isLead(u.memberships) && wk != null && !closed,
+      notClosed: isExpectedLead(u.memberships) && wk != null && !closed,
       goals: wk?.goals ?? [],
     });
   });
@@ -533,8 +544,9 @@ export default async function AdminPage({
 
   // This week's meeting attendance roster. Only department leads (the ops
   // director included) are expected at the Monday meeting, so only they are
-  // marked — members never appear here and so can never be fined for it.
-  const meetingRoster = rawUsers.filter((u) => isLead(u.memberships));
+  // marked — members never appear here and so can never be fined for it, and
+  // neither do the heads of mini departments, who owe no meeting.
+  const meetingRoster = rawUsers.filter((u) => isExpectedLead(u.memberships));
   const attStatus = new Map(
     currentMeeting?.attendances.map((a) => [a.userId, a.status]) ?? [],
   );
@@ -600,8 +612,9 @@ export default async function AdminPage({
   }
 
   // How many leads are still stuck on the previous week (never closed it) —
-  // members aren't expected to run the weekly cycle, so they don't count.
-  const leadCount = rawUsers.filter((u) => isLead(u.memberships)).length;
+  // members aren't expected to run the weekly cycle, so they don't count, and
+  // nor does a mini department's head (notClosed is never set for them).
+  const leadCount = rawUsers.filter((u) => isExpectedLead(u.memberships)).length;
   const notClosedCount = usersPreviousWeek.filter((u) => u.notClosed).length;
 
   // Assigned-goal tracking rows for the monitoring list.

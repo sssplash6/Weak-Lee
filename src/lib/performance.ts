@@ -15,7 +15,12 @@ import {
   weekSubmissionDeadline,
 } from "@/lib/lateness";
 import type { AttendanceStatus, PenaltyType } from "@/lib/penalties";
-import { departmentLine, type TeamRole } from "@/lib/team";
+import {
+  departmentLine,
+  isExpectedLead,
+  isLead,
+  type TeamRole,
+} from "@/lib/team";
 
 // ---------------------------------------------------------------- input shapes
 
@@ -36,7 +41,10 @@ export type PerformanceSource = {
   id: string;
   name: string | null;
   email: string | null;
-  memberships: { role: TeamRole; department: { name: string } }[];
+  memberships: {
+    role: TeamRole;
+    department: { name: string; mini: boolean };
+  }[];
   avatar: string | null;
   createdAt: Date;
   weeks: {
@@ -90,8 +98,13 @@ export type EmployeePerformance = {
   id: string;
   name: string;
   email: string | null;
-  /** Leads at least one department — owes meetings and weekly reports. */
+  /** Leads at least one department — wears the "Dep. lead" badge. */
   lead: boolean;
+  /**
+   * Leads a department that carries expectations, i.e. not only mini ones —
+   * whether meetings and weekly reports are owed at all.
+   */
+  expectedLead: boolean;
   /** Every department they belong to, led ones first (see departmentNames). */
   departments: string[];
   /** The one-line display form of `departments`, or null with none. */
@@ -393,11 +406,13 @@ function computeOne(
   // deleting one — forgiving it, or clearing a fine issued in error — clears
   // the person's late mark with it. Cycles before the deadline was enforced
   // aren't judged at all rather than being scored retroactively. Only
-  // department leads owe cycles at all: a member's reporting block stays empty
+  // department leads owe cycles at all, and only through a normal department:
+  // a member's — or a mini department head's — reporting block stays empty
   // (expected 0, rate null) and its weight folds back out of their score.
   const submitted = weeks.filter((w) => w.submittedAt != null);
-  const lead = u.memberships.some((m) => m.role === "LEAD");
-  const owed = lead
+  const lead = isLead(u.memberships);
+  const expectedLead = isExpectedLead(u.memberships);
+  const owed = expectedLead
     ? cycles.filter((c) => u.createdAt.getTime() <= c.deadline.getTime())
     : [];
   let onTimeCount = 0;
@@ -502,6 +517,7 @@ function computeOne(
     name: u.name ?? u.email ?? "—",
     email: u.email,
     lead,
+    expectedLead,
     departments,
     department: departmentLine(u.memberships),
     avatar: u.avatar,
