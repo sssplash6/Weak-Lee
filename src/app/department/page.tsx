@@ -6,6 +6,7 @@ import { auth } from "@/auth";
 import { assertApproved } from "@/lib/approval";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/admin";
+import { manageableUserIds } from "@/lib/manage";
 import { resolveAvatar } from "@/lib/avatar";
 import { weekPercent } from "@/lib/progress";
 import { formatDateTimeTz } from "@/lib/dates";
@@ -14,11 +15,16 @@ import { LeadRoster, type LeadDepartment } from "./_components/LeadRoster";
 import { PendingSignups } from "./_components/PendingSignups";
 
 /**
- * The department panel for leads: everyone holding a MEMBER seat in a
- * department the viewer leads, with the lead's three powers — assign a goal,
- * fine, bonus — right on each row. Admins have the wider /admin view; this is
- * the scoped, day-to-day one for a lead. (The actions themselves re-check the
- * same scope server-side, see lib/manage.ts.)
+ * The department panel for leads: the whole roster of every department the
+ * viewer leads — the lead themself and any fellow leads included, so the list
+ * reads as the actual team rather than "everyone except me" — with the lead's
+ * three powers (assign a goal, fine, bonus) on the rows they apply to.
+ *
+ * Those powers do NOT extend to every row. A lead manages the MEMBER seats
+ * under them, not themselves and not a peer lead, so each row carries a
+ * `manageable` flag taken from lib/manage.ts — the same function the actions
+ * re-check server-side, so the buttons can never offer what the action would
+ * refuse. Admins have the wider /admin view; this is the day-to-day one.
  */
 export default async function DepartmentPanelPage() {
   const session = await auth();
@@ -36,10 +42,16 @@ export default async function DepartmentPanelPage() {
           id: true,
           name: true,
           memberships: {
-            // The people under this department: member seats, not fellow leads.
-            where: { role: "MEMBER", userId: { not: userId } },
-            orderBy: [{ user: { name: "asc" } }, { user: { email: "asc" } }],
+            // The whole department, leads included — the viewer is a seat in
+            // their own team list, not an absence from it. Leads first (enum
+            // order puts LEAD before MEMBER), then alphabetically.
+            orderBy: [
+              { role: "asc" },
+              { user: { name: "asc" } },
+              { user: { email: "asc" } },
+            ],
             select: {
+              role: true,
               user: {
                 select: {
                   id: true,
@@ -93,6 +105,14 @@ export default async function DepartmentPanelPage() {
   // Not a lead anywhere — this panel isn't theirs.
   if (led.length === 0) redirect("/dashboard");
 
+  // Who the viewer may actually act on. Straight from lib/manage.ts, which is
+  // what assignTask/addManualPenalty/addBonus re-check, so a row can never
+  // show a button whose action would then refuse it.
+  const scope = await manageableUserIds({
+    id: userId,
+    email: session.user.email,
+  });
+
   const pending = pendingUsers.map((u) => {
     const av = resolveAvatar(u.avatar, u.email ?? u.id);
     return {
@@ -108,7 +128,7 @@ export default async function DepartmentPanelPage() {
   const departments: LeadDepartment[] = led.map(({ department: d }) => ({
     id: d.id,
     name: d.name,
-    people: d.memberships.map(({ user: u }) => {
+    people: d.memberships.map(({ role, user: u }) => {
       const av = resolveAvatar(u.avatar, u.email ?? u.id);
       // A redeploy race can leave duplicate current weeks; prefer the
       // submitted one, then the fullest (same tie-break as getOrCreate).
@@ -123,6 +143,9 @@ export default async function DepartmentPanelPage() {
         name: u.name ?? u.email ?? "—",
         emoji: av.emoji,
         bg: av.bg,
+        lead: role === "LEAD",
+        isSelf: u.id === userId,
+        manageable: scope === "all" || scope.has(u.id),
         goalCount: week?.goals.length ?? 0,
         weekPercent: week ? weekPercent(week.goals) : 0,
         submittedAtLabel: week?.submittedAt
@@ -154,10 +177,12 @@ export default async function DepartmentPanelPage() {
               : "Your departments"}
           </h1>
           <p className="mt-1 text-sm text-muted-fg">
-            {`${peopleCount} ${peopleCount === 1 ? "person" : "people"} under you. `}
-            Assign goals, issue fines, and award bonuses — each lands on their
-            dashboard with a notification, and everything shows in the admin
-            ledgers too.
+            {`${peopleCount} ${peopleCount === 1 ? "person" : "people"} in your ${
+              departments.length === 1 ? "department" : "departments"
+            }, you included. `}
+            Assign goals, issue fines, and award bonuses on the members under
+            you — each lands on their dashboard with a notification, and
+            everything shows in the admin ledgers too.
           </p>
         </div>
         <BackLink href="/dashboard" label="My dashboard" />

@@ -17,6 +17,16 @@ export type LeadMember = {
   name: string;
   emoji: string;
   bg: string;
+  /** Holds the LEAD seat in THIS department — badged, and never actionable. */
+  lead: boolean;
+  /** The viewer's own row. They're in their team list, but can't act on it. */
+  isSelf: boolean;
+  /**
+   * Whether the viewer may assign/fine/bonus this person. False for
+   * themselves and for a peer lead; see manageableUserIds in lib/manage.ts,
+   * which the actions re-check server-side.
+   */
+  manageable: boolean;
   goalCount: number;
   weekPercent: number;
   submittedAtLabel: string | null;
@@ -43,7 +53,7 @@ export function LeadRoster({ departments }: { departments: LeadDepartment[] }) {
           </div>
           {d.people.length === 0 ? (
             <p className="px-4 py-4 text-sm text-muted-fg">
-              Nobody under this department yet — people join it at onboarding,
+              Nobody in this department yet — people join it at onboarding,
               from their profile, or an admin adds them on the Departments page.
             </p>
           ) : (
@@ -79,6 +89,16 @@ function MemberRow({ member: p }: { member: LeadMember }) {
         <div className="min-w-0 flex-1">
           <p className="flex items-center gap-2 truncate text-sm font-semibold text-ink">
             <span className="truncate">{p.name}</span>
+            {p.isSelf && (
+              <span className="shrink-0 rounded-full bg-canvas px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted-fg">
+                You
+              </span>
+            )}
+            {p.lead && (
+              <span className="shrink-0 rounded-full bg-brand-soft px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand">
+                Dep. lead
+              </span>
+            )}
             {p.outstanding > 0 && (
               <span className="shrink-0 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-600">
                 {formatMoney(p.outstanding)}
@@ -101,32 +121,37 @@ function MemberRow({ member: p }: { member: LeadMember }) {
           </p>
         </div>
 
-        <div className="flex shrink-0 items-center gap-2">
-          <button
-            type="button"
-            onClick={() => toggle("assign")}
-            aria-expanded={panel === "assign"}
-            className="shrink-0 rounded-lg border border-line px-2.5 py-1 text-xs font-medium text-brand transition hover:bg-brand-soft/60"
-          >
-            Assign
-          </button>
-          <button
-            type="button"
-            onClick={() => toggle("fine")}
-            aria-expanded={panel === "fine"}
-            className="shrink-0 rounded-lg border border-red-200 px-2.5 py-1 text-xs font-medium text-red-600 transition hover:bg-red-50"
-          >
-            Fine
-          </button>
-          <button
-            type="button"
-            onClick={() => toggle("bonus")}
-            aria-expanded={panel === "bonus"}
-            className="shrink-0 rounded-lg border border-green-200 px-2.5 py-1 text-xs font-medium text-green-700 transition hover:bg-green-50"
-          >
-            Bonus
-          </button>
-        </div>
+        {/* No controls on a row the viewer can't act on — their own, or a
+            peer lead's. Rendering disabled buttons would advertise a power
+            that doesn't exist here; the row is still listed, just inert. */}
+        {p.manageable && (
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={() => toggle("assign")}
+              aria-expanded={panel === "assign"}
+              className="shrink-0 rounded-lg border border-line px-2.5 py-1 text-xs font-medium text-brand transition hover:bg-brand-soft/60"
+            >
+              Assign
+            </button>
+            <button
+              type="button"
+              onClick={() => toggle("fine")}
+              aria-expanded={panel === "fine"}
+              className="shrink-0 rounded-lg border border-red-200 px-2.5 py-1 text-xs font-medium text-red-600 transition hover:bg-red-50"
+            >
+              Fine
+            </button>
+            <button
+              type="button"
+              onClick={() => toggle("bonus")}
+              aria-expanded={panel === "bonus"}
+              className="shrink-0 rounded-lg border border-green-200 px-2.5 py-1 text-xs font-medium text-green-700 transition hover:bg-green-50"
+            >
+              Bonus
+            </button>
+          </div>
+        )}
       </div>
 
       {panel === "assign" && (
