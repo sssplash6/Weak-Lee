@@ -645,8 +645,12 @@ export async function reconcilePayrollReminders(now = new Date()): Promise<void>
   if (unfiled.length === 0) return; // nobody to remind — the claim is spent
 
   const label = payrollPeriodLabel(period.year, period.month);
+  // Phrased as an opening, not a last call: this fires at 09:00 on the morning
+  // the window opens, so "you haven't filed yet" would be scolding someone for
+  // missing a deadline that only just became reachable. It still carries the
+  // close time, because the whole window is four days.
   const message =
-    `Payroll: file your ${label} pay request — filing closes ` +
+    `Payroll for ${label} is open — file your pay request by ` +
     `${formatTashkent(period.filingClosesAt)}.`;
 
   // The claim above is what stops several page loads all sending this. But a
@@ -668,11 +672,13 @@ export async function reconcilePayrollReminders(now = new Date()): Promise<void>
         .map((e) =>
           sendEmail({
             to: e.email!,
-            subject: `Payroll: ${label} filing closes soon`,
+            subject: `Payroll: ${label} filing is open`,
             text:
               `Hi${e.name ? ` ${e.name}` : ""},\n\n` +
-              `You haven't filed your ${label} pay request yet. Filing closes ` +
-              `${formatTashkent(period.filingClosesAt)}.\n\n` +
+              `Filing for ${label} opened this morning. Your bonuses and fines ` +
+              `are pulled in automatically — you add your salary and any ` +
+              `expenses.\n\n` +
+              `The window closes ${formatTashkent(period.filingClosesAt)}.\n\n` +
               `File it here: ${appUrl()}/payroll\n\n— FreshWeek`,
           }),
         ),
