@@ -22,6 +22,7 @@ import {
   payrollPeriodLabel,
   PAYROLL_CLOSED,
   isPayrollOpenFor,
+  isPayrollRolloutTester,
   payrollOpenToEmails,
   PAYROLL_STATUS_LABEL,
 } from "@/lib/payrollTypes";
@@ -223,6 +224,29 @@ export function filingWindowState(
   if (now < period.filingOpensAt) return "BEFORE";
   if (now > period.filingClosesAt) return "CLOSED";
   return "OPEN";
+}
+
+/**
+ * The window as it applies to ONE person.
+ *
+ * A restricted rollout (PAYROLL_OPEN_TO) exists to be tested, and the window
+ * is only four days a month — so an allowlisted tester who has to wait for it
+ * cannot exercise the feature they were given early access to. While the
+ * rollout is on, its members file whenever they like; the moment the list is
+ * emptied for a full launch they are back on the window with everyone else,
+ * so this can't quietly become a permanent exemption for whoever tested.
+ *
+ * The exception is announced in the UI rather than applied silently: someone
+ * filing in the middle of the month should know the window didn't apply to
+ * them, or they'll report the window itself as broken.
+ */
+export function filingWindowStateFor(
+  email: string | null | undefined,
+  period: { filingOpensAt: Date; filingClosesAt: Date },
+  now: Date,
+): FilingWindowState {
+  if (isPayrollRolloutTester(email)) return "OPEN";
+  return filingWindowState(period, now);
 }
 
 // ----- Status machine -----

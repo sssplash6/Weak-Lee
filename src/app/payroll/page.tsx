@@ -12,6 +12,7 @@ import {
   ensureCurrentPeriod,
   expireLapsedSubmissions,
   filingWindowState,
+  filingWindowStateFor,
   formatTashkent,
   inFlightSubmission,
   isFinance,
@@ -26,6 +27,7 @@ import {
   parsePaymentDetails,
   payrollPeriodLabel,
   isPayrollOpenFor,
+  isPayrollRolloutTester,
   PAYROLL_STATUS_BADGE,
   PAYROLL_STATUS_LABEL,
 } from "@/lib/payrollTypes";
@@ -81,8 +83,16 @@ export default async function PayrollPage() {
   // Where we are in the filing window. Everything the page offers to DO keys
   // off this; the server action re-checks it, so this only decides what is
   // worth showing.
-  const filingWindow = filingWindowState(period, now);
+  const filingWindow = filingWindowStateFor(me.email, period, now);
   const filingOpen = filingWindow === "OPEN";
+  // A rollout tester is inside the window by definition (see
+  // filingWindowStateFor). Say so where it would otherwise look like the
+  // window simply isn't working — filing on the 25th when the card elsewhere
+  // says the window opens on the 29th needs an explanation on the page, not
+  // just in the code.
+  const windowBypassed =
+    isPayrollRolloutTester(me.email) &&
+    filingWindowState(period, now) !== "OPEN";
   // The window's closing day falls in the FOLLOWING month, so name that month
   // in the copy — "the 1st" on its own reads as this month's. December wraps.
   const nextMonthName = payrollMonthName(period.month === 12 ? 1 : period.month + 1);
@@ -314,6 +324,20 @@ export default async function PayrollPage() {
           >
             Stats
           </Link>
+        </div>
+      )}
+
+      {/* Filing is normally shut outside the window; it's open here because
+          this account is on the restricted-rollout allowlist. Announce it —
+          otherwise filing mid-month looks like the window is broken. */}
+      {windowBypassed && (
+        <div className="mb-5 rounded-xl border border-line bg-surface p-4">
+          <p className="text-sm font-semibold text-ink">
+            Filing is open to you early
+          </p>
+          <p className="mt-1 text-sm text-muted-fg">
+            {`Payroll is in a restricted rollout, so the filing window doesn't apply to your account yet — you can file ${label} now to try it out. For everyone else the window is ${formatTashkent(period.filingOpensAt)} to ${formatTashkent(period.filingClosesAt)}, and it will apply to you too once the rollout opens up.`}
+          </p>
         </div>
       )}
 

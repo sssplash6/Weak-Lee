@@ -12,7 +12,7 @@ import {
   appUrl,
   ensureCurrentPeriod,
   expireLapsedSubmissions,
-  filingWindowState,
+  filingWindowStateFor,
   formatTashkent,
   inFlightSubmission,
   payrollAdminEmails,
@@ -179,7 +179,7 @@ export async function submitPayroll(
   // one — see periodBoundsFor). The page hides the form outside it, but the
   // action stays POST-reachable and a page left open across the boundary would
   // still submit, so this is where the window is actually enforced.
-  const filingWindow = filingWindowState(period, now);
+  const filingWindow = filingWindowStateFor(session.user.email, period, now);
 
   // "edit" is the filer changing a request that is still sitting in the queue.
   // Inside the window it is bounded by the review as well as the clock: the

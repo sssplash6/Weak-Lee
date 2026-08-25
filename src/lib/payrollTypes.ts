@@ -37,6 +37,16 @@ export function isPayrollOpenFor(email: string | null | undefined): boolean {
   return !!email && PAYROLL_OPEN_TO.includes(email.toLowerCase());
 }
 
+/**
+ * Whether this account is testing a restricted rollout, as opposed to simply
+ * being allowed to use a fully-open payroll. Only true while the allowlist is
+ * in force — emptying it (full launch) makes this false for everyone, so no
+ * exception granted to a tester can outlive the rollout it was granted for.
+ */
+export function isPayrollRolloutTester(email: string | null | undefined): boolean {
+  return PAYROLL_OPEN_TO.length > 0 && isPayrollOpenFor(email);
+}
+
 /** The allowlist, lowercased — for the sweeps, which work in bulk. */
 export function payrollOpenToEmails(): string[] {
   return PAYROLL_OPEN_TO.map((e) => e.toLowerCase());
