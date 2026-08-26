@@ -12,9 +12,9 @@ import {
 /**
  * One request as the board sees it: a pre-rendered row plus the handful of
  * facts the board needs to find, count and order it. `node` is the finished
- * server-rendered `<ReviewRow>` / `<FinanceRow>` (detail and all) handed
- * through untouched — the board decides which rows appear, never what a row
- * says, so the two panels keep their own moves and their own authorization.
+ * server-rendered row (detail and all) handed through untouched — the board
+ * decides which rows appear, never what a row says, so the page keeps sole
+ * control of which moves a row offers and to whom.
  */
 export type PanelBoardItem = {
   id: string;
@@ -40,8 +40,8 @@ type SortKey = "default" | "waited" | "amount" | "name";
 const SORT_KEYS: SortKey[] = ["default", "waited", "amount", "name"];
 
 const SORT_LABEL: Record<SortKey, string> = {
-  // "default" is the order the server handed the rows over, which for both
-  // panels means "what needs a decision first".
+  // "default" is the order the server handed the rows over, which means
+  // "what needs a decision first".
   default: "Needs action first",
   waited: "Longest waiting",
   amount: "Largest amount",
@@ -54,19 +54,18 @@ type Facet = "status" | "period" | "dept" | "method";
 type Row = { item: PanelBoardItem; index: number; haystack: string };
 
 /**
- * The working surface of a reviewer panel: search, faceted filters, a payment
- * source breakdown and sorting over rows that are already on the page.
+ * The working surface of the reviewer panel: search, faceted filters, a
+ * payment source breakdown and sorting over rows that are already on the page.
  *
- * Everything here is client-side on purpose. Both panels already load the
- * whole set they cover — the admin panel every request in the selected month,
- * finance everything approved — so narrowing it is a re-render, not a round
- * trip, and a month of payroll can be worked through without the page ever
- * reloading under the reviewer.
+ * Everything here is client-side on purpose. The page already loads the whole
+ * month it covers, so narrowing it is a re-render rather than a round trip,
+ * and a month of payroll can be worked through without the page ever reloading
+ * under the reviewer.
  *
  * The facets configure themselves from the rows: a filter row only appears
- * when there is more than one value to choose between, so the same component
- * gives the admin panel status pills (five statuses, one month) and finance
- * period pills (one status, several months) without either page asking.
+ * when there is more than one value to choose between, so a month with five
+ * statuses in it grows status pills and a single-status list quietly doesn't,
+ * without the page asking for either.
  */
 export function PanelBoard({
   items,

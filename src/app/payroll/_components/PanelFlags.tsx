@@ -1,5 +1,5 @@
-// Attention marks for the two reviewer panels (/payroll/review and
-// /payroll/finance) — nothing employee-facing uses these. A panel row is
+// Attention marks for the reviewer panel (/payroll/panel) — nothing
+// employee-facing uses these. A panel row is
 // otherwise uniform (avatar, name, status, money), so a scan down the list has
 // nothing to catch on when one request has been sitting for a week or is three
 // times the size of everything around it. Those are the two things worth

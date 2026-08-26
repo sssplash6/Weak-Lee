@@ -1,4 +1,5 @@
-// The money-unit edge of /payroll/sheet, deliberately kept in one small module.
+// The money-unit edge of the accounting register (/payroll/panel?view=sheet),
+// deliberately kept in one small module.
 //
 // This is the only place in the app where the stored integer is NOT the number
 // a human types. The rest of payroll is whole-dollar USD, so a field and its

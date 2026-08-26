@@ -25,8 +25,9 @@ const fail = (error: string): ReviewActionResult => ({ ok: false, error });
 /** The views a panel action changes, refreshed together. */
 function revalidatePanels() {
   revalidatePath("/payroll");
-  revalidatePath("/payroll/review");
-  revalidatePath("/payroll/finance");
+  // The three reviewer URLs collapsed into one panel; the old paths are
+  // 307s now and have nothing of their own to refresh.
+  revalidatePath("/payroll/panel");
 }
 
 async function loadForReview(submissionId: string) {
@@ -175,7 +176,7 @@ export async function confirmSubmission(
         subject: `Payroll: ${who} — ${label}, ${formatMoney(sub.netTotal)} to pay`,
         text:
           `${who}'s ${label} pay request was approved by the admins — ${formatMoney(sub.netTotal)} net.\n\n` +
-          `The invoice is attached. Confirm the payment here: ${appUrl()}/payroll/finance\n\n— FreshWeek`,
+          `The invoice is attached. Confirm the payment here: ${appUrl()}/payroll/panel\n\n— FreshWeek`,
         attachments: pdf
           ? [{ filename: `${who} — ${label}.pdf`, bytes: pdf.bytes }]
           : undefined,

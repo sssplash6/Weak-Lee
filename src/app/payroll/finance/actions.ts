@@ -21,8 +21,9 @@ const fail = (error: string): FinanceActionResult => ({ ok: false, error });
 
 function revalidatePanels() {
   revalidatePath("/payroll");
-  revalidatePath("/payroll/review");
-  revalidatePath("/payroll/finance");
+  // The three reviewer URLs collapsed into one panel; the old paths are
+  // 307s now and have nothing of their own to refresh.
+  revalidatePath("/payroll/panel");
   revalidatePath("/penalties"); // the fine deduction lands there as a receipt
 }
 
@@ -164,7 +165,7 @@ export async function sendBackToAdmins(
         subject: `Payroll: ${who}'s ${label} request sent back by finance`,
         text:
           `Finance returned ${who}'s ${label} pay request to the review panel:\n\n“${cleanNote}”\n\n` +
-          `Review it: ${appUrl()}/payroll/review\n\n— FreshWeek`,
+          `Review it: ${appUrl()}/payroll/panel\n\n— FreshWeek`,
       }),
     ),
   );

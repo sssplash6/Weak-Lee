@@ -458,13 +458,13 @@ export async function submitPayroll(
           subject: `Payroll: ${who} ${NOTICE[mode].subject(label)}`,
           text:
             `${who} ${NOTICE[mode].sentence(label)} — ${formatMoney(netTotal)} net.\n\n` +
-            `Review it: ${appUrl()}/payroll/review\n\n— FreshWeek`,
+            `Review it: ${appUrl()}/payroll/panel\n\n— FreshWeek`,
         }),
       ),
   );
 
   revalidatePath("/payroll");
-  revalidatePath("/payroll/review");
+  revalidatePath("/payroll/panel");
   return { ok: true };
 }
 

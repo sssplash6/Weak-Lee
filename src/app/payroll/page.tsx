@@ -15,8 +15,6 @@ import {
   filingWindowStateFor,
   formatTashkent,
   inFlightSubmission,
-  isFinance,
-  isPayrollAdmin,
   pullLedgerSnapshot,
   reconcilePayrollReminders,
 } from "@/lib/payroll";
@@ -291,32 +289,17 @@ export default async function PayrollPage() {
         <BackLink href="/dashboard" label="Dashboard" />
       </header>
 
+      {/* One link, not three. The reviewer stages and the register merged
+          into /payroll/panel, where the verbs on a row come from the viewer's
+          role — so there is no longer a URL per audience to choose between,
+          and this can be gated once on "may see payroll money at all". */}
       {canViewPayrollStats(me.email) && (
         <div className="-mt-2 mb-5 flex flex-wrap gap-2">
-          {isPayrollAdmin(me.email) && (
-            <Link
-              href="/payroll/review"
-              className="whitespace-nowrap rounded-xl border border-line bg-surface px-4 py-2 text-sm font-semibold text-brand shadow-sm transition hover:bg-canvas"
-            >
-              Review panel
-            </Link>
-          )}
-          {isFinance(me.email) && (
-            <Link
-              href="/payroll/finance"
-              className="whitespace-nowrap rounded-xl border border-line bg-surface px-4 py-2 text-sm font-semibold text-brand shadow-sm transition hover:bg-canvas"
-            >
-              Finance panel
-            </Link>
-          )}
-          {/* The month as a register — the same shape as the finance team's
-              accounting sheet, so a month can be read (and exported) in one
-              table instead of row by row. Same audience as Stats. */}
           <Link
-            href="/payroll/sheet"
+            href="/payroll/panel"
             className="whitespace-nowrap rounded-xl border border-line bg-surface px-4 py-2 text-sm font-semibold text-brand shadow-sm transition hover:bg-canvas"
           >
-            Sheet
+            Payroll panel
           </Link>
           <Link
             href="/payroll/stats"

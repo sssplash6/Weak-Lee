@@ -2,7 +2,9 @@
 
 import { Fragment, useMemo, useState, useTransition, type ReactNode } from "react";
 import { formatMoney } from "@/lib/penalties";
-import { setSheetFigures } from "./actions";
+// The register's one write stays in ../sheet, beside the authorization it
+// enforces; only the table moved here when the three panels merged.
+import { setSheetFigures } from "../sheet/actions";
 import {
   formatCents,
   formatWhole,
