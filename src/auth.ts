@@ -5,8 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { authConfig } from "@/auth.config";
 import { ensureAvatar } from "@/lib/assignAvatar";
 import { isCompanyEmail } from "@/lib/company";
-import { adminEmails } from "@/lib/admin";
-import { notify } from "@/lib/notifications";
+import { announceSignup } from "@/lib/signupAlerts";
 
 // Dev-only login: a one-click "Continue as test student" that bypasses real
 // auth. Anyone with the URL can sign in as a shared account, so it needs BOTH
@@ -57,8 +56,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     // Runs once per brand-new (OAuth) user: hand out a unique animal avatar,
     // then settle their standing. Company accounts are approved on the spot;
     // anyone else waits on /pending, and every department lead and admin is
-    // told there's a sign-up to review. Best-effort — a notification hiccup
-    // must never break the sign-in itself.
+    // told there's a sign-up to review (see lib/signupAlerts.ts for who that
+    // is and where each of them acts). Best-effort — a notification hiccup
+    // must never break the sign-in itself, which is why the same alert can be
+    // replayed later from scripts/announce-pending-signups.ts.
     async createUser({ user }) {
       if (!user.id) return;
       await ensureAvatar(user.id, user.email ?? user.name);
@@ -70,30 +71,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           });
           return;
         }
-        const [leads, admins] = await Promise.all([
-          prisma.departmentMembership.findMany({
-            // Mini-department heads can't review sign-ups (see
-            // requireReviewer in app/department/actions.ts), so paging them
-            // would only be noise.
-            where: { role: "LEAD", department: { mini: false } },
-            select: { userId: true },
-            distinct: ["userId"],
-          }),
-          prisma.user.findMany({
-            where: { email: { in: adminEmails(), mode: "insensitive" } },
-            select: { id: true },
-          }),
-        ]);
-        const reviewers = [
-          ...leads.map((l) => l.userId),
-          ...admins.map((a) => a.id),
-        ].filter((id) => id !== user.id);
-        await notify(
-          prisma,
-          reviewers,
-          "OTHER",
-          `New sign-up: ${user.name ?? user.email} (${user.email}) is waiting for approval — review them on your department page.`,
-        );
+        await announceSignup(prisma, {
+          id: user.id,
+          name: user.name ?? null,
+          email: user.email ?? null,
+        });
       } catch (e) {
         console.error("post-signup approval bookkeeping failed", e);
       }
