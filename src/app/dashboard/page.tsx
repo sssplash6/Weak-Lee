@@ -72,6 +72,7 @@ import { WeekCalendar } from "./_components/WeekCalendar";
 import { WeekSubmit } from "./_components/WeekSubmit";
 import { PenaltyNotice } from "./_components/PenaltyNotice";
 import { NotificationsBell } from "./_components/NotificationsBell";
+import { SignupRequestsButton } from "./_components/SignupRequestsButton";
 import { SubmitReminder } from "./_components/SubmitReminder";
 import { BonusNotice } from "./_components/BonusNotice";
 import { AssignedTasks } from "./_components/AssignedTasks";
@@ -124,7 +125,16 @@ export default async function DashboardPage({
       name: true,
       workPhone: true,
       telegramUsername: true,
-      memberships: { select: { role: true } },
+      // departmentId + mini: the header's join-request button counts only
+      // sign-ups at a door this viewer can actually open, and a mini
+      // department's lead seat opens none (lib/signupAlerts.ts).
+      memberships: {
+        select: {
+          role: true,
+          departmentId: true,
+          department: { select: { mini: true } },
+        },
+      },
       birthday: true,
       avatar: true,
     },
@@ -132,6 +142,48 @@ export default async function DashboardPage({
   if (!profile || !isProfileComplete(profile)) redirect("/onboarding");
   // Leads at least one department — the only people the weekly deadline nags.
   const viewerIsLead = profile.memberships.some((m) => m.role === "LEAD");
+
+  /**
+   * Who is waiting at this viewer's door, for the header button.
+   *
+   * A lead sees sign-ups who named one of the departments they lead — their
+   * own doorstep, and the same scope their alert used. An admin sees the whole
+   * queue, unnamed requests included: tech@ is on every sign-up alert exactly
+   * so the unowned ones have an owner. Everyone else queries nothing and
+   * renders nothing.
+   */
+  const viewerIsAdmin = isAdmin(session!.user.email);
+  const myDoorIds = profile.memberships
+    .filter((m) => m.role === "LEAD" && !m.department.mini)
+    .map((m) => m.departmentId);
+  const atMyDoor =
+    viewerIsAdmin || myDoorIds.length > 0
+      ? await prisma.user.findMany({
+          where: {
+            approvedAt: null,
+            ...(viewerIsAdmin
+              ? {}
+              : { requestedDepartmentId: { in: myDoorIds } }),
+          },
+          orderBy: { createdAt: "asc" },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            requestedDepartment: { select: { name: true } },
+          },
+        })
+      : [];
+  // Named, because a button that says "1" tells you nothing about whether to
+  // stop what you're doing.
+  const doorSummary =
+    atMyDoor.length === 1
+      ? `${atMyDoor[0].name ?? atMyDoor[0].email ?? "Someone"} is waiting to join ${
+          atMyDoor[0].requestedDepartment?.name ?? "the team"
+        }`
+      : `${atMyDoor.length} people are waiting to join${
+          viewerIsAdmin ? "" : " your departments"
+        }`;
 
   // Enforce the weekly submission deadline for this person: if they've missed
   // Sunday 12:00 (or the Monday 11:00 escalation) without submitting, this
@@ -690,6 +742,11 @@ export default async function DashboardPage({
         <div className="flex shrink-0 items-center gap-2 sm:gap-4">
           <WeekProgress percent={overall} label={isMonth ? "Month" : "Week"} />
           <div className="flex items-center gap-2">
+            <SignupRequestsButton
+              count={atMyDoor.length}
+              summary={doorSummary}
+              href={viewerIsAdmin ? "/admin" : "/department"}
+            />
             <NotificationsBell
               updates={updates}
               olderUnread={olderUnread}
