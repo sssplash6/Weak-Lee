@@ -15,7 +15,7 @@ import {
   filingWindowStateFor,
   formatTashkent,
   inFlightSubmission,
-  payrollAdminEmails,
+  financeEmails,
   pullLedgerSnapshot,
   reviewerUsers,
 } from "@/lib/payroll";
@@ -430,10 +430,10 @@ export async function submitPayroll(
         create: { submissionId, bytes: pdfBytes },
       });
 
-      const admins = await reviewerUsers(tx, payrollAdminEmails());
+      const reviewers = await reviewerUsers(tx, financeEmails());
       await notify(
         tx,
-        admins.map((a) => a.id).filter((id) => id !== userId),
+        reviewers.map((r) => r.id).filter((id) => id !== userId),
         "PAYROLL",
         `${me.name ?? me.email}: ${label} pay request ${NOTICE[mode].verb} — ${formatMoney(netTotal)} net.`,
       );
@@ -448,17 +448,29 @@ export async function submitPayroll(
   }
 
   // Mail is a side channel — after the transaction, never inside it.
+  //
+  // The invoice rides along, because with one reviewer stage THIS mail is the
+  // hand-off: the person who reads it is the person who pays, and payment
+  // works from the invoice rather than from app state. It used to be attached
+  // a stage later, when an admin approved the request onward.
   const who = me.name ?? me.email ?? "Someone";
+  const pdf = await prisma.payrollPdf.findFirst({
+    where: { submission: { userId, periodId: period.id } },
+    select: { bytes: true },
+  });
   await Promise.all(
-    payrollAdminEmails()
+    financeEmails()
       .filter((to) => to !== (me.email ?? "").toLowerCase())
       .map((to) =>
         sendEmail({
           to,
-          subject: `Payroll: ${who} ${NOTICE[mode].subject(label)}`,
+          subject: `Payroll: ${who} ${NOTICE[mode].subject(label)} — ${formatMoney(netTotal)} to pay`,
           text:
             `${who} ${NOTICE[mode].sentence(label)} — ${formatMoney(netTotal)} net.\n\n` +
-            `Review it: ${appUrl()}/payroll/panel\n\n— FreshWeek`,
+            `The invoice is attached. Pay it, or decline it back with a note: ${appUrl()}/payroll/panel\n\n— FreshWeek`,
+          attachments: pdf
+            ? [{ filename: `${who} — ${label}.pdf`, bytes: pdf.bytes }]
+            : undefined,
         }),
       ),
   );
@@ -469,9 +481,9 @@ export async function submitPayroll(
 }
 
 /**
- * How each filing path is announced to the admins. An edit has to read
+ * How each filing path is announced to finance. An edit has to read
  * differently from a fresh filing: the request is already sitting in their
- * queue, and what changed is the very thing they were about to review.
+ * queue, and what changed is the very thing they were about to pay.
  */
 const NOTICE = {
   create: {
@@ -488,7 +500,7 @@ const NOTICE = {
     verb: "edited",
     subject: (label: string) => `edited their ${label} request`,
     sentence: (label: string) =>
-      `edited their ${label} pay request while it was in review`,
+      `edited their ${label} pay request before it was paid`,
   },
 } as const;
 

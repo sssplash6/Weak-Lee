@@ -43,7 +43,7 @@ export type PrefillExpense = {
  * payment method, and the running arithmetic — base + bonuses − fines +
  * expenses — shown as sums, not just a result. One submit files the request
  * and generates the invoice PDF; the same form reopens to refile after a
- * decline, or to edit a request the admins haven't reached yet (see `mode`).
+ * decline, or to edit a request finance hasn't reached yet (see `mode`).
  */
 export function PayrollForm({
   periodLabel,
@@ -70,7 +70,7 @@ export function PayrollForm({
   /**
    * Which of the three ways this form is open:
    *  - file   — nothing filed for this period yet
-   *  - refile — the admins declined it; there's a clock and a reason
+   *  - refile — finance declined it; there's a clock and a reason
    *  - edit   — it's filed and nobody has reviewed it, so it can still change
    */
   mode:
@@ -235,8 +235,8 @@ export function PayrollForm({
             In review — you can still change it
           </p>
           <p className="mt-1 text-xs text-ink">
-            Resending replaces what the admins see and tells them it changed.
-            Once someone approves or declines it, this closes.
+            Resending replaces what finance sees and tells them it changed.
+            Once it is paid or declined, this closes.
           </p>
         </div>
       )}
@@ -475,8 +475,8 @@ export function PayrollForm({
         </button>
         <p className="text-xs text-muted-fg">
           {mode.kind === "edit"
-            ? "Rebuilds your invoice PDF and tells the admins it changed."
-            : "Generates your invoice PDF and sends it to the admins for review."}
+            ? "Rebuilds your invoice PDF and tells finance it changed."
+            : "Generates your invoice PDF and sends it to finance for payment."}
         </p>
       </div>
       {error && <p className="mt-2 text-xs text-red-600">{error}</p>}

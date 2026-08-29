@@ -15,7 +15,7 @@ const fail = (error: string): SheetResult => ({ ok: false, error });
  * Recording a payout figure is a FINANCE act, narrower than the payroll-admin
  * stage: these numbers say what actually left which account, and finance is
  * who moves the money. Global admins pass too, as they do everywhere.
- * Deliberately NOT open to `isPayrollAdmin` — approving a request and writing
+ * Deliberately not the reviewer alone — deciding a request and writing
  * its settled amount are different jobs.
  */
 async function requireSheetEditor() {

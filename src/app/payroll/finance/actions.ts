@@ -9,16 +9,36 @@ import { sendEmail } from "@/lib/email";
 import {
   applyTransition,
   appUrl,
-  payrollAdminEmails,
+  expireLapsedSubmissions,
+  financeEmails,
+  formatTashkent,
   processSubmission,
   requireFinance,
+  resubmitWindowFor,
   reviewerUsers,
 } from "@/lib/payroll";
-import { payrollPeriodLabel, isPayrollOpenFor } from "@/lib/payrollTypes";
+import {
+  payrollPeriodLabel,
+  isPayrollOpenFor,
+  type PayrollStatus,
+} from "@/lib/payrollTypes";
 
 export type FinanceActionResult = { ok: true } | { ok: false; error: string };
 const fail = (error: string): FinanceActionResult => ({ ok: false, error });
 
+/**
+ * The two statuses a request can still be acted on from.
+ *
+ * SUBMITTED is where every filing now lands — payroll has one reviewer stage,
+ * so a request goes straight from the filer to the person who pays it.
+ * APPROVED_BY_ADMIN is the legacy half: rows the removed admin stage had
+ * already approved when it went away. They are the same job — unpaid money on
+ * the reviewer's desk — so both verbs below take either, and the audit trail
+ * keeps the distinction rather than the queue.
+ */
+const ACTIONABLE: PayrollStatus[] = ["SUBMITTED", "APPROVED_BY_ADMIN"];
+
+/** The views a panel action changes, refreshed together. */
 function revalidatePanels() {
   revalidatePath("/payroll");
   // The three reviewer URLs collapsed into one panel; the old paths are
@@ -27,29 +47,57 @@ function revalidatePanels() {
   revalidatePath("/penalties"); // the fine deduction lands there as a receipt
 }
 
-async function loadBasics(submissionId: string) {
+async function loadForReview(submissionId: string) {
   return prisma.payrollSubmission.findUnique({
     where: { id: submissionId },
     select: {
       id: true,
       status: true,
       netTotal: true,
+      graceDayUsed: true,
       user: { select: { id: true, name: true, email: true } },
-      period: { select: { year: true, month: true } },
+      period: {
+        select: { id: true, year: true, month: true, filingClosesAt: true },
+      },
     },
   });
 }
 
+/** In-app notice to the other reviewers, so a queue isn't worked twice. */
+async function tellOtherReviewers(
+  db: Parameters<typeof notify>[0],
+  message: string,
+  exceptIds: (string | null)[],
+) {
+  const others = await reviewerUsers(db, financeEmails());
+  await notify(
+    db,
+    others.map((r) => r.id).filter((id) => !exceptIds.includes(id)),
+    "PAYROLL",
+    message,
+  );
+}
+
 /**
- * Confirm the payment: the snapshot is re-verified against the live ledger,
- * the fine deduction is written back as one PAYROLL FinePayment batch, the
- * bonuses are stamped consumed, and the request goes PROCESSED (see
- * lib/payroll.ts processSubmission). If the ledger moved after filing, this
- * refuses with the exact reasons instead of paying wrong amounts — send it
- * back so the person refiles with a fresh snapshot.
+ * Decline a pay request back to its owner. The note is the whole point — it's
+ * what the employee fixes — so it's required.
+ *
+ * Declining takes nothing off the filer's clock: the resubmit deadline is the
+ * period's filing cutoff, exactly the deadline they already had. Only a
+ * decline on the window's last day moves it, one day past the cutoff, and that
+ * spends the once-per-period grace day — ORed in below because the flag
+ * records that the period ever ran past its cutoff, not that this particular
+ * decline did. resubmitWindowFor returns the same deadline for every later
+ * decline, so a re-decline can't extend the window or cut it short.
+ *
+ * This is also the recovery path when a payment is refused for snapshot drift
+ * (see processSubmission): the numbers are stale, and only the filer can refile
+ * them fresh. It replaces finance's old send-back, which returned a request to
+ * an admin stage that no longer exists.
  */
-export async function processApproved(
+export async function declineSubmission(
   submissionId: string,
+  note: string,
 ): Promise<FinanceActionResult> {
   const session = await auth();
   if (!isPayrollOpenFor(session?.user?.email)) {
@@ -57,9 +105,81 @@ export async function processApproved(
   }
   const actorId = await requireFinance(session);
 
-  const sub = await loadBasics(submissionId);
+  const cleanNote = note.trim().slice(0, 1000);
+  if (!cleanNote) return fail("A note is required — say what needs fixing.");
+
+  const sub = await loadForReview(submissionId);
   if (!sub) return fail("Request not found.");
-  if (sub.status !== "APPROVED_BY_ADMIN") {
+  if (!ACTIONABLE.includes(sub.status)) {
+    return fail("Only a request awaiting payment can be declined — reload.");
+  }
+
+  const now = new Date();
+  const window = resubmitWindowFor(now, sub.period.filingClosesAt);
+  const label = payrollPeriodLabel(sub.period.year, sub.period.month);
+
+  await prisma.$transaction(async (tx) => {
+    await applyTransition(tx, {
+      submissionId: sub.id,
+      from: sub.status,
+      to: "DECLINED",
+      actorId,
+      note: cleanNote,
+      data: {
+        resubmitDeadline: window.deadline,
+        graceDayUsed: sub.graceDayUsed || window.usesGraceDay,
+      },
+    });
+    await notify(
+      tx,
+      sub.user.id,
+      "PAYROLL",
+      `Your ${label} pay request was declined — “${cleanNote}”. Resubmit by ${formatTashkent(window.deadline)}.`,
+    );
+    // In-app only for the other reviewers — no email (the employee gets both).
+    await tellOtherReviewers(
+      tx,
+      `${sub.user.name ?? sub.user.email}'s ${label} request was declined — “${cleanNote}”.`,
+      [actorId, sub.user.id],
+    );
+  });
+
+  if (sub.user.email) {
+    await sendEmail({
+      to: sub.user.email,
+      subject: `Payroll: your ${label} request was declined`,
+      text:
+        `Your ${label} pay request was declined:\n\n“${cleanNote}”\n\n` +
+        `Fix it and resubmit by ${formatTashkent(window.deadline)} — after that the filing rolls into next month's cycle.\n\n` +
+        `Your form is reopened with everything prefilled: ${appUrl()}/payroll\n\n— FreshWeek`,
+    });
+  }
+
+  revalidatePanels();
+  return { ok: true };
+}
+
+/**
+ * Confirm the payment: the snapshot is re-verified against the live ledger,
+ * the fine deduction is written back as one PAYROLL FinePayment batch, the
+ * bonuses are stamped consumed, and the request goes PROCESSED (see
+ * lib/payroll.ts processSubmission). If the ledger moved after filing, this
+ * refuses with the exact reasons instead of paying wrong amounts — decline it
+ * so the person refiles with a fresh snapshot.
+ */
+export async function confirmPayment(
+  submissionId: string,
+): Promise<FinanceActionResult> {
+  const session = await auth();
+  if (!isPayrollOpenFor(session?.user?.email)) {
+    return fail("Payroll is closed right now.");
+  }
+  const actorId = await requireFinance(session);
+  await expireLapsedSubmissions();
+
+  const sub = await loadForReview(submissionId);
+  if (!sub) return fail("Request not found.");
+  if (!ACTIONABLE.includes(sub.status)) {
     return fail("Only a request awaiting payment can be confirmed — reload.");
   }
 
@@ -67,7 +187,7 @@ export async function processApproved(
     const result = await processSubmission({ submissionId, actorId });
     if (!result.ok) {
       return fail(
-        `The ledger moved after filing — ${result.reasons.join(" ")} Send it back for a fresh snapshot.`,
+        `The ledger moved after filing — ${result.reasons.join(" ")} Decline it so they refile with a fresh snapshot.`,
       );
     }
   } catch (e) {
@@ -84,12 +204,10 @@ export async function processApproved(
     "PAYROLL",
     `Your ${label} pay request was processed — ${formatMoney(sub.netTotal)} paid out. Fine deductions were recorded on your ledger.`,
   );
-  const admins = await reviewerUsers(prisma, payrollAdminEmails());
-  await notify(
+  await tellOtherReviewers(
     prisma,
-    admins.map((a) => a.id).filter((id) => id !== sub.user.id),
-    "PAYROLL",
     `${who}'s ${label} pay request was processed — ${formatMoney(sub.netTotal)} paid.`,
+    [actorId, sub.user.id],
   );
 
   if (sub.user.email) {
@@ -108,67 +226,6 @@ export async function processApproved(
         : undefined,
     });
   }
-
-  revalidatePanels();
-  return { ok: true };
-}
-
-/**
- * Return an approved request to the admin panel with a required note —
- * finance's recovery path for admin mistakes and for the snapshot-drift
- * refusal above. The request goes back to SUBMITTED; the note lives in the
- * audit trail and reaches both admins.
- */
-export async function sendBackToAdmins(
-  submissionId: string,
-  note: string,
-): Promise<FinanceActionResult> {
-  const session = await auth();
-  if (!isPayrollOpenFor(session?.user?.email)) {
-    return fail("Payroll is closed right now.");
-  }
-  const actorId = await requireFinance(session);
-
-  const cleanNote = note.trim().slice(0, 1000);
-  if (!cleanNote) return fail("A note is required — say why it's going back.");
-
-  const sub = await loadBasics(submissionId);
-  if (!sub) return fail("Request not found.");
-  if (sub.status !== "APPROVED_BY_ADMIN") {
-    return fail("Only a request awaiting payment can be sent back — reload.");
-  }
-
-  const label = payrollPeriodLabel(sub.period.year, sub.period.month);
-  const who = sub.user.name ?? sub.user.email ?? "Someone";
-
-  await prisma.$transaction(async (tx) => {
-    await applyTransition(tx, {
-      submissionId: sub.id,
-      from: "APPROVED_BY_ADMIN",
-      to: "SUBMITTED",
-      actorId,
-      note: cleanNote,
-    });
-    const admins = await reviewerUsers(tx, payrollAdminEmails());
-    await notify(
-      tx,
-      admins.map((a) => a.id),
-      "PAYROLL",
-      `Finance sent ${who}'s ${label} request back to review — “${cleanNote}”.`,
-    );
-  });
-
-  await Promise.all(
-    payrollAdminEmails().map((to) =>
-      sendEmail({
-        to,
-        subject: `Payroll: ${who}'s ${label} request sent back by finance`,
-        text:
-          `Finance returned ${who}'s ${label} pay request to the review panel:\n\n“${cleanNote}”\n\n` +
-          `Review it: ${appUrl()}/payroll/panel\n\n— FreshWeek`,
-      }),
-    ),
-  );
 
   revalidatePanels();
   return { ok: true };

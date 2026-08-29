@@ -3,7 +3,7 @@
 
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { isFinance, isPayrollAdmin } from "@/lib/payroll";
+import { canSeeAllPayroll } from "@/lib/payroll";
 import { isPayrollOpenFor } from "@/lib/payrollTypes";
 
 export async function GET(
@@ -29,11 +29,9 @@ export async function GET(
   });
   if (!receipt) return new Response("Not found", { status: 404 });
 
-  const email = session.user.email;
   const allowed =
     receipt.expense.submission.userId === session.user.id ||
-    isPayrollAdmin(email) ||
-    isFinance(email);
+    canSeeAllPayroll(session.user.email);
   if (!allowed) return new Response("Not authorized", { status: 403 });
 
   const ascii = receipt.filename.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "_");

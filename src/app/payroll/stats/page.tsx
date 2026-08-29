@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { formatMoney } from "@/lib/penalties";
 import { BackLink } from "@/app/_components/BackLink";
 import {
-  canViewPayrollStats,
+  canSeeAllPayroll,
   ensureCurrentPeriod,
   expireLapsedSubmissions,
   reconcilePayrollReminders,
@@ -81,7 +81,7 @@ export default async function PayrollStatsPage({
   await assertApproved(session.user);
   // Closed: reviewers see the same screen employees do, before any sweep runs.
   if (!isPayrollOpenFor(session.user.email)) return <PayrollComingSoon />;
-  if (!canViewPayrollStats(session.user.email)) redirect("/payroll");
+  if (!canSeeAllPayroll(session.user.email)) redirect("/payroll");
 
   const now = new Date();
   await expireLapsedSubmissions(now);

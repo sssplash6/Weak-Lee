@@ -8,7 +8,7 @@ import { BackLink } from "@/app/_components/BackLink";
 import { formatDateTimeTz, formatYmd, toYmd } from "@/lib/dates";
 import { PENALTY_LABEL } from "@/lib/penalties";
 import {
-  canViewPayrollStats,
+  canSeeAllPayroll,
   ensureCurrentPeriod,
   expireLapsedSubmissions,
   filingWindowState,
@@ -216,16 +216,16 @@ export default async function PayrollPage() {
                   tone: "border-brand/30 bg-brand-soft text-brand",
                   // Editing follows the filing window, so say so here rather
                   // than letting the Edit button quietly go missing.
-                  text: `Awaiting admin review — you'll get a notification when it moves.${
+                  text: `With finance for payment — you'll get a notification when it moves.${
                     filingOpen
                       ? ""
-                      : " Filing is closed, so it stands exactly as filed; an admin can send it back if something needs changing."
+                      : " Filing is closed, so it stands exactly as filed; finance can send it back if something needs changing."
                   }`,
                 }
               : current.status === "APPROVED_BY_ADMIN"
                 ? {
                     tone: "border-accent/40 bg-accent-soft text-accent-ink",
-                    text: "Approved by the admins — with finance for payment.",
+                    text: "Approved — with finance for payment.",
                   }
                 : current.status === "PROCESSED"
                   ? {
@@ -293,7 +293,7 @@ export default async function PayrollPage() {
           into /payroll/panel, where the verbs on a row come from the viewer's
           role — so there is no longer a URL per audience to choose between,
           and this can be gated once on "may see payroll money at all". */}
-      {canViewPayrollStats(me.email) && (
+      {canSeeAllPayroll(me.email) && (
         <div className="-mt-2 mb-5 flex flex-wrap gap-2">
           <Link
             href="/payroll/panel"

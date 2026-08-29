@@ -5,7 +5,7 @@
 
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { isFinance, isPayrollAdmin } from "@/lib/payroll";
+import { canSeeAllPayroll } from "@/lib/payroll";
 import { payrollPeriodLabel, isPayrollOpenFor } from "@/lib/payrollTypes";
 
 export async function GET(
@@ -31,13 +31,12 @@ export async function GET(
   });
   if (!submission) return new Response("Not found", { status: 404 });
 
-  // The owner, the admin stage, and the finance stage — nobody else (leads get
-  // no payroll visibility into their members).
-  const email = session.user.email;
+  // The owner and everyone who reads the whole of payroll — nobody else (leads
+  // get no payroll visibility into their members). The same test the panel
+  // gates on, so a row visible there always has an invoice that opens.
   const allowed =
     submission.userId === session.user.id ||
-    isPayrollAdmin(email) ||
-    isFinance(email);
+    canSeeAllPayroll(session.user.email);
   if (!allowed) return new Response("Not authorized", { status: 403 });
   if (!submission.pdf) return new Response("No invoice generated", { status: 404 });
 

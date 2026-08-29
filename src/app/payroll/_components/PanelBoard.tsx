@@ -26,9 +26,10 @@ export type PanelBoardItem = {
   method: PayrollMethod;
   net: number;
   /**
-   * When this landed on this desk, as epoch ms — filed, for the admin stage;
-   * approved, for finance. Null when nothing is waiting (an already-paid row),
-   * which sorts to the back of "longest waiting".
+   * When this landed on the reviewer's desk, as epoch ms — when it was filed,
+   * or for a legacy approved row when it was handed over. Null when nothing is
+   * waiting (an already-paid row), which sorts to the back of "longest
+   * waiting".
    */
   waitingSince: number | null;
   periodKey: string; // "2026-08" — sortable, and the pill's identity

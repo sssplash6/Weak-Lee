@@ -4,7 +4,7 @@ import { useState, type ReactNode } from "react";
 import { SubmissionView, type SubmissionViewModel } from "./SubmissionView";
 
 /**
- * A filed request that the admins haven't reached yet: the read-only summary
+ * A filed request that finance hasn't reached yet: the read-only summary
  * by default, with the filing form one click away.
  *
  * Editing is an option rather than the default state — most visits to this
@@ -48,7 +48,7 @@ export function EditableSubmission({
       <SubmissionView heading={heading} view={view} />
       <div className="mt-2 flex items-center justify-end gap-3">
         <p className="text-xs text-muted-fg">
-          Spotted a mistake? You can change it until an admin reviews it.
+          Spotted a mistake? You can change it until finance reviews it.
         </p>
         <button
           type="button"

@@ -5,17 +5,25 @@ import {
   PanelRowShell,
   type PanelRowSummary,
 } from "../_components/PanelRowShell";
-// As with ReviewRow: the finance-stage moves stay in ../finance beside the
-// state machine; only the UI lives in the merged panel.
-import { processApproved, sendBackToAdmins } from "../finance/actions";
+// The reviewer's moves stay in ../finance, next to the state machine they
+// drive. Only the UI moved here when the three panels merged.
+import { confirmPayment, declineSubmission } from "../finance/actions";
 
 /**
- * A panel row plus finance's two moves — confirm the payment, or send it back
- * to the admin stage with a required note. Mirrors ReviewRow; the moves differ.
+ * A panel row plus the reviewer's two moves — pay it, or decline it back to
+ * the filer with a required note (a small modal). The revalidated page moves
+ * the row on success; this component only holds the open/typing state.
  *
- * Like ReviewRow it takes no `canAct`: /payroll/panel renders it only for a
- * row awaiting payment being looked at by finance. See PanelRowShell for why
- * that is the whole permission model of a row.
+ * There is no `canAct` prop, on purpose. This component IS the permission:
+ * /payroll/panel renders it only for a row awaiting payment being looked at by
+ * the reviewer, and renders the bare PanelRowShell otherwise. A row can
+ * therefore never talk itself into showing a button by inspecting its own
+ * status, which is the failure mode a single merged panel invites.
+ *
+ * It used to be one of a pair — an admin stage approved a request onward and
+ * finance paid it. With one stage the two rows became one, and the decline
+ * that was the admin's is the reviewer's: it is also how a payment refused for
+ * snapshot drift gets back to the only person who can refile it.
  */
 export function FinanceRow({
   submissionId,
@@ -26,7 +34,7 @@ export function FinanceRow({
   summary: PanelRowSummary;
   children: ReactNode;
 }) {
-  const [sendingBack, setSendingBack] = useState(false);
+  const [declining, setDeclining] = useState(false);
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -35,7 +43,7 @@ export function FinanceRow({
     setError(null);
     startTransition(async () => {
       try {
-        const res = await processApproved(submissionId);
+        const res = await confirmPayment(submissionId);
         if (!res.ok) setError(res.error);
       } catch {
         setError("Couldn't confirm — try again.");
@@ -43,18 +51,18 @@ export function FinanceRow({
     });
   }
 
-  function sendBack() {
+  function decline() {
     setError(null);
     startTransition(async () => {
       try {
-        const res = await sendBackToAdmins(submissionId, note);
+        const res = await declineSubmission(submissionId, note);
         if (!res.ok) setError(res.error);
         else {
-          setSendingBack(false);
+          setDeclining(false);
           setNote("");
         }
       } catch {
-        setError("Couldn't send back — try again.");
+        setError("Couldn't decline — try again.");
       }
     });
   }
@@ -71,36 +79,36 @@ export function FinanceRow({
               onClick={confirm}
               className="rounded-lg bg-brand px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {isPending && !sendingBack ? "Confirming…" : "Confirm payment"}
+              {isPending && !declining ? "Confirming…" : "Confirm payment"}
             </button>
             <button
               type="button"
               disabled={isPending}
               onClick={() => {
                 setError(null);
-                setSendingBack(true);
+                setDeclining(true);
               }}
-              className="rounded-lg border border-line px-3.5 py-2 text-sm font-semibold text-brand transition hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-lg border border-red-200 px-3.5 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50/60 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Send back…
+              Decline…
             </button>
             {error && <p className="text-xs text-red-600">{error}</p>}
           </div>
 
-          {sendingBack && (
+          {declining && (
             <div
               className="overlay-in fixed inset-0 z-50 flex items-center justify-center bg-ink/30 p-4 backdrop-blur-sm"
               role="dialog"
               aria-modal="true"
-              aria-label={`Send ${summary.name}'s request back`}
+              aria-label={`Decline ${summary.name}'s request`}
             >
               <div className="modal-in w-full max-w-md rounded-2xl border border-line bg-surface p-5 shadow-xl">
                 <h3 className="text-sm font-semibold text-ink">
-                  Send {summary.name}&rsquo;s request back to review
+                  Decline {summary.name}&rsquo;s request
                 </h3>
                 <p className="mt-1 text-xs text-muted-fg">
-                  It returns to the admin stage with your note in the audit
-                  trail.
+                  The note reopens their form until the filing deadline &mdash;
+                  declining on the window&rsquo;s last day adds one more day.
                 </p>
                 <textarea
                   value={note}
@@ -108,7 +116,7 @@ export function FinanceRow({
                   autoFocus
                   rows={3}
                   maxLength={1000}
-                  placeholder="Why it's going back — required"
+                  placeholder="What needs fixing — required"
                   className="mt-3 w-full resize-none rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink placeholder:text-muted-fg focus:border-brand focus:outline-none"
                 />
                 {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
@@ -116,7 +124,7 @@ export function FinanceRow({
                   <button
                     type="button"
                     disabled={isPending}
-                    onClick={() => setSendingBack(false)}
+                    onClick={() => setDeclining(false)}
                     className="rounded-lg border border-line px-3.5 py-2 text-sm font-medium text-ink transition hover:bg-canvas"
                   >
                     Cancel
@@ -124,10 +132,10 @@ export function FinanceRow({
                   <button
                     type="button"
                     disabled={isPending || note.trim().length === 0}
-                    onClick={sendBack}
-                    className="rounded-lg bg-brand px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-50"
+                    onClick={decline}
+                    className="rounded-lg bg-red-600 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {isPending ? "Sending…" : "Send back"}
+                    {isPending ? "Declining…" : "Decline request"}
                   </button>
                 </div>
               </div>

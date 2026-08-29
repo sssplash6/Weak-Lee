@@ -52,6 +52,12 @@ export function payrollOpenToEmails(): string[] {
   return PAYROLL_OPEN_TO.map((e) => e.toLowerCase());
 }
 
+/**
+ * APPROVED_BY_ADMIN is legacy and nothing enters it any more: it was the admin
+ * stage's hand-off to finance, and payroll has one reviewer stage now. The
+ * value stays because rows and audit events still hold it, and a row left in
+ * it is still unpaid money — the panel queues it beside SUBMITTED.
+ */
 export type PayrollStatus =
   | "DRAFT"
   | "SUBMITTED"
@@ -92,10 +98,12 @@ export const PAYROLL_METHODS: PayrollMethod[] = [
 /** How each status reads in the UI — phrased for the employee's point of view. */
 export const PAYROLL_STATUS_LABEL: Record<PayrollStatus, string> = {
   DRAFT: "Draft",
-  SUBMITTED: "Awaiting review",
+  SUBMITTED: "With finance",
   DECLINED: "Declined",
   EXPIRED: "Expired",
-  APPROVED_BY_ADMIN: "With finance",
+  // Legacy — the same desk as SUBMITTED, kept distinguishable in the panel's
+  // status filter and in anyone's memory of where the row came from.
+  APPROVED_BY_ADMIN: "With finance · approved",
   PROCESSED: "Paid",
 };
 
@@ -213,7 +221,11 @@ export const PAYROLL_STATUS_BADGE: Record<PayrollStatus, string> = {
   PROCESSED: "bg-green-50 text-green-700",
 };
 
-/** One audit-trail row's verb, disambiguated by where it came from. */
+/**
+ * One audit-trail row's verb, disambiguated by where it came from. The two
+ * APPROVED_BY_ADMIN lines describe history only — no new event moves through
+ * that status — and stay so an old trail still reads correctly.
+ */
 export function payrollEventLabel(
   from: PayrollStatus | null,
   to: PayrollStatus,

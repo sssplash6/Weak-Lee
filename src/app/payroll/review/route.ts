@@ -1,10 +1,7 @@
-// The admin stage used to be its own panel. It is now the queue view of
-// /payroll/panel, which shows the same month to both reviewer stages and
-// decides a row's verbs from the viewer's role rather than from the URL.
-//
-// The URL survives for anyone who bookmarked it — and for the
-// `revalidatePath("/payroll/review")` calls in ./actions.ts, which still name
-// this path.
+// The admin stage used to be its own panel, then the queue view of
+// /payroll/panel. The stage itself is gone — one reviewer decides and pays —
+// and this URL survives only for anyone who bookmarked it, landing them on
+// the panel where their row now is.
 //
 // A route handler rather than a `page.tsx` that calls `redirect()`: ../loading
 // puts a Suspense boundary around every payroll page, so the shell is already

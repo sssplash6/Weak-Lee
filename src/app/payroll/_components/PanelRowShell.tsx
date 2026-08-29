@@ -30,10 +30,10 @@ export type PanelRowSummary = {
  * One request in the reviewer panel: the header line, and the full detail that
  * expands under it.
  *
- * This is the whole row for a viewer who holds no role over it — a payroll
- * admin looking at something already with finance, or finance looking at
- * something still awaiting approval. It is deliberately the DEFAULT: a row
- * only grows verbs by being wrapped (see ReviewRow / FinanceRow in ../panel),
+ * This is the whole row for a viewer who holds no role over it — a global
+ * admin reading the panel, or finance looking at a request already decided.
+ * It is deliberately the DEFAULT: a row only grows verbs by being wrapped
+ * (see FinanceRow in ../panel),
  * and those wrappers are only rendered when the page has established that this
  * viewer may make that move on this row. So a read-only row does not merely
  * hide its buttons — the module that can perform the move is never even

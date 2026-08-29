@@ -11,13 +11,12 @@ import { COMPANY_TIME_ZONE, formatDateTimeTz, formatYmd } from "@/lib/dates";
 import { formatMoney } from "@/lib/penalties";
 import { BackLink } from "@/app/_components/BackLink";
 import {
-  canViewPayrollStats,
+  canSeeAllPayroll,
   eligibleEmployees,
   ensureCurrentPeriod,
   expireLapsedSubmissions,
   formatTashkent,
   isFinance,
-  isPayrollAdmin,
   reconcilePayrollReminders,
 } from "@/lib/payroll";
 import {
@@ -53,22 +52,31 @@ import { FinanceRow } from "./FinanceRow";
 // The two ways to read the same month, shared with the three redirects that
 // land here so they cannot name a view this page does not have.
 import { type PanelView } from "./redirects";
-import { ReviewRow } from "./ReviewRow";
 import { SheetTable, type SheetRow } from "./SheetTable";
 
 export const metadata: Metadata = { title: "Payroll panel" };
 
 /**
- * Queue display order: what needs a decision first, then what needs paying,
- * then the record. DRAFT is deliberately absent — see MONTH_SCOPE below.
+ * Queue display order: what is waiting on the reviewer first, then what is
+ * back with the filer, then the record. DRAFT is deliberately absent — see
+ * MONTH_SCOPE below.
  */
 const STATUS_ORDER: PayrollStatus[] = [
   "SUBMITTED",
-  "DECLINED",
   "APPROVED_BY_ADMIN",
+  "DECLINED",
   "PROCESSED",
   "EXPIRED",
 ];
+
+/**
+ * What is still waiting on the reviewer, and so what a row can still be paid
+ * or declined from — the panel's copy of ACTIONABLE in ../finance/actions.ts.
+ * Payroll has one stage now: a filing lands on that desk as SUBMITTED, and
+ * APPROVED_BY_ADMIN is the legacy row the removed admin stage had already
+ * approved. Same desk, same two verbs, one bucket everywhere on this page.
+ */
+const AWAITING: PayrollStatus[] = ["SUBMITTED", "APPROVED_BY_ADMIN"];
 
 /**
  * The month's real money: an EXPIRED filing is never paid (it rolls into the
@@ -120,10 +128,10 @@ const tashkentYmd = new Intl.DateTimeFormat("en-CA", {
 });
 
 /**
- * When a request landed on finance's desk: the most recent hand-off from the
- * admins, read off the audit trail. Not the filing date — a request declined
- * twice and approved this morning has been finance's problem for an hour, not
- * a fortnight, and the wait shown on such a row keys off that.
+ * When a legacy row landed on the reviewer's desk: the last hand-off from the
+ * admin stage that used to exist, read off the audit trail. Only an
+ * APPROVED_BY_ADMIN row has one — everything filed since goes straight to the
+ * reviewer, so its clock starts at `lastSubmittedAt` instead.
  */
 function approvedAt(
   events: readonly { toStatus: string; createdAt: Date }[],
@@ -145,9 +153,8 @@ function approvedAt(
  *
  * WHICH VERBS A ROW OFFERS COMES FROM THE VIEWER'S ROLE, NEVER FROM THE URL.
  * The role flags are computed once, below, and passed down; a row is wrapped
- * in ReviewRow only when it is at the admin stage AND the viewer is a payroll
- * admin, in FinanceRow only when it is awaiting payment AND the viewer is
- * finance, and is otherwise the bare read-only shell. No component re-derives
+ * in FinanceRow only when it is awaiting payment AND the viewer is the
+ * reviewer, and is otherwise the bare read-only shell. No component re-derives
  * a permission from a status, and every action re-checks its own role server
  * side regardless — what is rendered here is never what makes a move legal.
  *
@@ -169,26 +176,23 @@ export default async function PayrollPanelPage({
   if (!isPayrollOpenFor(session.user.email)) return <PayrollComingSoon />;
   // Reading the panel is for everyone who reviews money — both stages plus
   // global admins. Acting on a row is narrower, and decided per row below.
-  if (!canViewPayrollStats(session.user.email)) redirect("/dashboard");
+  if (!canSeeAllPayroll(session.user.email)) redirect("/dashboard");
 
   /**
    * The viewer's roles, worked out exactly once for the whole page.
    *
-   *   canReview  — the admin stage's approve/decline. `isPayrollAdmin` alone,
-   *                matching `requirePayrollAdmin` in ../review/actions.ts: a
-   *                global admin who is not a payroll admin gets no verbs here,
-   *                which is what /payroll/review enforced before the merge.
-   *   canPay     — finance's confirm/send-back, matching `requireFinance`.
-   *   canRecord  — recording a settled figure on the register. Finance or a
-   *                global admin, the same test `requireSheetEditor` in
-   *                ../sheet/actions.ts applies, and deliberately NOT the
-   *                payroll-admin stage: approving a request and writing down
-   *                what settled it are different jobs.
+   *   canPay     — the reviewer's pay/decline, matching `requireFinance` in
+   *                ../finance/actions.ts. A global admin who is not the
+   *                reviewer gets no verbs here: they read every row on the
+   *                page and can move none of them.
+   *   canRecord  — recording a settled figure on the register. The reviewer or
+   *                a global admin, the same test `requireSheetEditor` in
+   *                ../sheet/actions.ts applies: deciding a request and writing
+   *                down what settled it are different jobs.
    *
-   * Every one of these is a copy of a server-side guard, for deciding what to
-   * draw. None of them is the guard.
+   * Both are copies of a server-side guard, for deciding what to draw. Neither
+   * is the guard.
    */
-  const canReview = isPayrollAdmin(session.user.email);
   const canPay = isFinance(session.user.email);
   const canRecord = canPay || isAdmin(session.user.email);
 
@@ -302,25 +306,24 @@ export default async function PayrollPanelPage({
   const filedIds = new Set(submissions.map((s) => s.user.id));
   const unfiled = employees.filter((e) => !filedIds.has(e.id));
 
-  const awaitingReview = submissions.filter((s) => s.status === "SUBMITTED");
-  const toPay = submissions.filter((s) => s.status === "APPROVED_BY_ADMIN");
+  const toPay = submissions.filter((s) => AWAITING.includes(s.status));
+  const paid = submissions.filter((s) => s.status === "PROCESSED");
   const countable = submissions.filter((s) => COUNTABLE.includes(s.status));
-  const awaitingTotal = awaitingReview.reduce((s, x) => s + x.netTotal, 0);
   const toPayTotal = toPay.reduce((s, x) => s + x.netTotal, 0);
   const toPaySources = new Set(toPay.map((s) => s.paymentMethod)).size;
+  const paidTotal = paid.reduce((s, x) => s + x.netTotal, 0);
   const monthTotal = countable.reduce((s, x) => s + x.netTotal, 0);
-  const paidCount = submissions.filter((s) => s.status === "PROCESSED").length;
 
   /**
-   * Approvals cross the filing cutoff by design, so a request approved in July
-   * can still be waiting on payment while this page is showing August. The old
+   * An unpaid request crosses the filing cutoff by design, so one filed in
+   * July can still be waiting while this page is showing August. The old
    * /payroll/finance listed every period at once and could not miss one; a
    * month-scoped panel can, so the months with outstanding payments are named
    * here rather than quietly left off. Two scalar columns over a handful of
    * rows — this is a pointer to work, not a second load of the month.
    */
   const elsewhere = await prisma.payrollSubmission.findMany({
-    where: { status: "APPROVED_BY_ADMIN", periodId: { not: selected.id } },
+    where: { status: { in: AWAITING }, periodId: { not: selected.id } },
     select: { periodId: true, netTotal: true },
   });
   const carryOver = periods
@@ -338,27 +341,24 @@ export default async function PayrollPanelPage({
 
   const stats: PanelStat[] = [
     {
-      label: "Awaiting review",
-      value: String(awaitingReview.length),
-      hint:
-        awaitingReview.length > 0
-          ? `${formatMoney(awaitingTotal)} to decide`
-          : "Nothing on that desk",
-      tone: awaitingReview.length > 0 ? "brand" : "muted",
-    },
-    {
       label: "To pay",
       value: formatMoney(toPayTotal),
       hint:
         toPay.length > 0
           ? `${toPay.length} ${toPay.length === 1 ? "request" : "requests"} · ${toPaySources} ${toPaySources === 1 ? "source" : "sources"}`
-          : "Nothing awaiting payment",
+          : "Nothing on that desk",
       tone: toPay.length > 0 ? "brand" : "muted",
+    },
+    {
+      label: "Paid",
+      value: formatMoney(paidTotal),
+      hint: `${paid.length} ${paid.length === 1 ? "request" : "requests"} settled`,
+      tone: paid.length > 0 ? "brand" : "muted",
     },
     {
       label: `${label} total`,
       value: formatMoney(monthTotal),
-      hint: `${submissions.length} filed · ${paidCount} paid`,
+      hint: `${submissions.length} filed · ${paid.length} paid`,
       tone: "ink",
     },
     {
@@ -389,10 +389,10 @@ export default async function PayrollPanelPage({
     const av = resolveAvatar(s.user.avatar, s.user.email ?? s.user.id);
     const handedOver = approvedAt(s.events);
     /**
-     * Whose clock is running on this row, and since when. A request awaiting
-     * review has been on the admin desk since it was filed; one awaiting
-     * payment has been on finance's desk since the hand-off. Anything else is
-     * decided, and nobody is waiting on it.
+     * Whose clock is running on this row, and since when. A filed request has
+     * been on the reviewer's desk since it was filed; a legacy approved one
+     * since the hand-off that put it there. Anything else is decided, and
+     * nobody is waiting on it.
      */
     const waitingSince =
       s.status === "SUBMITTED"
@@ -456,17 +456,13 @@ export default async function PayrollPanelPage({
     );
 
     /**
-     * The one place a row's verbs are decided: the stage it is at, AND the
-     * role the viewer holds over that stage. Neither alone is enough, and a
-     * viewer with neither role for this row gets the shell, which has no move
-     * to offer and does not even pull an action module into the bundle.
+     * The one place a row's verbs are decided: whether the row is still
+     * waiting on a decision, AND whether the viewer is the reviewer. Neither
+     * alone is enough, and anyone else gets the shell, which has no move to
+     * offer and does not even pull the action module into the bundle.
      */
     const node =
-      s.status === "SUBMITTED" && canReview ? (
-        <ReviewRow submissionId={s.id} summary={summary}>
-          {detail}
-        </ReviewRow>
-      ) : s.status === "APPROVED_BY_ADMIN" && canPay ? (
+      AWAITING.includes(s.status) && canPay ? (
         <FinanceRow submissionId={s.id} summary={summary}>
           {detail}
         </FinanceRow>
@@ -563,13 +559,9 @@ export default async function PayrollPanelPage({
               ? canRecord
                 ? "UZS, SGD and the Wise fee are yours to fill in as each payment settles."
                 : "The settled amounts are recorded by finance."
-              : canReview && canPay
-                ? "You hold both stages: approve a filed request, then confirm the payment."
-                : canReview
-                  ? "Approving hands a request to finance; declining sends it back with a note."
-                  : canPay
-                    ? "Confirming a payment records the fine deduction and closes the request."
-                    : "Read-only — deciding and paying are done by the reviewers on each stage."}
+              : canPay
+                ? "Confirming a payment records the fine deduction and closes the request; declining sends it back with a note."
+                : "Read-only — requests are decided and paid by finance."}
           </p>
         </div>
         <BackLink href="/payroll" label="Payroll" />

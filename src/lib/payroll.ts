@@ -3,7 +3,7 @@
 // at submit time, the lazy expiry + reminder sweeps (no cron anywhere — the
 // lib/submissionFines.ts pattern), and the money write-back at PROCESSED.
 //
-//   DRAFT → SUBMITTED → (DECLINED → SUBMITTED)* → APPROVED_BY_ADMIN → PROCESSED
+//   DRAFT → SUBMITTED → (DECLINED → SUBMITTED)* → PROCESSED
 //              ↺ (filer edits)   └───────────────▶ EXPIRED
 //
 // Server actions own authorization and notifications; this module owns the
@@ -34,16 +34,23 @@ type Db = Prisma.TransactionClient | typeof prisma;
 
 // ----- Roles -----
 //
-// Payroll's two review stages are deliberately narrower than the global admin
-// list: valera@ is a built-in admin app-wide, but inside payroll he is the
-// finance stage only, and tech@/shakhzod@ are the admin stage. Env vars ADD
-// reviewers (the ADMIN_EMAILS convention) — handy for exercising the queues as
-// dev@freshman.academy locally.
-
-const BUILT_IN_PAYROLL_ADMINS = [
-  "tech@freshman.academy",
-  "shakhzod@freshman.academy",
-];
+// Payroll has ONE reviewer stage, and it is finance: a filed request goes
+// straight to valera@, who either declines it back to the filer or pays it.
+//
+// It used to pass through an admin stage (tech@/shakhzod@) that approved
+// requests onward for payment. That stage is gone: nothing waits on a second
+// desk, and no request is queued to an account that no longer reviews. What
+// the admin stage contributed — a note explaining what to fix — is the same
+// decline the reviewer still has, so nothing was lost with it.
+//
+// Env vars ADD reviewers (the ADMIN_EMAILS convention) — handy for exercising
+// the queue as dev@freshman.academy locally, and the way to hand someone the
+// desk for a week without a deploy. PAYROLL_ADMIN_EMAILS is no longer read by
+// anything; PAYROLL_FINANCE_EMAILS is the one that still adds a reviewer.
+//
+// Being a global admin (lib/admin.ts) means seeing everything payroll holds —
+// the panel, the stats, the invoices — but NOT acting on a request. Deciding
+// money and administering the app stay separate, as they did before.
 
 const BUILT_IN_FINANCE = ["valera@freshman.academy"];
 
@@ -55,16 +62,7 @@ function withEnvEmails(builtIn: string[], envVar: string): string[] {
   return [...new Set([...builtIn, ...fromEnv])];
 }
 
-/** The admin-stage reviewers (first approval). */
-export function payrollAdminEmails(): string[] {
-  return withEnvEmails(BUILT_IN_PAYROLL_ADMINS, "PAYROLL_ADMIN_EMAILS");
-}
-
-export function isPayrollAdmin(email: string | null | undefined): boolean {
-  return !!email && payrollAdminEmails().includes(email.toLowerCase());
-}
-
-/** The finance-stage reviewers (payment). */
+/** The reviewer stage: who decides a request and pays it. */
 export function financeEmails(): string[] {
   return withEnvEmails(BUILT_IN_FINANCE, "PAYROLL_FINANCE_EMAILS");
 }
@@ -73,25 +71,20 @@ export function isFinance(email: string | null | undefined): boolean {
   return !!email && financeEmails().includes(email.toLowerCase());
 }
 
-/** Stats are for everyone who reviews money: global admins + both stages. */
-export function canViewPayrollStats(email: string | null | undefined): boolean {
-  return isAdmin(email) || isPayrollAdmin(email) || isFinance(email);
+/**
+ * Who may read the whole of payroll — the panel, the stats, anyone's invoice:
+ * the reviewer plus global admins. Reading is the wide door; every verb below
+ * it is `isFinance` alone.
+ */
+export function canSeeAllPayroll(email: string | null | undefined): boolean {
+  return isAdmin(email) || isFinance(email);
 }
 
 type SessionLike = {
   user?: { id?: string; email?: string | null };
 } | null;
 
-/** Throw unless the signed-in user is an admin-stage reviewer; returns their id. */
-export async function requirePayrollAdmin(session: SessionLike): Promise<string> {
-  const id = session?.user?.id;
-  if (!id || !isPayrollAdmin(session?.user?.email)) {
-    throw new Error("Not authorized");
-  }
-  return id;
-}
-
-/** Throw unless the signed-in user is a finance-stage reviewer; returns their id. */
+/** Throw unless the signed-in user is the reviewer; returns their id. */
 export async function requireFinance(session: SessionLike): Promise<string> {
   const id = session?.user?.id;
   if (!id || !isFinance(session?.user?.email)) {
@@ -255,9 +248,14 @@ const TRANSITIONS: Record<PayrollStatus, readonly PayrollStatus[]> = {
   DRAFT: ["SUBMITTED"],
   // SUBMITTED → SUBMITTED is the filer editing a request nobody has acted on
   // yet: same status, fresh snapshot, and an audit event recording the change.
-  SUBMITTED: ["SUBMITTED", "DECLINED", "APPROVED_BY_ADMIN"],
+  SUBMITTED: ["SUBMITTED", "DECLINED", "PROCESSED"], // declined | paid
   DECLINED: ["SUBMITTED", "EXPIRED"],
-  APPROVED_BY_ADMIN: ["SUBMITTED", "PROCESSED"], // send-back | paid
+  // Legacy. Nothing enters this state any more — it was the admin stage's
+  // hand-off to finance, and there is no admin stage. Rows that were sitting
+  // in it when the stage was removed are still live money, so they keep both
+  // exits and the queue offers them the same two verbs as a SUBMITTED row.
+  // The send-back to SUBMITTED is gone with the desk it went back to.
+  APPROVED_BY_ADMIN: ["DECLINED", "PROCESSED"],
   EXPIRED: [],
   PROCESSED: [],
 };
@@ -507,7 +505,7 @@ export async function pullLedgerSnapshot(
   };
 }
 
-// ----- Processing (finance confirm) -----
+// ----- Processing (the reviewer confirms payment) -----
 
 export type ProcessResult =
   | { ok: true; batchId: string | null }
@@ -521,10 +519,15 @@ export type ProcessResult =
  *
  * The re-check is the invoice-immutability guard: if someone settled a
  * snapshotted fine in cash or deleted a snapshotted bonus after filing, the
- * approved numbers no longer describe reality — processing is refused with
- * the exact reasons, and finance sends the request back for a fresh snapshot
+ * filed numbers no longer describe reality — processing is refused with the
+ * exact reasons, and the reviewer declines it back for a fresh snapshot
  * instead of silently paying wrong amounts. The per-fine optimistic locks
  * (the recordSettlement idiom) close the race window inside the transaction.
+ *
+ * Pays from whichever status the request is waiting in: SUBMITTED, or the
+ * legacy APPROVED_BY_ADMIN of a row the removed admin stage had already
+ * approved. Both mean the same thing now — money the reviewer has not sent
+ * out yet — and the audit row records which one it moved from.
  */
 export async function processSubmission(opts: {
   submissionId: string;
@@ -541,8 +544,8 @@ export async function processSubmission(opts: {
       },
     });
     if (!sub) throw new Error("Request not found.");
-    if (sub.status !== "APPROVED_BY_ADMIN") {
-      throw new Error("Only a request that is with finance can be processed.");
+    if (sub.status !== "SUBMITTED" && sub.status !== "APPROVED_BY_ADMIN") {
+      throw new Error("Only a request awaiting payment can be processed.");
     }
 
     // Re-check every snapshotted source against the live ledger.
@@ -627,7 +630,7 @@ export async function processSubmission(opts: {
 
     await applyTransition(tx, {
       submissionId: sub.id,
-      from: "APPROVED_BY_ADMIN",
+      from: sub.status,
       to: "PROCESSED",
       actorId: opts.actorId,
       data: { processedAt: now, fineBatchId: batchId },

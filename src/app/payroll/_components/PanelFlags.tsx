@@ -37,8 +37,8 @@ const DAY_MS = 86_400_000;
 
 /**
  * "5d waiting", once a request has been at this desk past the stale mark.
- * `since` is when it landed here — filed, for the admin stage; approved, for
- * finance — not when it was created.
+ * `since` is when it landed here — when it was filed, or for a legacy
+ * approved row when it was handed over — not when it was created.
  */
 export function waitingFlag(since: Date | null, now: Date): PanelFlag | null {
   if (!since) return null;
