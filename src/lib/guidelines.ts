@@ -152,11 +152,11 @@ export const GUIDE_GROUPS: GuideGroup[] = [
         tone: "cyan",
         version: "v1.0",
         dated: "June 2026",
-        owner: { name: "Shakhzod Kodirov", role: "COO, Freshman Academy" },
-        approvedBy: {
-          name: "Valera Arakelyan",
-          role: "Founder, Freshman Academy",
-        },
+        // The COO who owned this guide has left the company. Owner falls to
+        // Valera, who approved it — and as in GOAL_SETTING above, one person
+        // in both roles makes the approver line a repeat, so it is dropped.
+        owner: { name: "Valera Arakelyan", role: "CEO, Freshman Academy" },
+        approvedBy: null,
         pages: 8,
         pdf: "masters-program-mentor-guidelines.pdf",
         departments: [

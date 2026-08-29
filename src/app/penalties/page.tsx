@@ -76,7 +76,7 @@ const POLICY: {
     rows: [
       { label: "No response within 2 business days (Mon–Fri)", amount: "$10" },
     ],
-    note: "How to report: use the form above, or send a screenshot of the unanswered message to Shakhzod directly (TG kodirovshakhzod).",
+    note: "How to report: use the form above, or send a screenshot of the unanswered message on Telegram (@gapyearingdoesntsuck).",
   },
 ];
 

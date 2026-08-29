@@ -14,7 +14,7 @@ export type Colleague = {
 /**
  * The "report a colleague" form at the top of the penalties page: a reason
  * field plus a multi-select dropdown of colleagues. Submitting delivers the
- * report to the admins (shakhzod@ / tech@) via the notification system.
+ * report to the admin accounts (lib/admin.ts) via the notification system.
  */
 export function ReportForm({ colleagues }: { colleagues: Colleague[] }) {
   const [reason, setReason] = useState("");
@@ -57,8 +57,8 @@ export function ReportForm({ colleagues }: { colleagues: Colleague[] }) {
     <section className="rounded-xl border border-line bg-surface p-4">
       <h2 className="text-sm font-semibold text-ink">Report a colleague</h2>
       <p className="mt-0.5 text-xs text-muted-fg">
-        Goes straight to Shakhzod and the tech team. Say what happened and pick
-        who it&rsquo;s about — e.g. no response within 2 business days.
+        Goes straight to the admin team. Say what happened and pick who
+        it&rsquo;s about — e.g. no response within 2 business days.
       </p>
 
       <div className="mt-3 flex flex-wrap items-start gap-2">

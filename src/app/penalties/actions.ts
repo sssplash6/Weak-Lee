@@ -8,8 +8,8 @@ import { notifyAdmins } from "@/lib/notifications";
 /**
  * Report one or more colleagues (e.g. no response within 2 business days — see
  * the penalty policy). The report is delivered as REPORT notifications to the
- * admin accounts (shakhzod@ / tech@freshman.academy), which surface in their
- * dashboard updates zone. Any signed-in user can report.
+ * admin accounts (lib/admin.ts), which surface in their dashboard updates
+ * zone. Any signed-in user can report.
  */
 export async function reportColleagues(reason: string, userIds: string[]) {
   const session = await auth();
