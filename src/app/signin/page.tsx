@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { signIn, devLoginEnabled } from "@/auth";
 import { googleEnabled } from "@/auth.config";
+import { COMPANY_EMAIL_DOMAIN } from "@/lib/company";
 
 export const metadata: Metadata = { title: "Sign in" };
 
@@ -46,6 +47,18 @@ export default async function SignInPage({
               <GoogleIcon />
               Continue with Google
             </button>
+            {/*
+              The domain gate came off a while ago — any Google account may
+              sign up, and a non-company one waits on /pending for a lead to
+              approve it. Nothing said so, which reads as "members only" to
+              exactly the person the approval queue was built for: a new joiner
+              whose company address doesn't exist yet. Written as a template
+              literal because a bare {COMPANY_EMAIL_DOMAIN} beside text that
+              carries an entity loses the space between them.
+            */}
+            <p className="mt-3 text-center text-xs leading-relaxed text-muted-fg">
+              {`Not on a ${COMPANY_EMAIL_DOMAIN} address? Sign in with any Google account — a department lead approves you before you're in.`}
+            </p>
           </form>
         )}
 

@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 export const metadata: Metadata = { title: "Waiting for approval" };
 import { auth, signOut } from "@/auth";
 import { isApprovedUser } from "@/lib/approval";
+import { COMPANY_EMAIL_DOMAIN } from "@/lib/company";
 
 /**
  * The waiting room for non-company sign-ups: signed in, but not yet let in.
@@ -27,9 +28,7 @@ export default async function PendingPage() {
         </div>
         <h1 className="text-2xl font-bold text-ink">Almost in</h1>
         <p className="mt-2 text-sm text-muted-fg">
-          {`Your account (${session.user.email ?? "no email"}) is waiting for a
-          department lead to approve it. They've been notified — check back in
-          a bit.`}
+          {`Your account (${session.user.email ?? "no email"}) isn't on the ${COMPANY_EMAIL_DOMAIN} domain, so a department lead approves it before you're in. They've been notified — check back in a bit, there's nothing else to do on your side.`}
         </p>
 
         <form
