@@ -25,7 +25,7 @@ export const PAYROLL_CLOSED = false;
  * and receipt routes, and the two lazy sweeps — so there is no surface where
  * the list is enforced in one place and forgotten in another.
  */
-export const PAYROLL_OPEN_TO: readonly string[] = ["tech@freshman.academy"];
+export const PAYROLL_OPEN_TO: readonly string[] = [];
 
 /**
  * Whether payroll is available to this account. The kill switch wins over the
