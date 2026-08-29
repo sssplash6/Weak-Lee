@@ -24,6 +24,11 @@ export default async function OnboardingPage() {
         telegramUsername: true,
         avatar: true,
         memberships: { select: { departmentId: true } },
+        // What they told /pending they were joining, before anyone approved
+        // them. Nobody should answer the same question twice, so it seeds the
+        // picker — still editable, since a lead may have placed them
+        // elsewhere between the request and the approval.
+        requestedDepartmentId: true,
         birthday: true,
       },
     }),
@@ -79,7 +84,9 @@ export default async function OnboardingPage() {
             name: user?.name ?? session.user.name ?? "",
             workPhone: user?.workPhone ?? "",
             telegramUsername: user?.telegramUsername ?? "",
-            departmentIds: user?.memberships.map((m) => m.departmentId) ?? [],
+            departmentIds:
+              user?.memberships.map((m) => m.departmentId) ??
+              (user?.requestedDepartmentId ? [user.requestedDepartmentId] : []),
             birthday: user?.birthday ? toYmd(user.birthday) : "",
             avatar: suggested,
           }}

@@ -9,13 +9,20 @@
 // no department straight back to /dashboard, so an admin-only reviewer sent
 // there lands nowhere near the queue.
 //
+// WHO gets told is scoped by the department the sign-up named on /pending:
+// that department's lead, plus tech@. It used to be every non-mini lead in the
+// company plus every admin, about a person whose department nobody yet knew —
+// which is a queue everyone can see and nobody owns. A sign-up that named no
+// department (they closed the tab, or the row predates the question) still
+// pages everyone, because an unowned request must not go quiet.
+//
 // Every write goes through `announceSignup`, which skips reviewers who have
-// already been told about that person. That makes it safe to call for a
-// brand-new account (the sign-in event) and safe to re-run over the whole
-// waiting queue (scripts/announce-pending-signups.ts) without spamming anyone.
+// already been told about that person. That makes it safe to call when the
+// department is chosen and safe to re-run over the whole waiting queue
+// (scripts/announce-pending-signups.ts) without spamming anyone.
 
 import { prisma } from "@/lib/prisma";
-import { adminEmails } from "@/lib/admin";
+import { adminEmails, TECH_ADMIN_EMAIL } from "@/lib/admin";
 import { notify } from "@/lib/notifications";
 import type { Prisma } from "@/generated/prisma/client";
 
@@ -28,6 +35,9 @@ export type PendingSignupUser = {
   id: string;
   name: string | null;
   email: string | null;
+  /** The department they named on /pending; null when they never did. */
+  requestedDepartmentId?: string | null;
+  requestedDepartmentName?: string | null;
 };
 
 /** Who may review a sign-up, split by the page each one would act on. */
@@ -39,29 +49,76 @@ export type SignupReviewers = {
 };
 
 /**
- * Everyone allowed to review a sign-up, matching `requireReviewer` in
- * app/department/actions.ts. A MINI department's lead seat is excluded there
- * (it's self-appointed, so it confers no power to admit strangers), which
- * makes paging those heads pure noise. Someone who is both an admin and a lead
- * counts as an admin: /admin carries both buttons.
+ * Every reviewer in the company, resolved once so a whole queue costs one
+ * lookup. `reviewersFor` then narrows it per sign-up.
+ *
+ * A MINI department's lead seat is excluded throughout, matching
+ * `requireReviewer` in app/department/actions.ts: it's self-appointed, so it
+ * confers no power to admit strangers and paging those heads is pure noise.
+ * Someone who is both an admin and a lead counts as an admin — /admin carries
+ * both buttons.
  */
-export async function signupReviewers(db: Db): Promise<SignupReviewers> {
+export type ReviewerDirectory = {
+  /** tech@, who is told about every sign-up. */
+  techIds: string[];
+  /** Every admin — the fallback audience when no department was named. */
+  adminIds: string[];
+  /** Non-mini lead ids, by department. */
+  leadsByDepartment: Map<string, string[]>;
+  /** Every non-mini lead — the fallback audience, as above. */
+  allLeadIds: string[];
+};
+
+export async function reviewerDirectory(db: Db): Promise<ReviewerDirectory> {
   const [leads, admins] = await Promise.all([
     db.departmentMembership.findMany({
       where: { role: "LEAD", department: { mini: false } },
-      select: { userId: true },
-      distinct: ["userId"],
+      select: { userId: true, departmentId: true },
     }),
     db.user.findMany({
       where: { email: { in: adminEmails(), mode: "insensitive" } },
-      select: { id: true },
+      select: { id: true, email: true },
     }),
   ]);
+
   const adminIds = [...new Set(admins.map((a) => a.id))];
-  const leadIds = [...new Set(leads.map((l) => l.userId))].filter(
-    (id) => !adminIds.includes(id),
-  );
-  return { adminIds, leadIds };
+  const techIds = admins
+    .filter((a) => a.email?.toLowerCase() === TECH_ADMIN_EMAIL)
+    .map((a) => a.id);
+
+  const leadsByDepartment = new Map<string, string[]>();
+  for (const l of leads) {
+    if (adminIds.includes(l.userId)) continue; // counted as an admin
+    const seats = leadsByDepartment.get(l.departmentId) ?? [];
+    if (!seats.includes(l.userId)) seats.push(l.userId);
+    leadsByDepartment.set(l.departmentId, seats);
+  }
+  const allLeadIds = [
+    ...new Set(leads.map((l) => l.userId).filter((id) => !adminIds.includes(id))),
+  ];
+
+  return { techIds, adminIds, leadsByDepartment, allLeadIds };
+}
+
+/**
+ * The audience for one sign-up: the lead of the department they named, plus
+ * tech@ — who is on every one of these because someone has to own the queue
+ * when a department has no lead, or has one who never signs in.
+ *
+ * With no department named there is nobody specific to tell, so everyone is
+ * told. That is the old behaviour, kept exactly for the case it was right for.
+ */
+export function reviewersFor(
+  dir: ReviewerDirectory,
+  departmentId: string | null | undefined,
+): SignupReviewers {
+  if (!departmentId) {
+    return { adminIds: dir.adminIds, leadIds: dir.allLeadIds };
+  }
+  return {
+    adminIds: dir.techIds,
+    leadIds: dir.leadsByDepartment.get(departmentId) ?? [],
+  };
 }
 
 /**
@@ -118,14 +175,15 @@ async function untold(
  * Tell every reviewer who hasn't heard yet that `user` is waiting for
  * approval. Returns who was (or, when `dryRun`, would be) written to.
  *
- * Pass `reviewers` to reuse one lookup across a whole queue.
+ * Pass `directory` to reuse one lookup across a whole queue.
  */
 export async function announceSignup(
   db: Db,
   user: PendingSignupUser,
-  opts: { reviewers?: SignupReviewers; dryRun?: boolean } = {},
+  opts: { directory?: ReviewerDirectory; dryRun?: boolean } = {},
 ): Promise<SignupReviewers> {
-  const all = opts.reviewers ?? (await signupReviewers(db));
+  const dir = opts.directory ?? (await reviewerDirectory(db));
+  const all = reviewersFor(dir, user.requestedDepartmentId);
   // A reviewer never needs paging about their own sign-up.
   const notSelf = (id: string) => id !== user.id;
   const [adminIds, leadIds] = await untold(db, user, [
@@ -135,17 +193,22 @@ export async function announceSignup(
 
   if (!opts.dryRun) {
     const who = describe(user);
+    // The department is what makes the line actionable — "someone you've never
+    // heard of is waiting" is not a request anyone can act on.
+    const joining = user.requestedDepartmentName
+      ? ` is joining ${user.requestedDepartmentName} and`
+      : "";
     await notify(
       db,
       adminIds,
       "OTHER",
-      `${SIGNUP_PREFIX} ${who} is waiting for approval — approve or remove them on the admin panel (/admin).`,
+      `${SIGNUP_PREFIX} ${who}${joining} is waiting for approval — approve or remove them on the admin panel (/admin).`,
     );
     await notify(
       db,
       leadIds,
       "OTHER",
-      `${SIGNUP_PREFIX} ${who} is waiting for approval — approve them on your department page (/department).`,
+      `${SIGNUP_PREFIX} ${who}${joining} is waiting for approval — approve them on your department page (/department).`,
     );
   }
 
@@ -161,30 +224,45 @@ export type PendingAnnouncement = {
 
 /**
  * Walk the whole waiting queue, oldest request first, and announce each one to
- * the reviewers who were never told. Catches up sign-ups that arrived before
- * this alert existed, and any whose alert was lost to a hiccup at sign-in time
- * (the event writes it best-effort, so a failure there is silent).
+ * the reviewers who were never told. Catches up sign-ups whose alert was lost
+ * to a hiccup when they named their department (the write is best-effort, so a
+ * failure there is silent), and any who never named one — those page every
+ * reviewer, which is the point: nothing in this queue may go unowned.
  */
 export async function announcePendingSignups(
   db: Db,
   opts: { dryRun?: boolean } = {},
 ): Promise<PendingAnnouncement[]> {
-  const [waiting, reviewers] = await Promise.all([
+  const [waiting, directory] = await Promise.all([
     db.user.findMany({
       where: { approvedAt: null },
       orderBy: { createdAt: "asc" },
-      select: { id: true, name: true, email: true, createdAt: true },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        createdAt: true,
+        requestedDepartmentId: true,
+        requestedDepartment: { select: { name: true } },
+      },
     }),
-    signupReviewers(db),
+    reviewerDirectory(db),
   ]);
 
   const out: PendingAnnouncement[] = [];
-  for (const { createdAt, ...user } of waiting) {
+  for (const row of waiting) {
+    const user: PendingSignupUser = {
+      id: row.id,
+      name: row.name,
+      email: row.email,
+      requestedDepartmentId: row.requestedDepartmentId,
+      requestedDepartmentName: row.requestedDepartment?.name ?? null,
+    };
     out.push({
       user,
-      createdAt,
+      createdAt: row.createdAt,
       reviewers: await announceSignup(db, user, {
-        reviewers,
+        directory,
         dryRun: opts.dryRun,
       }),
     });

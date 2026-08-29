@@ -5,17 +5,36 @@ export const metadata: Metadata = { title: "Waiting for approval" };
 import { auth, signOut } from "@/auth";
 import { isApprovedUser } from "@/lib/approval";
 import { COMPANY_EMAIL_DOMAIN } from "@/lib/company";
+import { prisma } from "@/lib/prisma";
+import { DepartmentRequest } from "./DepartmentRequest";
 
 /**
  * The waiting room for non-company sign-ups: signed in, but not yet let in.
- * Every department lead and admin was notified the moment the account was
- * created; once one of them approves it, reloading (or just navigating) lands
- * on onboarding like any new joiner.
+ *
+ * It asks one question — which department are you joining — and that answer is
+ * what pages a reviewer. Nothing is sent at sign-in any more: at that moment
+ * nobody knows whose joiner this is, so the only honest alert went to every
+ * lead in the company about a stranger. Answering here tells that department's
+ * lead and tech@, and arrives at onboarding prefilled once they're approved.
  */
 export default async function PendingPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/signin");
   if (await isApprovedUser(session.user)) redirect("/dashboard");
+
+  const [me, departments] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { requestedDepartment: { select: { id: true, name: true } } },
+    }),
+    // The same fixed list onboarding offers, mini departments included: a new
+    // joiner may genuinely be joining one, and its queue still reaches tech@.
+    prisma.department.findMany({
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
+  ]);
+  const requested = me?.requestedDepartment ?? null;
 
   return (
     <main className="flex flex-1 items-center justify-center bg-canvas px-6 py-10">
@@ -28,8 +47,13 @@ export default async function PendingPage() {
         </div>
         <h1 className="text-2xl font-bold text-ink">Almost in</h1>
         <p className="mt-2 text-sm text-muted-fg">
-          {`Your account (${session.user.email ?? "no email"}) isn't on the ${COMPANY_EMAIL_DOMAIN} domain, so a department lead approves it before you're in. They've been notified — check back in a bit, there's nothing else to do on your side.`}
+          {`Your account (${session.user.email ?? "no email"}) isn't on the ${COMPANY_EMAIL_DOMAIN} domain, so a department lead approves it before you're in.`}
+          {requested
+            ? " They've been notified — check back in a bit, there's nothing else to do on your side."
+            : " Tell us where you belong and we'll let them know."}
         </p>
+
+        <DepartmentRequest departments={departments} requested={requested} />
 
         <form
           action={async () => {

@@ -5,7 +5,6 @@ import { prisma } from "@/lib/prisma";
 import { authConfig } from "@/auth.config";
 import { ensureAvatar } from "@/lib/assignAvatar";
 import { isCompanyEmail } from "@/lib/company";
-import { announceSignup } from "@/lib/signupAlerts";
 
 // Dev-only login: a one-click "Continue as test student" that bypasses real
 // auth. Anyone with the URL can sign in as a shared account, so it needs BOTH
@@ -55,11 +54,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   events: {
     // Runs once per brand-new (OAuth) user: hand out a unique animal avatar,
     // then settle their standing. Company accounts are approved on the spot;
-    // anyone else waits on /pending, and every department lead and admin is
-    // told there's a sign-up to review (see lib/signupAlerts.ts for who that
-    // is and where each of them acts). Best-effort — a notification hiccup
-    // must never break the sign-in itself, which is why the same alert can be
-    // replayed later from scripts/announce-pending-signups.ts.
+    // anyone else waits on /pending.
+    //
+    // No alert is written here any more. /pending first asks which department
+    // they're joining, and THAT is what pages a reviewer — the answer decides
+    // who hears about it (their lead, plus tech@), and an alert sent a moment
+    // earlier could only say "a stranger is waiting" to everyone. A sign-up
+    // who never answers is not lost: /admin lists every waiting account, and
+    // scripts/announce-pending-signups.ts pages every reviewer about anyone
+    // still unnamed.
     async createUser({ user }) {
       if (!user.id) return;
       await ensureAvatar(user.id, user.email ?? user.name);
@@ -69,13 +72,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             where: { id: user.id },
             data: { approvedAt: new Date() },
           });
-          return;
         }
-        await announceSignup(prisma, {
-          id: user.id,
-          name: user.name ?? null,
-          email: user.email ?? null,
-        });
       } catch (e) {
         console.error("post-signup approval bookkeeping failed", e);
       }

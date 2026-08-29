@@ -89,6 +89,8 @@ export default async function DepartmentPanelPage() {
     },
     }),
     // Sign-ups waiting to be let in — reviewing them is a lead power too.
+    // The department each one named on /pending comes along: it is what tells
+    // a lead whose new joiner this is, and every lead sees the whole queue.
     prisma.user.findMany({
       where: { approvedAt: null },
       orderBy: { createdAt: "asc" },
@@ -98,6 +100,7 @@ export default async function DepartmentPanelPage() {
         email: true,
         avatar: true,
         createdAt: true,
+        requestedDepartment: { select: { name: true } },
       },
     }),
   ]);
@@ -127,6 +130,7 @@ export default async function DepartmentPanelPage() {
       emoji: av.emoji,
       bg: av.bg,
       joinedLabel: formatDateTimeTz(u.createdAt),
+      department: u.requestedDepartment?.name ?? null,
     };
   });
 

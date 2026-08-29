@@ -10,6 +10,8 @@ export type PendingSignup = {
   emoji: string;
   bg: string;
   joinedLabel: string;
+  /** The department they named on /pending; null when they never answered. */
+  department: string | null;
 };
 
 /**
@@ -81,6 +83,12 @@ function SignupRow({
         <p className="truncate text-sm font-semibold text-ink">{s.name}</p>
         <p className="truncate text-xs text-muted-fg">
           {[s.email, `signed up ${s.joinedLabel}`].filter(Boolean).join(" · ")}
+        </p>
+        {/* The department is the whole reason a reviewer can act: without it
+            this row is a stranger's email address. Called out rather than
+            appended to the line above, including when it is missing. */}
+        <p className="truncate text-xs font-semibold text-ink">
+          {s.department ?? "No department named yet"}
         </p>
         {error && <p className="text-xs text-red-600">{error}</p>}
       </div>

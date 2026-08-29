@@ -43,6 +43,10 @@ model Department {
   mini Boolean @default(false)
 
   memberships DepartmentMembership[]
+
+  // Sign-ups who named this department on /pending but aren't approved yet.
+  // Not members of it — see User.requestedDepartmentId.
+  signupRequests User[] @relation("SignupRequests")
 }
 
 // One person's seat in one department, with the hat they wear there. A user
@@ -73,6 +77,20 @@ model User {
   // Sign-up approval. Company accounts are stamped approved the moment they're
   // created; anyone else waits on /pending until a department lead or an admin
   // lets them in (see lib/approval.ts). Null = still waiting.
+  //
+  // The department a waiting sign-up says they're joining, asked on /pending
+  // BEFORE anyone approves them. It is what makes the queue reviewable: the
+  // alert goes to that department's lead (plus tech@) instead of paging every
+  // lead in the company about a stranger, and a reviewer can see whose new
+  // joiner this is.
+  //
+  // Deliberately NOT a membership. A membership is what every roster reads —
+  // /team, the attendance sheet, eligibleEmployees — so creating one before
+  // approval would put a stranger on those lists. Onboarding turns this into
+  // the real seat once they're in, arriving prefilled with it.
+  requestedDepartmentId String?
+  requestedDepartment   Department? @relation("SignupRequests", fields: [requestedDepartmentId], references: [id], onDelete: SetNull)
+
   approvedAt   DateTime?
   approvedById String?
   approvedBy   User?     @relation("UsersApproved", fields: [approvedById], references: [id], onDelete: SetNull)
@@ -123,6 +141,9 @@ model User {
   notifications   Notification[]
   payrollSubmissions PayrollSubmission[]
   payrollEvents      PayrollEvent[] @relation("PayrollEventsActed")
+
+  // The signup queue reads waiting accounts by the department they named.
+  @@index([requestedDepartmentId])
 }
 
 model Account {

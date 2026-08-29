@@ -271,7 +271,8 @@ export default async function AdminPage({
       select: { amount: true, paidAmount: true },
     }),
     // Sign-ups waiting for approval (non-company accounts) — shown above the
-    // tabs so they can't be missed on any of them.
+    // tabs so they can't be missed on any of them. The department each named
+    // on /pending rides along: it is what makes the row reviewable.
     prisma.user.findMany({
       where: { approvedAt: null },
       orderBy: { createdAt: "asc" },
@@ -281,6 +282,7 @@ export default async function AdminPage({
         email: true,
         avatar: true,
         createdAt: true,
+        requestedDepartment: { select: { name: true } },
       },
     }),
     // Full per-user history for the Performance tab — every week and month with
@@ -374,6 +376,7 @@ export default async function AdminPage({
       emoji: av.emoji,
       bg: av.bg,
       joinedLabel: formatDateTimeTz(u.createdAt),
+      department: u.requestedDepartment?.name ?? null,
     };
   });
 

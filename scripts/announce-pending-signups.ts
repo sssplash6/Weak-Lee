@@ -18,7 +18,7 @@
  *   DATABASE_URL="<prod-url>" npx tsx scripts/announce-pending-signups.ts --apply
  */
 import { prisma } from "@/lib/prisma";
-import { announcePendingSignups, signupReviewers } from "@/lib/signupAlerts";
+import { announcePendingSignups, reviewerDirectory } from "@/lib/signupAlerts";
 
 function fmt(d: Date): string {
   return d.toISOString().slice(0, 16).replace("T", " ");
@@ -27,8 +27,8 @@ function fmt(d: Date): string {
 async function main() {
   const apply = process.argv.slice(2).includes("--apply");
 
-  const reviewers = await signupReviewers(prisma);
-  const reviewerCount = reviewers.adminIds.length + reviewers.leadIds.length;
+  const dir = await reviewerDirectory(prisma);
+  const reviewerCount = dir.adminIds.length + dir.allLeadIds.length;
   if (reviewerCount === 0) {
     console.error(
       "No reviewers found — no admin has ever signed in and no non-mini\n" +
@@ -38,8 +38,14 @@ async function main() {
     return;
   }
   console.log(
-    `Reviewers: ${reviewers.adminIds.length} admin(s) → /admin, ` +
-      `${reviewers.leadIds.length} lead(s) → /department`,
+    `Reviewers: ${dir.adminIds.length} admin(s) → /admin, ` +
+      `${dir.allLeadIds.length} lead(s) → /department`,
+  );
+  // Who each sign-up actually reaches is narrower: the lead of the department
+  // they named, plus tech@. Only a sign-up that named none pages everyone.
+  console.log(
+    `Alerts are scoped by the department each sign-up named on /pending; ` +
+      `one that named none reaches all ${reviewerCount}.`,
   );
 
   const results = await announcePendingSignups(prisma, { dryRun: !apply });
@@ -53,7 +59,8 @@ async function main() {
   for (const { user, createdAt, reviewers: to } of results) {
     const n = to.adminIds.length + to.leadIds.length;
     written += n;
-    const who = `${user.name ?? "—"} <${user.email ?? "no email"}>`;
+    const dept = user.requestedDepartmentName ?? "no department named";
+    const who = `${user.name ?? "—"} <${user.email ?? "no email"}> · ${dept}`;
     console.log(
       `  ${fmt(createdAt)}  ${who}\n` +
         `      ${n === 0 ? "every reviewer already notified" : `${apply ? "notified" : "would notify"} ${n} reviewer(s) (${to.adminIds.length} admin, ${to.leadIds.length} lead)`}`,

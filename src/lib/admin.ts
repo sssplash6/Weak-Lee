@@ -1,8 +1,16 @@
 // Server-only: which accounts may reach the admin panel. tech@freshman.academy
 // is always an admin; add more (comma-separated) via the ADMIN_EMAILS env var.
 
+/**
+ * The account that owns anything with no other owner — every sign-up alert
+ * goes here alongside the department's own lead (see lib/signupAlerts.ts), so
+ * a department with no lead, or one who never signs in, still has someone
+ * watching its queue.
+ */
+export const TECH_ADMIN_EMAIL = "tech@freshman.academy";
+
 const BUILT_IN_ADMINS = [
-  "tech@freshman.academy",
+  TECH_ADMIN_EMAIL,
   "valera@freshman.academy",
   "shakhzod@freshman.academy",
 ];
