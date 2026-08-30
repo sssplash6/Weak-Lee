@@ -67,6 +67,8 @@ const COL_QTY = 420;
 const COL_RATE = 496;
 const COL_AMOUNT = RIGHT - 8;
 const ROW_H = 24;
+// Extra height each wrapped continuation line of an item label adds to a row.
+const ITEM_LINE_H = 12;
 
 /** Whole dollars → "$1,234.00" / "-$20.00" (the sample renders cents). */
 function usd(n: number): string {
@@ -220,12 +222,22 @@ export async function renderPayrollInvoice(
 
   drawTableHeader();
   for (const row of rows) {
-    ensureRoom(ROW_H, true);
-    text(truncate(bold, row.label, 10, COL_ITEM_MAX), COL_ITEM, y, { font: bold });
+    // Expense explanations and fine/bonus notes are written to be read, so the
+    // item column wraps them and the row grows instead of cutting the sentence
+    // off mid-word. The numbers stay on the row's first line.
+    const lines = wrap(bold, row.label, 10, COL_ITEM_MAX);
+    const rowH = ROW_H + (lines.length - 1) * ITEM_LINE_H;
+    ensureRoom(rowH, true);
+    lines.forEach((line, i) => {
+      // Only bites on a single unbreakable token wider than the column.
+      text(truncate(bold, line, 10, COL_ITEM_MAX), COL_ITEM, y - i * ITEM_LINE_H, {
+        font: bold,
+      });
+    });
     rightText("1", COL_QTY, y);
     rightText(usd(row.amount), COL_RATE, y);
     rightText(usd(row.amount), COL_AMOUNT, y);
-    y -= ROW_H;
+    y -= rowH;
   }
   y -= 12;
 
