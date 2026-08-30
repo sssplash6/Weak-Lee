@@ -34,7 +34,7 @@ function BonusItem({ bonus: b }: { bonus: BonusRow }) {
       <span className="h-2 w-2 shrink-0 rounded-full bg-green-500" />
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium text-ink">{b.who}</p>
-        {b.note && <p className="truncate text-xs text-muted-fg">{b.note}</p>}
+        {b.note && <p className="break-words text-xs text-muted-fg">{b.note}</p>}
       </div>
       <span className="hidden shrink-0 text-xs text-muted-fg sm:block">
         {b.dateLabel}

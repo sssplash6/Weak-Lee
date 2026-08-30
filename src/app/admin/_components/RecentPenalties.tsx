@@ -38,7 +38,7 @@ function PenaltyItem({ penalty: p }: { penalty: PenaltyRow }) {
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium text-ink">{p.who}</p>
         {p.note && (
-          <p className="truncate text-xs text-muted-fg">{p.note}</p>
+          <p className="break-words text-xs text-muted-fg">{p.note}</p>
         )}
       </div>
       <span className="shrink-0 text-sm font-semibold tabular-nums text-red-600">

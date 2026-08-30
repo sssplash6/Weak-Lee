@@ -35,10 +35,12 @@ export function BonusNotice({
           {bonuses.map((b) => (
             <li
               key={b.id}
-              className="flex items-center gap-2 text-xs text-green-700/90"
+              className="flex items-start gap-2 text-xs text-green-700/90"
             >
-              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-green-500" />
-              <span className="min-w-0 flex-1 truncate">
+              <span className="mt-[5px] h-1.5 w-1.5 shrink-0 rounded-full bg-green-500" />
+              {/* Wraps: a bonus note is the reason someone was paid extra,
+                  and half a sentence doesn't say why. */}
+              <span className="min-w-0 flex-1 break-words">
                 {b.note ?? "Bonus"}
                 <span className="text-green-700/60"> · {b.dateLabel}</span>
               </span>

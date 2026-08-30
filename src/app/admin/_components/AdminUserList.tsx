@@ -554,9 +554,9 @@ function UserRow({
 
 function PenaltyRow({ penalty: p }: { penalty: AdminPenalty }) {
   return (
-    <li className="flex items-center gap-3 py-1.5 text-sm">
-      <span className="h-2 w-2 shrink-0 rounded-full bg-red-500" />
-      <span className="min-w-0 flex-1 truncate text-ink">
+    <li className="flex items-start gap-3 py-1.5 text-sm">
+      <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-red-500" />
+      <span className="min-w-0 flex-1 break-words text-ink">
         {p.label}
         {p.note ? <span className="text-muted-fg"> · {p.note}</span> : ""}
       </span>
@@ -712,9 +712,11 @@ function AddFineForm({
 
 function BonusRow({ bonus: b }: { bonus: AdminBonus }) {
   return (
-    <li className="flex items-center gap-3 py-1.5 text-sm">
-      <span className="h-2 w-2 shrink-0 rounded-full bg-green-500" />
-      <span className="min-w-0 flex-1 truncate text-ink">
+    <li className="flex items-start gap-3 py-1.5 text-sm">
+      <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-green-500" />
+      {/* Wraps rather than truncates — the note is the whole reason for the
+          bonus, so it stays readable however long it runs. */}
+      <span className="min-w-0 flex-1 break-words text-ink">
         Bonus
         {b.note ? <span className="text-muted-fg"> · {b.note}</span> : ""}
       </span>
