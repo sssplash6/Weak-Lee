@@ -17,7 +17,7 @@ import fontkit from "@pdf-lib/fontkit";
 import { PENALTY_LABEL, type PenaltyType } from "@/lib/penalties";
 import {
   methodIsCash,
-  methodNeedsWiseEmail,
+  paymentDetailLines,
   PAYROLL_METHOD_LABEL,
   type PayrollMethod,
   type PaymentDetails,
@@ -280,23 +280,27 @@ export async function renderPayrollInvoice(
 
   // ----- Notes: how to pay this person -----
   //
-  // No card or bank numbers. This PDF is emailed — to every finance address on
-  // approval, and back to the employee on payout — and those details are
-  // arranged directly over Telegram, so there is nothing here to print and
-  // nothing to leak through a third-party mail provider.
+  // The payout instructions the filer entered, with ONE substitution: a card
+  // number prints as its last four digits. This PDF is emailed — to every
+  // finance address on approval, and back to the employee on payout — and a
+  // full card number has no business travelling through a third-party mail
+  // provider. Finance reads the whole number in the app, where it is entered.
   //
   // "Preferred" because the method is what the employee asked for, not what
   // finance is bound to: the same wording the employee sees on the form.
   const method = data.paymentMethod;
   const noteLines = [`Preferred payment method: ${PAYROLL_METHOD_LABEL[method]}`];
-  if (methodNeedsWiseEmail(method)) {
-    // Wise is the only method that carries something the employee typed.
-    noteLines.push(`Account email: ${data.paymentDetails.wiseEmail ?? ""}`);
-  } else if (!methodIsCash(method)) {
-    // Every other non-cash route — card, bank transfer, Stripe, "various" —
-    // is settled off-app, so finance reads this as "you already know where".
-    // Cash needs no second line: there is nothing to send it to.
+  const details = paymentDetailLines(method, data.paymentDetails, { mask: true });
+  for (const line of details) {
+    noteLines.push(`${line.label}: ${line.value}`);
+  }
+  if (details.length === 0 && !methodIsCash(method)) {
+    // Stripe, SG Bank, Kapital Bank — settled off-app, so finance reads this
+    // as "you already know where". Cash needs no second line at all.
     noteLines.push("Account details: arranged directly with finance");
+  }
+  if (details.some((l) => l.value.startsWith("••••"))) {
+    noteLines.push("Full card number is in the app — shown to finance there.");
   }
   ensureRoom(15 + noteLines.length * 14 + 10, false);
   text("Notes:", MARGIN_X, y, { color: GRAY });

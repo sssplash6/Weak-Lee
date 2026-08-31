@@ -21,6 +21,7 @@ import {
 } from "@/lib/payroll";
 import {
   parsePaymentDetails,
+  paymentDetailLines,
   paymentSummary,
   payrollPeriodLabel,
   isPayrollOpenFor,
@@ -447,6 +448,12 @@ export default async function PayrollPanelPage({
           fines: fineLineViews(s.fineLines, selected.year),
           expenses: s.expenses,
           paymentLine: paymentSummary(
+            s.paymentMethod,
+            parsePaymentDetails(s.paymentDetails),
+          ),
+          // Unmasked: both of these screens live behind the app's own auth, and
+          // the payment is made from one of them. Only the emailed PDF masks.
+          paymentDetails: paymentDetailLines(
             s.paymentMethod,
             parsePaymentDetails(s.paymentDetails),
           ),

@@ -82,6 +82,7 @@ export type PayrollMethod =
   | "CASH_UZBEKISTAN"
   | "WISE_USD"
   | "UZS_CARD"
+  | "VISA_CARD"
   | "STRIPE"
   | "SG_CASH"
   | "SG_BANK"
@@ -94,6 +95,7 @@ export const PAYROLL_METHODS: PayrollMethod[] = [
   "CASH_UZBEKISTAN",
   "WISE_USD",
   "UZS_CARD",
+  "VISA_CARD",
   "STRIPE",
   "SG_CASH",
   "SG_BANK",
@@ -117,12 +119,16 @@ export const PAYROLL_METHOD_LABEL: Record<PayrollMethod, string> = {
   CASH_SINGAPORE: "Cash Singapore",
   CASH_UZBEKISTAN: "Cash Uzbekistan",
   WISE_USD: "Wise USD",
-  UZS_CARD: "UZS card",
+  UZS_CARD: "Uzbek card",
+  VISA_CARD: "Visa card",
   STRIPE: "Stripe",
   SG_CASH: "SG Cash",
   SG_BANK: "SG Bank",
   KAPITAL_BANK: "Kapital Bank",
-  VARIOUS: "Various",
+  // The catch-all. It is "Various" in the finance sheet's Source column — the
+  // enum value still says so — but the person filing is describing one payment
+  // they want made a way that isn't listed, and "Other" is what that reads as.
+  VARIOUS: "Other",
 };
 
 /** True for a value the enum actually holds — use on anything caller-supplied. */
@@ -131,9 +137,8 @@ export function isPayrollMethod(v: unknown): v is PayrollMethod {
 }
 
 /**
- * The one method that needs something typed alongside it. Everything else is
- * either cash or is arranged with finance directly, so the app holds no
- * account or card number for it.
+ * The one method that needs an email typed alongside it. Cards and bank
+ * transfers ask for their own fields — see paymentFieldsFor.
  */
 export function methodNeedsWiseEmail(method: PayrollMethod): boolean {
   return method === "WISE_USD";
@@ -149,42 +154,250 @@ export function methodIsCash(method: PayrollMethod): boolean {
 }
 
 /**
- * What the chosen payment method stores in `paymentDetails`: WISE_USD the
- * account email, every other method nothing. A card or account number is
- * deliberately absent — those details are arranged with finance over Telegram,
- * so the app never holds one. Rows written before that decision may still
- * carry card keys; nothing reads them.
+ * What the chosen payment method stores in `paymentDetails`.
+ *
+ * These are payout instructions, entered by the person being paid, so finance
+ * can send the money without a side conversation. Card numbers used to be kept
+ * out of the app deliberately; they are here now because the team asked to
+ * collect them, and two rules keep that decision contained:
+ *   • the emailed invoice PDF carries a MASKED number (last four only) — the
+ *     PDF goes out through a third-party mail provider, and that is exactly
+ *     what the old rule was protecting against;
+ *   • full numbers are shown only in the app, to the filer and to finance.
  */
 export type PaymentDetails = {
   wiseEmail?: string;
+  cardHolder?: string;
+  cardNumber?: string;
+  cardExpiry?: string;
+  bankName?: string;
+  accountNumber?: string;
+  bankCode?: string;
+  swift?: string;
+  otherDetails?: string;
 };
+
+export type PaymentFieldKey = keyof PaymentDetails;
+
+export type PaymentField = {
+  key: PaymentFieldKey;
+  label: string;
+  placeholder: string;
+  maxLength: number;
+  /** Blocks filing when empty. Optional ones are still asked for, never demanded. */
+  required: boolean;
+  /** Drives the input type, the validation, and whether the PDF masks it. */
+  kind: "email" | "card" | "expiry" | "text" | "note";
+};
+
+const FIELDS: Record<PaymentFieldKey, PaymentField> = {
+  wiseEmail: {
+    key: "wiseEmail",
+    label: "Wise account email",
+    placeholder: "you@example.com",
+    maxLength: 200,
+    required: true,
+    kind: "email",
+  },
+  cardHolder: {
+    key: "cardHolder",
+    label: "Cardholder name",
+    placeholder: "As printed on the card",
+    maxLength: 120,
+    required: true,
+    kind: "text",
+  },
+  cardNumber: {
+    key: "cardNumber",
+    label: "Card number",
+    placeholder: "8600 1234 5678 9012",
+    maxLength: 30,
+    required: true,
+    kind: "card",
+  },
+  cardExpiry: {
+    key: "cardExpiry",
+    label: "Expires",
+    placeholder: "MM/YY",
+    maxLength: 7,
+    required: true,
+    kind: "expiry",
+  },
+  // Bank routing is asked for but never demanded: a filing window is four days
+  // long, and nobody should miss it hunting for a branch code. Finance gets
+  // whatever is known, and asks for the rest only if a transfer needs it.
+  bankName: {
+    key: "bankName",
+    label: "Bank",
+    placeholder: "Bank name (optional)",
+    maxLength: 120,
+    required: false,
+    kind: "text",
+  },
+  accountNumber: {
+    key: "accountNumber",
+    label: "Account number",
+    placeholder: "Account or IBAN (optional)",
+    maxLength: 64,
+    required: false,
+    kind: "text",
+  },
+  bankCode: {
+    key: "bankCode",
+    label: "Bank code",
+    placeholder: "Branch / routing code (optional)",
+    maxLength: 32,
+    required: false,
+    kind: "text",
+  },
+  swift: {
+    key: "swift",
+    label: "SWIFT / BIC",
+    placeholder: "e.g. ABCDUZ22 (optional)",
+    maxLength: 16,
+    required: false,
+    kind: "text",
+  },
+  otherDetails: {
+    key: "otherDetails",
+    label: "How to pay you",
+    placeholder: "Describe the method and everything finance needs to send it",
+    maxLength: 500,
+    required: true,
+    kind: "note",
+  },
+};
+
+/**
+ * What to ask for, given the method. ONE table — the form renders it, the
+ * server validates against it, and the invoice reads it back, so a new field
+ * can never appear on the form and go unstored (or be demanded by a validator
+ * nothing displays).
+ */
+export function paymentFieldsFor(method: PayrollMethod): PaymentField[] {
+  switch (method) {
+    case "WISE_USD":
+      return [FIELDS.wiseEmail];
+    case "UZS_CARD":
+      return [FIELDS.cardHolder, FIELDS.cardNumber, FIELDS.cardExpiry];
+    case "VISA_CARD":
+      return [
+        FIELDS.cardHolder,
+        FIELDS.cardNumber,
+        FIELDS.cardExpiry,
+        FIELDS.bankName,
+        FIELDS.accountNumber,
+        FIELDS.bankCode,
+        FIELDS.swift,
+      ];
+    case "VARIOUS":
+      return [FIELDS.otherDetails];
+    default:
+      // Cash, Stripe, SG Bank, Kapital Bank — settled off-app as they always were.
+      return [];
+  }
+}
+
+/** Digits only, for length checks and for masking. */
+function cardDigits(raw: string): string {
+  return raw.replace(/[^0-9]/g, "");
+}
+
+/**
+ * A card number as finance should see it outside the app: last four only.
+ * "8600123456789012" → "•••• 9012". Anything too short to have a meaningful
+ * tail is masked whole.
+ */
+export function maskCardNumber(raw: string): string {
+  const digits = cardDigits(raw);
+  if (digits.length < 4) return "••••";
+  return `•••• ${digits.slice(-4)}`;
+}
+
+/**
+ * The first thing wrong with the details for this method, phrased for the
+ * person filing — or null when they're good. Shared by the form and the server
+ * action so the message is the same wherever it's hit.
+ */
+export function validatePaymentDetails(
+  method: PayrollMethod,
+  details: PaymentDetails,
+): string | null {
+  for (const f of paymentFieldsFor(method)) {
+    const value = (details[f.key] ?? "").trim();
+    if (!value) {
+      if (f.required) return `${f.label} is required for ${PAYROLL_METHOD_LABEL[method]}.`;
+      continue;
+    }
+    if (f.kind === "email" && !/^\S+@\S+\.\S+$/.test(value)) {
+      return "Enter a valid Wise account email.";
+    }
+    if (f.kind === "card") {
+      const digits = cardDigits(value);
+      // Spaces and dashes are how people write a card down; the range covers
+      // Uzcard/Humo (16) through the longest international PANs (19).
+      if (digits.length < 12 || digits.length > 19 || !/^[0-9 -]+$/.test(value)) {
+        return "Enter the full card number (digits only, spaces are fine).";
+      }
+    }
+    if (f.kind === "expiry") {
+      const m = /^(0[1-9]|1[0-2])\s*\/\s*(\d{2}|\d{4})$/.exec(value);
+      if (!m) return "Enter the card expiry as MM/YY.";
+    }
+  }
+  return null;
+}
 
 /** Safely read a Prisma Json column back into the details shape. */
 export function parsePaymentDetails(v: unknown): PaymentDetails {
   if (typeof v !== "object" || v === null || Array.isArray(v)) return {};
   const o = v as Record<string, unknown>;
-  return {
-    wiseEmail: typeof o.wiseEmail === "string" ? o.wiseEmail : undefined,
-  };
+  const out: PaymentDetails = {};
+  for (const key of Object.keys(FIELDS) as PaymentFieldKey[]) {
+    const raw = o[key];
+    if (typeof raw === "string" && raw.trim()) out[key] = raw;
+  }
+  return out;
 }
 
 /**
- * How this person gets paid, in one line: "UZS card", "Wise USD · a@b.c",
- * "Cash Singapore" — the sheet's own wording, plus the Wise address when
- * there is one.
+ * The payout instructions as labelled lines, in the order they were asked for:
+ * what the reviewer reads off the screen, and what the invoice prints.
  *
- * There is no masked/unmasked pair any more. There used to be, because the
- * card method stored a card number and finance needed to see all of it; now
- * those details are settled over Telegram and there is nothing here to hide.
+ * `mask` swaps the card number for its last four. The PDF passes it, because
+ * that file is emailed; the in-app views don't, because finance has to type
+ * the number somewhere to make the payment.
+ */
+export function paymentDetailLines(
+  method: PayrollMethod,
+  details: PaymentDetails,
+  opts: { mask?: boolean } = {},
+): { label: string; value: string }[] {
+  const lines: { label: string; value: string }[] = [];
+  for (const f of paymentFieldsFor(method)) {
+    const value = (details[f.key] ?? "").trim();
+    if (!value) continue;
+    lines.push({
+      label: f.label,
+      value: opts.mask && f.kind === "card" ? maskCardNumber(value) : value,
+    });
+  }
+  return lines;
+}
+
+/**
+ * How this person gets paid, in one line: "Uzbek card · •••• 9012",
+ * "Wise USD · a@b.c", "Cash Singapore" — the sheet's own wording plus the one
+ * identifying detail. Always masked: this is a summary for lists and headers,
+ * and the full number is a click away in the details below it.
  */
 export function paymentSummary(
   method: PayrollMethod,
   details: PaymentDetails,
 ): string {
   const label = PAYROLL_METHOD_LABEL[method];
-  if (methodNeedsWiseEmail(method)) {
-    return [label, details.wiseEmail].filter(Boolean).join(" · ");
-  }
+  if (details.wiseEmail) return `${label} · ${details.wiseEmail}`;
+  if (details.cardNumber) return `${label} · ${maskCardNumber(details.cardNumber)}`;
   return label;
 }
 

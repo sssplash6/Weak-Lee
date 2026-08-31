@@ -23,6 +23,8 @@ export type SubmissionDetailModel = {
   fines: LedgerLineView[];
   expenses: SubmissionExpenseView[];
   paymentLine: string;
+  /** Everything finance needs to send the money, in full (the PDF masks it). */
+  paymentDetails: { label: string; value: string }[];
   events: SubmissionEventView[];
 };
 
@@ -96,12 +98,28 @@ export function SubmissionDetail({ view }: { view: SubmissionDetailModel }) {
             group by it and finance reconciles against it line by line, so the
             detail names it the same way instead of inventing a synonym, and
             gives it a chip rather than burying it in grey body text. */}
-        <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-fg">
-          Source
-          <span className="rounded-full bg-brand-soft px-2 py-0.5 text-xs font-semibold text-brand">
-            {view.paymentLine}
-          </span>
-        </p>
+        <div className="min-w-0">
+          <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-fg">
+            Source
+            <span className="rounded-full bg-brand-soft px-2 py-0.5 text-xs font-semibold text-brand">
+              {view.paymentLine}
+            </span>
+          </p>
+          {/* In full here, and only here: this is the screen the payment gets
+              made from. The emailed invoice carries the last four. */}
+          {view.paymentDetails.length > 0 && (
+            <dl className="mt-1.5 flex flex-col gap-0.5">
+              {view.paymentDetails.map((d) => (
+                <div key={d.label} className="flex gap-1.5 text-xs">
+                  <dt className="text-muted-fg">{d.label}:</dt>
+                  <dd className="min-w-0 break-words font-medium tabular-nums text-ink">
+                    {d.value}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          )}
+        </div>
         <a
           href={`/payroll/submissions/${view.id}/pdf`}
           target="_blank"

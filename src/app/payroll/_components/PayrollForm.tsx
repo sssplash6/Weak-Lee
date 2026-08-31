@@ -11,11 +11,13 @@ import {
   roundingCents,
   MAX_RECEIPT_BYTES,
   methodIsCash,
-  methodNeedsWiseEmail,
+  paymentFieldsFor,
+  validatePaymentDetails,
   PAYROLL_METHOD_LABEL,
   PAYROLL_METHODS,
   RECEIPT_MIME_TYPES,
   type PaymentDetails,
+  type PaymentFieldKey,
   type PayrollMethod,
 } from "@/lib/payrollTypes";
 import { TrashIcon } from "@/app/dashboard/_components/icons";
@@ -109,7 +111,12 @@ export function PayrollForm({
   );
   const nextKey = useRef((prefill.expenses?.length ?? 0) + 1);
   const [method, setMethod] = useState<PayrollMethod>(prefill.method);
-  const [wiseEmail, setWiseEmail] = useState(prefill.details.wiseEmail ?? "");
+  // One bag for every payout field. Switching method changes which of them are
+  // asked for (paymentFieldsFor) but keeps what was already typed, so flicking
+  // between the two card methods doesn't wipe the card you just entered — only
+  // the fields the chosen method asks for are submitted.
+  const [details, setDetails] = useState<PaymentDetails>(prefill.details);
+  const detailFields = paymentFieldsFor(method);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -132,6 +139,10 @@ export function PayrollForm({
     setExpenses((prev) =>
       prev.map((e) => (e.key === key ? { ...e, ...patch } : e)),
     );
+  }
+
+  function patchDetail(key: PaymentFieldKey, value: string) {
+    setDetails((prev) => ({ ...prev, [key]: value }));
   }
 
   function pickReceipt(key: number, file: File | null) {
@@ -164,11 +175,9 @@ export function PayrollForm({
         return;
       }
     }
-    if (
-      methodNeedsWiseEmail(method) &&
-      !/^\S+@\S+\.\S+$/.test(wiseEmail.trim())
-    ) {
-      setError("Enter a valid Wise account email.");
+    const detailsError = validatePaymentDetails(method, details);
+    if (detailsError) {
+      setError(detailsError);
       return;
     }
     if (net < 0) {
@@ -180,7 +189,9 @@ export function PayrollForm({
     const fd = new FormData();
     fd.set("baseSalary", String(baseValue));
     fd.set("paymentMethod", method);
-    if (methodNeedsWiseEmail(method)) fd.set("wiseEmail", wiseEmail);
+    for (const f of detailFields) {
+      fd.set(`detail_${f.key}`, (details[f.key] ?? "").trim());
+    }
     fd.set(
       "expenses",
       JSON.stringify(
@@ -427,31 +438,61 @@ export function PayrollForm({
             ))}
           </select>
         </div>
-        {/* Wise is the only method with something to type — the server
-            requires this address, so it's validated before submit too. */}
-        {methodNeedsWiseEmail(method) && (
-          <div className="rise-in mt-2">
-            <input
-              type="email"
-              value={wiseEmail}
-              onChange={(e) => setWiseEmail(e.target.value)}
-              placeholder="Wise account email"
-              aria-label="Wise account email"
-              maxLength={200}
-              className="w-72 max-w-full rounded-lg border border-line px-3 py-2 text-sm text-ink placeholder:text-muted-fg focus:border-brand focus:outline-none"
-            />
+        {/* Whatever this method asks for. The list is data (paymentFieldsFor),
+            so a new method's fields appear here — and are validated and stored
+            — without touching this file. */}
+        {detailFields.length > 0 && (
+          <div className="rise-in mt-2 flex flex-wrap gap-2">
+            {detailFields.map((f) => (
+              <label key={f.key} className="flex flex-col gap-1">
+                <span className="text-[11px] font-medium text-muted-fg">
+                  {f.label}
+                </span>
+                {f.kind === "note" ? (
+                  <textarea
+                    value={details[f.key] ?? ""}
+                    onChange={(e) => patchDetail(f.key, e.target.value)}
+                    placeholder={f.placeholder}
+                    maxLength={f.maxLength}
+                    rows={3}
+                    className="w-72 max-w-full rounded-lg border border-line px-3 py-2 text-sm text-ink placeholder:text-muted-fg focus:border-brand focus:outline-none"
+                  />
+                ) : (
+                  <input
+                    type={f.kind === "email" ? "email" : "text"}
+                    inputMode={
+                      f.kind === "card" || f.kind === "expiry" ? "numeric" : undefined
+                    }
+                    autoComplete="off"
+                    value={details[f.key] ?? ""}
+                    onChange={(e) => patchDetail(f.key, e.target.value)}
+                    placeholder={f.placeholder}
+                    maxLength={f.maxLength}
+                    className={`${
+                      f.kind === "expiry" ? "w-24" : "w-72"
+                    } max-w-full rounded-lg border border-line px-3 py-2 text-sm text-ink placeholder:text-muted-fg focus:border-brand focus:outline-none`}
+                  />
+                )}
+              </label>
+            ))}
           </div>
+        )}
+        {/* Card numbers are typed here, so say where they go. The invoice is
+            emailed, so it carries the last four only — the full number stays
+            in the app, where finance reads it to make the payment. */}
+        {detailFields.some((f) => f.kind === "card") && (
+          <p className="rise-in mt-2 text-xs text-muted-fg">
+            Finance sees these to pay you. The emailed invoice shows only the
+            last four digits.
+          </p>
         )}
         {methodIsCash(method) && (
           <p className="rise-in mt-2 text-xs text-muted-fg">
             Nothing else needed — you&rsquo;ll be paid in cash.
           </p>
         )}
-        {/* Everything else — UZS card, Stripe, SG Bank, Kapital Bank, Various.
-            No card or account fields. Those details are arranged directly with
-            finance over Telegram, so the app has no reason to hold a card
-            number — and every reason not to, given the invoice is emailed. */}
-        {!methodNeedsWiseEmail(method) && !methodIsCash(method) && (
+        {/* Stripe, SG Bank, Kapital Bank — settled off-app as they always were. */}
+        {detailFields.length === 0 && !methodIsCash(method) && (
           <p className="rise-in mt-2 text-xs text-muted-fg">
             Finance will arrange the details with you directly — nothing to
             enter here.

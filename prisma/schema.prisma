@@ -671,6 +671,7 @@ enum PayrollMethod {
   CASH_UZBEKISTAN
   WISE_USD
   UZS_CARD
+  VISA_CARD
   STRIPE
   SG_CASH
   SG_BANK

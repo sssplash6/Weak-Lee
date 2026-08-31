@@ -42,6 +42,8 @@ export type SubmissionViewModel = {
   fines: LedgerLineView[];
   expenses: SubmissionExpenseView[];
   paymentLine: string;
+  /** The payout instructions, labelled — shown in full, unlike on the PDF. */
+  paymentDetails: { label: string; value: string }[];
   events: SubmissionEventView[];
 };
 
@@ -134,9 +136,25 @@ export function SubmissionView({
       )}
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs text-muted-fg">
-          Paying to: <span className="font-medium text-ink">{view.paymentLine}</span>
-        </p>
+        <div className="min-w-0">
+          <p className="text-xs text-muted-fg">
+            Paying to: <span className="font-medium text-ink">{view.paymentLine}</span>
+          </p>
+          {/* Your own details, in full — you typed them, and seeing them back
+              is how you catch a mistyped digit before finance pays it. */}
+          {view.paymentDetails.length > 0 && (
+            <dl className="mt-1 flex flex-col gap-0.5">
+              {view.paymentDetails.map((d) => (
+                <div key={d.label} className="flex gap-1.5 text-xs">
+                  <dt className="text-muted-fg">{d.label}:</dt>
+                  <dd className="min-w-0 break-words font-medium text-ink">
+                    {d.value}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          )}
+        </div>
         <a
           href={`/payroll/submissions/${view.id}/pdf`}
           target="_blank"

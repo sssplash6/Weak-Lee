@@ -31,7 +31,8 @@ import {
   payrollMonthName,
   payrollPeriodLabel,
   isPayrollMethod,
-  methodNeedsWiseEmail,
+  paymentFieldsFor,
+  validatePaymentDetails,
   isPayrollOpenFor,
   PAYROLL_STATUS_LABEL,
   type PaymentDetails,
@@ -112,14 +113,18 @@ export async function submitPayroll(
     return fail("Pick a preferred payment method.");
   }
   const method: PayrollMethod = rawMethod;
-  // Only Wise carries anything. Card and bank details are arranged with
-  // finance over Telegram, so the app never sees a number and can't leak one.
-  let details: PaymentDetails = {};
-  if (methodNeedsWiseEmail(method)) {
-    const wiseEmail = String(formData.get("wiseEmail") ?? "").trim().slice(0, 200);
-    if (!/^\S+@\S+\.\S+$/.test(wiseEmail)) return fail("Enter a valid Wise account email.");
-    details = { wiseEmail };
+  // Payout instructions, read straight off the field list for the chosen
+  // method — so only what that method actually asks for is ever stored, and a
+  // switch of method can't leave a stale card number behind on the row.
+  const details: PaymentDetails = {};
+  for (const field of paymentFieldsFor(method)) {
+    const value = String(formData.get(`detail_${field.key}`) ?? "")
+      .trim()
+      .slice(0, field.maxLength);
+    if (value) details[field.key] = value;
   }
+  const detailsError = validatePaymentDetails(method, details);
+  if (detailsError) return fail(detailsError);
 
   let expenseMeta: { id?: unknown; label: unknown; amount: unknown }[];
   try {

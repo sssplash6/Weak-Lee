@@ -19,6 +19,7 @@ import {
   reconcilePayrollReminders,
 } from "@/lib/payroll";
 import {
+  paymentDetailLines,
   paymentSummary,
   payrollEventLabel,
   payrollMonthName,
@@ -263,6 +264,12 @@ export default async function PayrollPage() {
           ),
           expenses: current.expenses,
           paymentLine: paymentSummary(
+            current.paymentMethod,
+            parsePaymentDetails(current.paymentDetails),
+          ),
+          // Unmasked: both of these screens live behind the app's own auth, and
+          // the payment is made from one of them. Only the emailed PDF masks.
+          paymentDetails: paymentDetailLines(
             current.paymentMethod,
             parsePaymentDetails(current.paymentDetails),
           ),
