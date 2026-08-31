@@ -30,6 +30,34 @@ type ExpenseDraft = {
   file: File | null;
 };
 
+/**
+ * An expense amount as typed → whole dollars, rounded half-up ($1.95 → $2).
+ * Null when it isn't a positive number at all.
+ *
+ * Cents are worth accepting — a $1.95 tool subscription is a real expense — but
+ * the ledger, the payout and the invoice are all whole dollars, so the cents
+ * have to settle somewhere. Rounding to the nearest dollar is the same rule the
+ * server applies (submitPayroll), so what the form totals is what gets paid.
+ * A rounded 0 (anything under 50¢) comes back as 0 for the caller to reject.
+ */
+function expenseDollars(raw: string): number | null {
+  const text = raw.trim();
+  const n = Number(text);
+  if (!text || !Number.isFinite(n) || n <= 0) return null;
+  return Math.round(n);
+}
+
+/**
+ * What the field shows once you leave it: the whole dollars that will actually
+ * be paid, so nobody reads $1.95 on the form and $2.00 on the invoice. Anything
+ * that isn't a claimable amount is left exactly as typed — mid-edit text is not
+ * ours to throw away, and submit() explains what's wrong.
+ */
+function snapAmount(raw: string): string {
+  const dollars = expenseDollars(raw);
+  return dollars != null && dollars > 0 ? String(dollars) : raw;
+}
+
 export type PrefillExpense = {
   id: string;
   label: string;
@@ -103,10 +131,10 @@ export function PayrollForm({
   const [isPending, startTransition] = useTransition();
 
   const baseValue = /^\d+$/.test(base.trim()) ? Number(base.trim()) : null;
-  const expensesTotal = expenses.reduce((s, e) => {
-    const n = Number(e.amount);
-    return s + (Number.isInteger(n) && n > 0 ? n : 0);
-  }, 0);
+  const expensesTotal = expenses.reduce(
+    (s, e) => s + (expenseDollars(e.amount) ?? 0),
+    0,
+  );
   const net = computeNet({
     baseSalary: baseValue ?? 0,
     bonusesTotal: snapshot.bonusesTotal,
@@ -141,13 +169,19 @@ export function PayrollForm({
       return;
     }
     for (const e of expenses) {
-      const n = Number(e.amount);
+      const n = expenseDollars(e.amount);
       if (!e.label.trim()) {
         setError("Every expense needs a label.");
         return;
       }
-      if (!Number.isInteger(n) || n <= 0) {
-        setError(`Expense “${e.label.trim()}” needs a whole-dollar amount.`);
+      if (n == null) {
+        setError(`Expense “${e.label.trim()}” needs an amount in dollars.`);
+        return;
+      }
+      if (n === 0) {
+        setError(
+          `Expense “${e.label.trim()}” rounds down to $0 — claim at least $0.50.`,
+        );
         return;
       }
     }
@@ -174,7 +208,7 @@ export function PayrollForm({
         expenses.map((e) => ({
           ...(e.existingId ? { id: e.existingId } : {}),
           label: e.label.trim(),
-          amount: Number(e.amount),
+          amount: expenseDollars(e.amount),
         })),
       ),
     );
@@ -308,9 +342,12 @@ export function PayrollForm({
                   <span className="text-sm text-muted-fg">$</span>
                   <input
                     type="text"
-                    inputMode="numeric"
+                    inputMode="decimal"
                     value={e.amount}
                     onChange={(ev) => patchExpense(e.key, { amount: ev.target.value })}
+                    onBlur={() =>
+                      patchExpense(e.key, { amount: snapAmount(e.amount) })
+                    }
                     placeholder="0"
                     aria-label={`Expense ${i + 1} amount in dollars`}
                     className="w-14 bg-transparent text-sm tabular-nums text-ink placeholder:text-muted-fg focus:outline-none"
