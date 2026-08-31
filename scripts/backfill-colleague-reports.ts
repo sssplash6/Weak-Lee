@@ -27,6 +27,10 @@
  *
  * Apply for real:
  *   DATABASE_URL="<url>" npx tsx scripts/backfill-colleague-reports.ts --apply
+ *
+ * Skip anything older than a date — the early notifications include people
+ * testing the form, and a test report is noise in a queue meant to be worked:
+ *   DATABASE_URL="<url>" npx tsx scripts/backfill-colleague-reports.ts --since=2026-08-01
  */
 import { prisma } from "@/lib/prisma";
 
@@ -36,6 +40,16 @@ import { prisma } from "@/lib/prisma";
 const SHAPE = /^(.+?) reported (.+?) — “([\s\S]+)”$/;
 
 const apply = process.argv.includes("--apply");
+
+// --since=YYYY-MM-DD, exclusive of anything before it (UTC midnight).
+const sinceArg = process.argv
+  .find((a) => a.startsWith("--since="))
+  ?.slice("--since=".length);
+const since = sinceArg ? new Date(`${sinceArg}T00:00:00.000Z`) : null;
+if (sinceArg && Number.isNaN(since?.getTime())) {
+  console.error(`--since needs a date like 2026-08-01, got "${sinceArg}"`);
+  process.exit(1);
+}
 
 type Person = { id: string; name: string | null; email: string | null };
 
@@ -75,9 +89,14 @@ async function main() {
   let created = 0;
   let skipped = 0;
   let unparsed = 0;
+  let tooOld = 0;
   const unmatched = new Set<string>();
 
   for (const n of distinct) {
+    if (since && n.createdAt.getTime() < since.getTime()) {
+      tooOld++;
+      continue;
+    }
     const m = SHAPE.exec(n.message);
     if (!m) {
       unparsed++;
@@ -133,6 +152,7 @@ async function main() {
 
   console.log(
     `\n${apply ? "Created" : "Would create"} ${created} · already present ${skipped}` +
+      `${tooOld ? ` · skipped ${tooOld} before ${sinceArg}` : ""}` +
       `${unparsed ? ` · ignored ${unparsed} non-report message(s)` : ""}`,
   );
   if (unmatched.size > 0) {
