@@ -64,6 +64,8 @@ export default async function ColleagueReportsPage({
       status: true,
       closedAt: true,
       resolution: true,
+      legacyReporter: true,
+      legacySubjects: true,
       reporter: { select: { id: true, name: true, email: true, avatar: true } },
       closedBy: { select: { name: true, email: true } },
       subjects: {
@@ -93,12 +95,22 @@ export default async function ColleagueReportsPage({
     reason: r.reason,
     dateLabel: formatDateTimeTz(r.createdAt),
     status: r.status,
-    // A report survives the account that filed it (reporter is SetNull), so the
-    // row still reads rather than crashing on a missing name.
+    // A report survives the account that filed it (reporter is SetNull), and a
+    // backfilled one may only ever have had the name — either way the card
+    // still reads rather than showing a blank.
     reporter: r.reporter
       ? person(r.reporter)
-      : { id: "", name: "A former colleague", emoji: "👤", bg: "bg-canvas" },
+      : {
+          id: "",
+          name: r.legacyReporter ?? "A former colleague",
+          emoji: "👤",
+          bg: "bg-canvas",
+        },
     subjects: r.subjects.map((s) => person(s.user)),
+    legacySubjects: (r.legacySubjects ?? "")
+      .split(",")
+      .map((n) => n.trim())
+      .filter(Boolean),
     closedLabel: r.closedAt
       ? `${r.closedBy?.name ?? r.closedBy?.email ?? "An admin"} · ${formatDateTimeTz(r.closedAt)}`
       : null,

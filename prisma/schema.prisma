@@ -657,6 +657,15 @@ model ColleagueReport {
   closedAt   DateTime?
   resolution String?
 
+  // Backfilled rows only (scripts/backfill-colleague-reports.ts). Reports filed
+  // before this table existed survive as the admin notification's text, where
+  // people are NAMED rather than linked. The backfill resolves those names to
+  // accounts where it can; whoever it can't (renamed, deleted) is kept here
+  // verbatim instead of being dropped, so the record still says who filed it
+  // and who it was about.
+  legacyReporter String?
+  legacySubjects String?
+
   // SetNull on both, like every other actor link here: a report survives the
   // account that filed or closed it, because it is a record of what happened.
   reporter User? @relation("ReportsFiled", fields: [reporterId], references: [id], onDelete: SetNull)

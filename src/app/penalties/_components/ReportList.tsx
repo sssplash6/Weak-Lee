@@ -18,6 +18,8 @@ export type ReportView = {
   status: ColleagueReportStatus;
   reporter: ReportPerson;
   subjects: ReportPerson[];
+  /** Names from a backfilled report that no longer match an account. */
+  legacySubjects: string[];
   /** "Valera · Mon, Aug 31, 09:12 AM" once closed, else null. */
   closedLabel: string | null;
   resolution: string | null;
@@ -114,6 +116,17 @@ function ReportCard({
           <span className="text-xs text-muted-fg">reported</span>
           {r.subjects.map((s) => (
             <Chip key={s.id} person={s} />
+          ))}
+          {/* A backfilled report whose named account is gone or renamed: the
+              name is all that survived, and it still belongs on the card. */}
+          {r.legacySubjects.map((name) => (
+            <span
+              key={name}
+              className="rounded-full border border-dashed border-line px-2 py-0.5 text-xs font-medium text-muted-fg"
+              title="Filed before reports were recorded — no matching account"
+            >
+              {name}
+            </span>
           ))}
         </div>
         <span
