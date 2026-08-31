@@ -5,7 +5,10 @@ import { submitPayroll } from "../actions";
 import { formatMoney } from "@/lib/penalties";
 import {
   computeNet,
+  formatCents,
   MAX_PAYROLL_EXPENSES,
+  parseAmountCents,
+  roundingCents,
   MAX_RECEIPT_BYTES,
   methodIsCash,
   methodNeedsWiseEmail,
@@ -31,37 +34,17 @@ type ExpenseDraft = {
 };
 
 /**
- * An expense amount as typed → whole dollars, rounded half-up ($1.95 → $2).
- * Null when it isn't a positive number at all.
- *
- * Cents are worth accepting — a $1.95 tool subscription is a real expense — but
- * the ledger, the payout and the invoice are all whole dollars, so the cents
- * have to settle somewhere. Rounding to the nearest dollar is the same rule the
- * server applies (submitPayroll), so what the form totals is what gets paid.
- * A rounded 0 (anything under 50¢) comes back as 0 for the caller to reject.
+ * Cents → what the field shows: "1.95", or "39" when there are no cents. The
+ * amount is never rounded on the way in or out — only the net is.
  */
-function expenseDollars(raw: string): number | null {
-  const text = raw.trim();
-  const n = Number(text);
-  if (!text || !Number.isFinite(n) || n <= 0) return null;
-  return Math.round(n);
-}
-
-/**
- * What the field shows once you leave it: the whole dollars that will actually
- * be paid, so nobody reads $1.95 on the form and $2.00 on the invoice. Anything
- * that isn't a claimable amount is left exactly as typed — mid-edit text is not
- * ours to throw away, and submit() explains what's wrong.
- */
-function snapAmount(raw: string): string {
-  const dollars = expenseDollars(raw);
-  return dollars != null && dollars > 0 ? String(dollars) : raw;
+function centsToInput(cents: number): string {
+  return cents % 100 === 0 ? String(cents / 100) : (cents / 100).toFixed(2);
 }
 
 export type PrefillExpense = {
   id: string;
   label: string;
-  amount: number;
+  amountCents: number;
   receiptName: string | null;
 };
 
@@ -120,7 +103,7 @@ export function PayrollForm({
       existingId: e.id,
       existingReceiptName: e.receiptName,
       label: e.label,
-      amount: String(e.amount),
+      amount: centsToInput(e.amountCents),
       file: null,
     })),
   );
@@ -131,16 +114,19 @@ export function PayrollForm({
   const [isPending, startTransition] = useTransition();
 
   const baseValue = /^\d+$/.test(base.trim()) ? Number(base.trim()) : null;
-  const expensesTotal = expenses.reduce(
-    (s, e) => s + (expenseDollars(e.amount) ?? 0),
+  const expensesTotalCents = expenses.reduce(
+    (s, e) => s + (parseAmountCents(e.amount) ?? 0),
     0,
   );
-  const net = computeNet({
+  const totals = {
     baseSalary: baseValue ?? 0,
     bonusesTotal: snapshot.bonusesTotal,
     finesTotal: snapshot.finesTotal,
-    expensesTotal,
-  });
+    expensesTotalCents,
+  };
+  // What lands in the account: the exact sum, rounded to the whole dollar once.
+  const net = computeNet(totals);
+  const rounding = roundingCents(totals);
 
   function patchExpense(key: number, patch: Partial<ExpenseDraft>) {
     setExpenses((prev) =>
@@ -169,19 +155,12 @@ export function PayrollForm({
       return;
     }
     for (const e of expenses) {
-      const n = expenseDollars(e.amount);
       if (!e.label.trim()) {
         setError("Every expense needs a label.");
         return;
       }
-      if (n == null) {
+      if (parseAmountCents(e.amount) == null) {
         setError(`Expense “${e.label.trim()}” needs an amount in dollars.`);
-        return;
-      }
-      if (n === 0) {
-        setError(
-          `Expense “${e.label.trim()}” rounds down to $0 — claim at least $0.50.`,
-        );
         return;
       }
     }
@@ -208,7 +187,7 @@ export function PayrollForm({
         expenses.map((e) => ({
           ...(e.existingId ? { id: e.existingId } : {}),
           label: e.label.trim(),
-          amount: expenseDollars(e.amount),
+          amount: e.amount.trim(),
         })),
       ),
     );
@@ -239,7 +218,17 @@ export function PayrollForm({
       value: `− ${formatMoney(snapshot.finesTotal)}`,
       tone: "text-red-600",
     },
-    { label: "Expenses", value: `+ ${formatMoney(expensesTotal)}` },
+    { label: "Expenses", value: `+ ${formatCents(expensesTotalCents)}` },
+    // Only when there is one. Without this line the column visibly misses by a
+    // few cents, which reads as a bug rather than as the rounding it is.
+    ...(rounding !== 0
+      ? [
+          {
+            label: "Rounding",
+            value: `${rounding > 0 ? "+" : "−"} ${formatCents(Math.abs(rounding))}`,
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -345,9 +334,6 @@ export function PayrollForm({
                     inputMode="decimal"
                     value={e.amount}
                     onChange={(ev) => patchExpense(e.key, { amount: ev.target.value })}
-                    onBlur={() =>
-                      patchExpense(e.key, { amount: snapAmount(e.amount) })
-                    }
                     placeholder="0"
                     aria-label={`Expense ${i + 1} amount in dollars`}
                     className="w-14 bg-transparent text-sm tabular-nums text-ink placeholder:text-muted-fg focus:outline-none"

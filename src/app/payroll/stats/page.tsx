@@ -28,32 +28,38 @@ export const metadata: Metadata = { title: "Payroll stats" };
 // paid (they roll to the next cycle), so they count as outstanding instead.
 const COUNTABLE = ["SUBMITTED", "DECLINED", "APPROVED_BY_ADMIN", "PROCESSED"] as const;
 
+// Everything here is whole dollars except expenses, which are summed in cents
+// and only rounded once, at the row that displays them — the same rule the
+// payout itself follows.
 type Sums = {
   net: number;
   base: number;
   bonuses: number;
   fines: number;
-  expenses: number;
+  expensesCents: number;
   count: number;
 };
-const ZERO: Sums = { net: 0, base: 0, bonuses: 0, fines: 0, expenses: 0, count: 0 };
+const ZERO: Sums = { net: 0, base: 0, bonuses: 0, fines: 0, expensesCents: 0, count: 0 };
 
 function addTo(s: Sums, x: {
   netTotal: number;
   baseSalary: number;
   bonusesTotal: number;
   finesTotal: number;
-  expensesTotal: number;
+  expensesTotalCents: number;
 }): Sums {
   return {
     net: s.net + x.netTotal,
     base: s.base + x.baseSalary,
     bonuses: s.bonuses + x.bonusesTotal,
     fines: s.fines + x.finesTotal,
-    expenses: s.expenses + x.expensesTotal,
+    expensesCents: s.expensesCents + x.expensesTotalCents,
     count: s.count + 1,
   };
 }
+
+/** A cents sum → the whole dollars this page reports in. */
+const dollars = (cents: number) => Math.round(cents / 100);
 
 /** "▲ $120 · +8%" / "▼ $50 · −3%" / "no change" — neutral ink, spend isn't good or bad. */
 function delta(cur: number, prev: number | null): string {
@@ -121,7 +127,7 @@ export default async function PayrollStatsPage({
         baseSalary: true,
         bonusesTotal: true,
         finesTotal: true,
-        expensesTotal: true,
+        expensesTotalCents: true,
         paymentMethod: true,
         user: {
           select: {
@@ -204,7 +210,11 @@ export default async function PayrollStatsPage({
     { label: "Base salaries", cur: current.base, prev: prev?.base ?? null },
     { label: "Bonuses", cur: current.bonuses, prev: prev?.bonuses ?? null, tone: "text-green-700" },
     { label: "Fines deducted", cur: current.fines, prev: prev?.fines ?? null, tone: "text-red-600" },
-    { label: "Expenses", cur: current.expenses, prev: prev?.expenses ?? null },
+    {
+      label: "Expenses",
+      cur: dollars(current.expensesCents),
+      prev: prev ? dollars(prev.expensesCents) : null,
+    },
   ];
 
   return (

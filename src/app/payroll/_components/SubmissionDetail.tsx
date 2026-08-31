@@ -5,6 +5,7 @@
 // Server-rendered and passed into the interactive panel rows as children.
 
 import { formatMoney } from "@/lib/penalties";
+import { formatCents, payrollMathRows } from "@/lib/payrollTypes";
 import { LedgerBreakdown, type LedgerLineView } from "./LedgerBreakdown";
 import type {
   SubmissionEventView,
@@ -16,7 +17,7 @@ export type SubmissionDetailModel = {
   baseSalary: number;
   bonusesTotal: number;
   finesTotal: number;
-  expensesTotal: number;
+  expensesTotalCents: number;
   netTotal: number;
   bonuses: LedgerLineView[];
   fines: LedgerLineView[];
@@ -26,12 +27,7 @@ export type SubmissionDetailModel = {
 };
 
 export function SubmissionDetail({ view }: { view: SubmissionDetailModel }) {
-  const mathRows: { label: string; value: string; tone?: string }[] = [
-    { label: "Base salary", value: formatMoney(view.baseSalary) },
-    { label: "Bonuses", value: `+ ${formatMoney(view.bonusesTotal)}`, tone: "text-green-700" },
-    { label: "Fines", value: `− ${formatMoney(view.finesTotal)}`, tone: "text-red-600" },
-    { label: "Expenses", value: `+ ${formatMoney(view.expensesTotal)}` },
-  ];
+  const mathRows = payrollMathRows(view);
 
   return (
     <div className="flex flex-col gap-3">
@@ -87,7 +83,7 @@ export function SubmissionDetail({ view }: { view: SubmissionDetailModel }) {
                   )}
                 </span>
                 <span className="shrink-0 font-semibold tabular-nums text-ink">
-                  + {formatMoney(e.amount)}
+                  + {formatCents(e.amountCents)}
                 </span>
               </li>
             ))}

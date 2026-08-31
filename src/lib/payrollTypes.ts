@@ -1,7 +1,13 @@
 // Client-safe payroll vocabulary. Mirrors the Prisma `PayrollStatus` and
 // `PayrollMethod` enums (the lib/penalties.ts pattern) and holds the shared
 // arithmetic and upload limits, so the form previews with exactly the numbers
-// the server action then stores. All money is whole-dollar USD app-wide.
+// the server action then stores.
+//
+// Money is whole-dollar USD app-wide, with ONE exception: self-reported
+// expenses are cents, because that is what a receipt says. They are summed
+// exactly and the payout rounds half-up once, at the net — see computeNet.
+
+import { formatMoney } from "@/lib/penalties";
 
 /**
  * The kill switch for the whole payroll feature. While true every route under
@@ -182,18 +188,122 @@ export function paymentSummary(
   return label;
 }
 
-/** The one formula: base + bonuses − fines + expenses. Shown, not just stored. */
-export function computeNet(t: {
+/**
+ * The pay arithmetic. Base, bonuses and fines are whole dollars; expenses are
+ * cents, because that's what a receipt says ($1.95 for a tool subscription).
+ */
+export type PayrollTotals = {
   baseSalary: number;
   bonusesTotal: number;
   finesTotal: number;
-  expensesTotal: number;
-}): number {
-  return t.baseSalary + t.bonusesTotal - t.finesTotal + t.expensesTotal;
+  expensesTotalCents: number;
+};
+
+/** The exact total in cents, before anything is rounded. */
+export function netTotalCents(t: PayrollTotals): number {
+  return (
+    (t.baseSalary + t.bonusesTotal - t.finesTotal) * 100 + t.expensesTotalCents
+  );
+}
+
+/**
+ * The one formula: base + bonuses − fines + expenses, rounded half-up to whole
+ * dollars — $600.95 is paid as $601, $1001.4 as $1001.
+ *
+ * The rounding happens HERE and nowhere else. Rounding each expense on the way
+ * in would restate what someone spent (and drop anything under 50¢ entirely);
+ * rounding the sum once moves the payout by at most half a dollar, and every
+ * line still reads back exactly as it was filed.
+ */
+export function computeNet(t: PayrollTotals): number {
+  return Math.round(netTotalCents(t) / 100);
+}
+
+/**
+ * The cents the final rounding added or shaved — 0 when the total was already
+ * whole. Shown as its own line wherever the breakdown is displayed, so the
+ * figures visibly add up instead of missing by a few cents.
+ */
+export function roundingCents(t: PayrollTotals): number {
+  return computeNet(t) * 100 - netTotalCents(t);
+}
+
+/**
+ * The breakdown every surface shows — the form's live preview, the filer's own
+ * request, the reviewer's panel — so all three read the same and the rounding
+ * line can never appear on one and not another. `Total` is rendered separately
+ * by each (they style it differently); these are the rows above it.
+ */
+export function payrollMathRows(
+  t: PayrollTotals,
+): { label: string; value: string; tone?: string }[] {
+  const rounding = roundingCents(t);
+  return [
+    { label: "Base salary", value: formatMoney(t.baseSalary) },
+    {
+      label: "Bonuses",
+      value: `+ ${formatMoney(t.bonusesTotal)}`,
+      tone: "text-green-700",
+    },
+    {
+      label: "Fines",
+      value: `− ${formatMoney(t.finesTotal)}`,
+      tone: "text-red-600",
+    },
+    { label: "Expenses", value: `+ ${formatCents(t.expensesTotalCents)}` },
+    // Only when there is one. Without this line the column visibly misses by a
+    // few cents, which reads as a bug rather than as the rounding it is.
+    ...(rounding !== 0
+      ? [
+          {
+            label: "Rounding",
+            value: `${rounding > 0 ? "+" : "−"} ${formatCents(Math.abs(rounding))}`,
+          },
+        ]
+      : []),
+  ];
+}
+
+/**
+ * Cents → "$1.95", or "$39" when it's a whole number of dollars, so amounts
+ * without cents read the same as the rest of the app (formatMoney). Negative
+ * values keep the sign inside: "-$0.05".
+ */
+export function formatCents(cents: number): string {
+  const sign = cents < 0 ? "-" : "";
+  const abs = Math.abs(cents);
+  const dollars = Math.floor(abs / 100);
+  const rest = abs % 100;
+  const whole = dollars.toLocaleString("en-US");
+  return rest === 0
+    ? `${sign}$${whole}`
+    : `${sign}$${whole}.${String(rest).padStart(2, "0")}`;
+}
+
+/**
+ * An amount as typed → cents, or null if it isn't a positive amount. Accepts
+ * "1.95", "39", " 2.5 "; rejects "", "abc", "0" and negatives. Anything past
+ * two decimals settles to the nearest cent, so "1.956" files as $1.96.
+ *
+ * Shared by the form and the server action deliberately: the number the filer
+ * sees totalled has to be the number that gets stored.
+ */
+export function parseAmountCents(raw: string): number | null {
+  const text = raw.trim();
+  if (!text) return null;
+  const n = Number(text);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  // Scale before rounding — 1.95 * 100 is 194.99999999999997 in binary floating
+  // point, and truncating that would file $1.94.
+  const cents = Math.round(n * 100);
+  return cents > 0 ? cents : null;
 }
 
 /** Guard rail so a typo can't file an absurd amount (mirrors MAX_PENALTY). */
 export const MAX_PAYROLL_AMOUNT = 100_000_000;
+
+/** The same guard rail in cents, for the expense lines that carry them. */
+export const MAX_PAYROLL_AMOUNT_CENTS = MAX_PAYROLL_AMOUNT * 100;
 
 /** Expense line items per submission — plenty for "miscellaneous". */
 export const MAX_PAYROLL_EXPENSES = 15;

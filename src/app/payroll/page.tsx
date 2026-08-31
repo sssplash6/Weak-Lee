@@ -103,7 +103,7 @@ export default async function PayrollPage() {
       baseSalary: true,
       bonusesTotal: true,
       finesTotal: true,
-      expensesTotal: true,
+      expensesTotalCents: true,
       netTotal: true,
       paymentMethod: true,
       paymentDetails: true,
@@ -122,7 +122,7 @@ export default async function PayrollPage() {
         select: {
           id: true,
           label: true,
-          amount: true,
+          amountCents: true,
           receipt: { select: { id: true, filename: true } },
         },
       },
@@ -241,7 +241,7 @@ export default async function PayrollPage() {
           baseSalary: current.baseSalary,
           bonusesTotal: current.bonusesTotal,
           finesTotal: current.finesTotal,
-          expensesTotal: current.expensesTotal,
+          expensesTotalCents: current.expensesTotalCents,
           netTotal: current.netTotal,
           bonuses: current.bonusLines.map(
             (l): LedgerLineView => ({
@@ -336,7 +336,7 @@ export default async function PayrollPage() {
             expenses: current.expenses.map((e) => ({
               id: e.id,
               label: e.label,
-              amount: e.amount,
+              amountCents: e.amountCents,
               receiptName: e.receipt?.filename ?? null,
             })),
           }}
@@ -369,7 +369,7 @@ export default async function PayrollPage() {
                 expenses: current.expenses.map((e) => ({
                   id: e.id,
                   label: e.label,
-                  amount: e.amount,
+                  amountCents: e.amountCents,
                   receiptName: e.receipt?.filename ?? null,
                 })),
               }}

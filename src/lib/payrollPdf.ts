@@ -40,7 +40,9 @@ export type InvoiceData = {
     note: string | null;
     issuedAt: Date;
   }[];
-  expenses: { label: string; amount: number }[];
+  /** Self-reported expenses, in cents — a receipt is $1.95, not $2. */
+  expenses: { label: string; amountCents: number }[];
+  /** What gets paid: the exact total rounded half-up to whole dollars. */
   netTotal: number;
   paymentMethod: PayrollMethod;
   paymentDetails: PaymentDetails;
@@ -70,11 +72,17 @@ const ROW_H = 24;
 // Extra height each wrapped continuation line of an item label adds to a row.
 const ITEM_LINE_H = 12;
 
-/** Whole dollars → "$1,234.00" / "-$20.00" (the sample renders cents). */
-function usd(n: number): string {
-  const sign = n < 0 ? "-" : "";
-  return `${sign}$${Math.abs(n).toLocaleString("en-US")}.00`;
+/** Cents → "$1,234.00" / "$1.95" / "-$20.00" (the sample renders cents). */
+function usd(cents: number): string {
+  const sign = cents < 0 ? "-" : "";
+  const abs = Math.abs(cents);
+  return `${sign}$${Math.floor(abs / 100).toLocaleString("en-US")}.${String(
+    abs % 100,
+  ).padStart(2, "0")}`;
 }
+
+/** Whole dollars → cents, for the lines the app keeps as whole dollars. */
+const cents = (dollars: number) => dollars * 100;
 
 function truncate(font: PDFFont, text: string, size: number, maxWidth: number): string {
   if (font.widthOfTextAtSize(text, size) <= maxWidth) return text;
@@ -179,7 +187,7 @@ export async function renderPayrollInvoice(
   const bandY = blockTop - 30;
   page.drawRectangle({ x: 360, y: bandY - 7, width: RIGHT - 360, height: 22, color: BAND });
   rightText("Balance Due:", 470, bandY, { font: bold, size: 10.5 });
-  rightText(usd(data.netTotal), COL_AMOUNT, bandY, { font: bold, size: 10.5 });
+  rightText(usd(cents(data.netTotal)), COL_AMOUNT, bandY, { font: bold, size: 10.5 });
 
   // ----- Bill To -----
   text("Bill To:", MARGIN_X, y, { color: GRAY });
@@ -205,19 +213,24 @@ export async function renderPayrollInvoice(
   };
 
   const when = (d: Date) => formatYmd(toYmd(d));
+  // Every row is in cents so the column adds up exactly; only the expenses
+  // actually carry any.
   const rows: { label: string; amount: number }[] = [
-    { label: `Base salary — ${data.periodLabel}`, amount: data.baseSalary },
+    { label: `Base salary — ${data.periodLabel}`, amount: cents(data.baseSalary) },
     ...data.bonusLines.map((b) => ({
       label: `Bonus (${when(b.awardedAt)})${b.note ? ` — ${b.note}` : ""}`,
-      amount: b.amount,
+      amount: cents(b.amount),
     })),
     ...data.fineLines.map((f) => ({
       label:
         (f.type === "OTHER" ? "Fine" : `${PENALTY_LABEL[f.type]} fine`) +
         ` (${when(f.issuedAt)})${f.note ? ` — ${f.note}` : ""}`,
-      amount: -f.amount,
+      amount: cents(-f.amount),
     })),
-    ...data.expenses.map((e) => ({ label: `Expense — ${e.label}`, amount: e.amount })),
+    ...data.expenses.map((e) => ({
+      label: `Expense — ${e.label}`,
+      amount: e.amountCents,
+    })),
   ];
 
   drawTableHeader();
@@ -242,12 +255,22 @@ export async function renderPayrollInvoice(
   y -= 12;
 
   // ----- Totals (right column) -----
-  ensureRoom(3 * 20 + 12, false);
+  //
+  // Subtotal is what the lines above literally add up to; Total is what gets
+  // paid, rounded to the whole dollar the payout runs in. When those differ,
+  // the rounding is its own line rather than an unexplained few cents — an
+  // invoice whose column doesn't add up is one finance has to come back about.
+  const subtotal = rows.reduce((s, r) => s + r.amount, 0);
+  const rounding = cents(data.netTotal) - subtotal;
   const totalRows: [string, string, boolean][] = [
-    ["Subtotal:", usd(data.netTotal), false],
+    ["Subtotal:", usd(subtotal), false],
     ["Tax (0%):", usd(0), false],
-    ["Total:", usd(data.netTotal), true],
+    ...(rounding !== 0
+      ? ([["Rounding:", usd(rounding), false]] as [string, string, boolean][])
+      : []),
+    ["Total:", usd(cents(data.netTotal)), true],
   ];
+  ensureRoom(totalRows.length * 20 + 12, false);
   for (const [label, value, isBold] of totalRows) {
     rightText(label, COL_RATE, y, { color: GRAY, font: isBold ? bold : font });
     rightText(value, COL_AMOUNT, y, { font: isBold ? bold : font });

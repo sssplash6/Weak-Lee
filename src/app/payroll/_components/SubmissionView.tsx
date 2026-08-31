@@ -5,6 +5,8 @@
 
 import { formatMoney } from "@/lib/penalties";
 import {
+  formatCents,
+  payrollMathRows,
   PAYROLL_STATUS_BADGE,
   PAYROLL_STATUS_LABEL,
   type PayrollStatus,
@@ -22,7 +24,8 @@ export type SubmissionEventView = {
 export type SubmissionExpenseView = {
   id: string;
   label: string;
-  amount: number;
+  /** Cents — a filed expense keeps the price that was actually paid. */
+  amountCents: number;
   receipt: { id: string; filename: string } | null;
 };
 
@@ -33,7 +36,7 @@ export type SubmissionViewModel = {
   baseSalary: number;
   bonusesTotal: number;
   finesTotal: number;
-  expensesTotal: number;
+  expensesTotalCents: number;
   netTotal: number;
   bonuses: LedgerLineView[];
   fines: LedgerLineView[];
@@ -49,12 +52,7 @@ export function SubmissionView({
   heading: string;
   view: SubmissionViewModel;
 }) {
-  const mathRows: { label: string; value: string; tone?: string }[] = [
-    { label: "Base salary", value: formatMoney(view.baseSalary) },
-    { label: "Bonuses", value: `+ ${formatMoney(view.bonusesTotal)}`, tone: "text-green-700" },
-    { label: "Fines", value: `− ${formatMoney(view.finesTotal)}`, tone: "text-red-600" },
-    { label: "Expenses", value: `+ ${formatMoney(view.expensesTotal)}` },
-  ];
+  const mathRows = payrollMathRows(view);
 
   return (
     <section className="rounded-xl border border-line bg-surface p-4 sm:p-5">
@@ -127,7 +125,7 @@ export function SubmissionView({
                   )}
                 </span>
                 <span className="shrink-0 font-semibold tabular-nums text-ink">
-                  + {formatMoney(e.amount)}
+                  + {formatCents(e.amountCents)}
                 </span>
               </li>
             ))}

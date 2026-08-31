@@ -23,7 +23,9 @@ import { renderPayrollInvoice } from "@/lib/payrollPdf";
 import {
   computeNet,
   MAX_PAYROLL_AMOUNT,
+  MAX_PAYROLL_AMOUNT_CENTS,
   MAX_PAYROLL_EXPENSES,
+  parseAmountCents,
   MAX_RECEIPT_BYTES,
   RECEIPT_MIME_TYPES,
   payrollMonthName,
@@ -49,7 +51,7 @@ type ParsedExpense = {
    * receipt is kept unless a new file replaces it. */
   existingId: string | null;
   label: string;
-  amount: number;
+  amountCents: number;
   receipt: {
     filename: string;
     mimeType: string;
@@ -132,10 +134,12 @@ export async function submitPayroll(
   const expenses: ParsedExpense[] = [];
   for (const [i, raw] of expenseMeta.entries()) {
     const label = String(raw.label ?? "").trim().slice(0, 120);
-    const amount = Math.round(Number(raw.amount));
+    // Cents, straight from what was typed — a $1.95 receipt files as $1.95.
+    // Only the net is rounded (computeNet), and only once.
+    const amountCents = parseAmountCents(String(raw.amount ?? ""));
     if (!label) return fail(`Expense ${i + 1} needs a label.`);
-    if (!Number.isFinite(amount) || amount <= 0 || amount > MAX_PAYROLL_AMOUNT) {
-      return fail(`Expense “${label}” needs a valid amount (whole dollars).`);
+    if (amountCents == null || amountCents > MAX_PAYROLL_AMOUNT_CENTS) {
+      return fail(`Expense “${label}” needs a valid amount.`);
     }
     const file = formData.get(`receipt_${i}`);
     let receipt: ParsedExpense["receipt"] = null;
@@ -156,12 +160,14 @@ export async function submitPayroll(
     expenses.push({
       existingId: typeof raw.id === "string" ? raw.id : null,
       label,
-      amount,
+      amountCents,
       receipt,
     });
   }
-  const expensesTotal = expenses.reduce((s, e) => s + e.amount, 0);
-  if (expensesTotal > MAX_PAYROLL_AMOUNT) return fail("Expenses total is too large.");
+  const expensesTotalCents = expenses.reduce((s, e) => s + e.amountCents, 0);
+  if (expensesTotalCents > MAX_PAYROLL_AMOUNT_CENTS) {
+    return fail("Expenses total is too large.");
+  }
 
   // ----- Which filing path is open? -----
 
@@ -285,7 +291,7 @@ export async function submitPayroll(
         baseSalary,
         bonusesTotal: snapshot.bonusesTotal,
         finesTotal: snapshot.finesTotal,
-        expensesTotal,
+        expensesTotalCents,
       });
       if (netTotal < 0) {
         throw new SubmitError(
@@ -297,7 +303,7 @@ export async function submitPayroll(
         baseSalary,
         bonusesTotal: snapshot.bonusesTotal,
         finesTotal: snapshot.finesTotal,
-        expensesTotal,
+        expensesTotalCents,
         netTotal,
         paymentMethod: method,
         paymentDetails: details as Prisma.InputJsonValue,
@@ -378,11 +384,16 @@ export async function submitPayroll(
           expenseId = e.existingId!;
           await tx.payrollExpense.update({
             where: { id: expenseId },
-            data: { label: e.label, amount: e.amount, position: i + 1 },
+            data: { label: e.label, amountCents: e.amountCents, position: i + 1 },
           });
         } else {
           const row = await tx.payrollExpense.create({
-            data: { submissionId, label: e.label, amount: e.amount, position: i + 1 },
+            data: {
+              submissionId,
+              label: e.label,
+              amountCents: e.amountCents,
+              position: i + 1,
+            },
             select: { id: true },
           });
           expenseId = row.id;
@@ -419,7 +430,10 @@ export async function submitPayroll(
         baseSalary,
         bonusLines: snapshot.bonusLines,
         fineLines: snapshot.fineLines,
-        expenses: expenses.map((e) => ({ label: e.label, amount: e.amount })),
+        expenses: expenses.map((e) => ({
+          label: e.label,
+          amountCents: e.amountCents,
+        })),
         netTotal,
         paymentMethod: method,
         paymentDetails: details,

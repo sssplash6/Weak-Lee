@@ -709,9 +709,15 @@ model PayrollPeriod {
 // One person's pay request for one period. Bonus and fine amounts are a
 // SNAPSHOT taken at (re)submit time — never read live — so an approved invoice
 // can't change because the ledger moved later; the line tables below keep the
-// per-source breakdown auditable. All money is whole-dollar USD (the app-wide
-// convention, see lib/penalties.ts). netTotal = baseSalary + bonusesTotal −
-// finesTotal + expensesTotal.
+// per-source breakdown auditable. Money is whole-dollar USD (the app-wide
+// convention, see lib/penalties.ts) EXCEPT self-reported expenses, which people
+// pay in real prices ($1.95 for a tool) and so carry cents — units in the name,
+// as with amountSgdCents below.
+//
+// netTotal is what actually gets paid: baseSalary + bonusesTotal − finesTotal +
+// expenses, rounded half-up to whole dollars ONCE at the end (computeNet in
+// lib/payrollTypes.ts). Rounding each expense instead would quietly re-price
+// every line; rounding the sum moves the payout by at most 50¢.
 //
 // At most one NON-terminal submission per person across all periods (enforced
 // in lib/payroll.ts): filing next month while last month's request is still in
@@ -722,11 +728,11 @@ model PayrollSubmission {
   periodId String
   status   PayrollStatus @default(DRAFT)
 
-  baseSalary    Int
-  bonusesTotal  Int @default(0)
-  finesTotal    Int @default(0)
-  expensesTotal Int @default(0)
-  netTotal      Int
+  baseSalary         Int
+  bonusesTotal       Int @default(0)
+  finesTotal         Int @default(0)
+  expensesTotalCents Int @default(0)
+  netTotal           Int
 
   paymentMethod  PayrollMethod
   paymentDetails Json          @default("{}")
@@ -823,7 +829,10 @@ model PayrollExpense {
   id           String @id @default(cuid())
   submissionId String
   label        String
-  amount       Int
+  // Cents, not dollars — a real receipt is $1.95, and rounding it here would
+  // change what the line says it was for. The rounding happens once, on the
+  // submission's netTotal.
+  amountCents  Int
   position     Int
 
   submission PayrollSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
