@@ -5,6 +5,7 @@ import { auth } from "@/auth";
 import { assertApproved } from "@/lib/approval";
 import { prisma } from "@/lib/prisma";
 import { BackLink } from "@/app/_components/BackLink";
+import { PaymentDetailsPrompt } from "./_components/PaymentDetailsPrompt";
 import { formatDateTimeTz, formatYmd, toYmd } from "@/lib/dates";
 import { PENALTY_LABEL } from "@/lib/penalties";
 import {
@@ -17,6 +18,7 @@ import {
   inFlightSubmission,
   pullLedgerSnapshot,
   reconcilePayrollReminders,
+  submissionNeedingPaymentDetails,
 } from "@/lib/payroll";
 import {
   paymentDetailLines,
@@ -169,6 +171,11 @@ export default async function PayrollPage() {
     details: parsePaymentDetails(latest?.paymentDetails),
   };
 
+  // A request filed before the card/bank fields existed has nothing finance
+  // can pay from, and the filer has no way to know. Ask, here and on the
+  // dashboard, until it's answered.
+  const needsDetails = await submissionNeedingPaymentDetails(session.user.id);
+
   const canFileFresh = !current && filingOpen;
   const canResubmit = current?.status === "DECLINED"; // lapsed ones were swept above
   // Still in the queue, untouched by a reviewer, and the window is still open.
@@ -295,6 +302,17 @@ export default async function PayrollPage() {
         </div>
         <BackLink href="/dashboard" label="Dashboard" />
       </header>
+
+      {needsDetails && (
+        <PaymentDetailsPrompt
+          pending={{
+            submissionId: needsDetails.id,
+            method: needsDetails.method,
+            details: needsDetails.details,
+            periodLabel: needsDetails.periodLabel,
+          }}
+        />
+      )}
 
       {/* One link, not three. The reviewer stages and the register merged
           into /payroll/panel, where the verbs on a row come from the viewer's

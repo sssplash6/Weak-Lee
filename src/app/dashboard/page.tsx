@@ -42,7 +42,11 @@ import {
   reconcileDailyReportFines,
   reconcileDailyReportReminders,
 } from "@/lib/dailyReportFines";
-import { reconcilePayrollReminders } from "@/lib/payroll";
+import {
+  reconcilePayrollReminders,
+  submissionNeedingPaymentDetails,
+} from "@/lib/payroll";
+import { PaymentDetailsPrompt } from "@/app/payroll/_components/PaymentDetailsPrompt";
 import {
   dailyReporterEmails,
   dailyReporterFirstName,
@@ -552,6 +556,11 @@ export default async function DashboardPage({
     return { id: g.id, title: g.title, percent, done: percent === 100 };
   });
 
+  // A pay request filed before the card/bank fields existed has nothing
+  // finance can pay from, and nothing tells the filer. The dashboard is where
+  // everyone lands, so the ask happens here as well as on /payroll.
+  const needsPayoutDetails = await submissionNeedingPaymentDetails(userId);
+
   const todayYmd = toYmd(now);
   const nowStamp = toStamp(now);
 
@@ -765,6 +774,17 @@ export default async function DashboardPage({
           </div>
         </div>
       </header>
+
+      {needsPayoutDetails && (
+        <PaymentDetailsPrompt
+          pending={{
+            submissionId: needsPayoutDetails.id,
+            method: needsPayoutDetails.method,
+            details: needsPayoutDetails.details,
+            periodLabel: needsPayoutDetails.periodLabel,
+          }}
+        />
+      )}
 
       <PeriodToggle view={view} showDaily={dailyReporter || reportRecipient} />
 

@@ -20,6 +20,7 @@ import {
   reviewerUsers,
 } from "@/lib/payroll";
 import { renderPayrollInvoice } from "@/lib/payrollPdf";
+import { regenerateInvoicePdf } from "@/lib/payrollInvoice";
 import {
   computeNet,
   MAX_PAYROLL_AMOUNT,
@@ -531,3 +532,87 @@ class SubmitError extends Error {}
  * any other advisory lock the app might take later. Arbitrary but fixed.
  */
 const PAYROLL_LOCK_NAMESPACE = 8_140_233;
+
+
+/**
+ * Fill in the payout details on a request that was filed without them.
+ *
+ * The card and bank fields didn't exist when some requests were filed, so those
+ * rows sit in the queue with nothing finance can pay from. This is the way back
+ * in — details only, no money, no status change, and no new filing — so it
+ * works whatever the review has or hasn't done, right up until the request is
+ * paid or expired.
+ *
+ * The stored invoice PDF is re-rendered from the row, because that file is what
+ * gets emailed and it would otherwise still say "arranged directly with
+ * finance". Reviewers are told, since they are the ones who were stuck.
+ */
+export async function savePaymentDetails(
+  submissionId: string,
+  entries: Record<string, string>,
+): Promise<SubmitPayrollResult> {
+  const session = await auth();
+  const userId = session?.user?.id;
+  if (!userId) throw new Error("Not authenticated");
+
+  const submission = await prisma.payrollSubmission.findUnique({
+    where: { id: submissionId },
+    select: {
+      id: true,
+      userId: true,
+      status: true,
+      paymentMethod: true,
+      period: { select: { year: true, month: true } },
+    },
+  });
+  // Not yours is indistinguishable from not there — this is a prompt anyone
+  // can be shown, so it says nothing about whose request an id belongs to.
+  if (!submission || submission.userId !== userId) {
+    return fail("That request is no longer available.");
+  }
+  if (submission.status === "PROCESSED" || submission.status === "EXPIRED") {
+    return fail(
+      submission.status === "PROCESSED"
+        ? "That request has already been paid — send anything new to finance directly."
+        : "That request expired. File again in the next window.",
+    );
+  }
+
+  // Read only the fields this method asks for, exactly as the filing form does.
+  const details: PaymentDetails = {};
+  for (const field of paymentFieldsFor(submission.paymentMethod)) {
+    const value = String(entries[field.key] ?? "").trim().slice(0, field.maxLength);
+    if (value) details[field.key] = value;
+  }
+  const detailsError = validatePaymentDetails(submission.paymentMethod, details);
+  if (detailsError) return fail(detailsError);
+
+  const me = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { name: true, email: true },
+  });
+
+  await prisma.$transaction(async (tx) => {
+    await tx.payrollSubmission.update({
+      where: { id: submission.id },
+      data: { paymentDetails: details as Prisma.InputJsonValue },
+    });
+    await regenerateInvoicePdf(tx, submission.id);
+
+    const reviewers = await reviewerUsers(tx, financeEmails());
+    await notify(
+      tx,
+      reviewers.map((r) => r.id),
+      "PAYROLL",
+      `${me?.name ?? me?.email ?? "Someone"} added their payment details for ${payrollPeriodLabel(
+        submission.period.year,
+        submission.period.month,
+      )}.`,
+    );
+  });
+
+  revalidatePath("/payroll");
+  revalidatePath("/payroll/panel");
+  revalidatePath("/dashboard");
+  return { ok: true };
+}

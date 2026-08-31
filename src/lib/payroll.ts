@@ -19,12 +19,16 @@ import {
   type PenaltyType,
 } from "@/lib/penalties";
 import {
+  parsePaymentDetails,
   payrollPeriodLabel,
+  validatePaymentDetails,
   PAYROLL_CLOSED,
   isPayrollOpenFor,
   isPayrollRolloutTester,
   payrollOpenToEmails,
   PAYROLL_STATUS_LABEL,
+  type PaymentDetails,
+  type PayrollMethod,
 } from "@/lib/payrollTypes";
 import { notify } from "@/lib/notifications";
 import { sendEmail } from "@/lib/email";
@@ -750,4 +754,51 @@ export function formatTashkent(at: Date): string {
       timeZone: "Asia/Tashkent",
     }) + " (Tashkent)"
   );
+}
+
+// ----- Payment details owed on an already-filed request -----
+
+/**
+ * A filed request that is missing the payout details its method now asks for.
+ *
+ * The card and bank fields didn't exist when some requests were filed — those
+ * methods used to store nothing, on the reasoning that finance would sort it
+ * out over Telegram. Anyone who filed before that changed has a request in the
+ * queue that finance can't pay from, and no reason to know it. This finds it so
+ * the app can ask (see PaymentDetailsPrompt).
+ *
+ * Only requests where the money HASN'T moved: PROCESSED is already paid and
+ * EXPIRED is closed, so neither is worth chasing anyone about.
+ */
+export async function submissionNeedingPaymentDetails(
+  userId: string,
+  db: Db = prisma,
+): Promise<{
+  id: string;
+  method: PayrollMethod;
+  details: PaymentDetails;
+  periodLabel: string;
+} | null> {
+  const rows = await db.payrollSubmission.findMany({
+    where: { userId, status: { notIn: ["PROCESSED", "EXPIRED"] } },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      paymentMethod: true,
+      paymentDetails: true,
+      period: { select: { year: true, month: true } },
+    },
+  });
+
+  for (const r of rows) {
+    const details = parsePaymentDetails(r.paymentDetails);
+    if (validatePaymentDetails(r.paymentMethod, details) == null) continue;
+    return {
+      id: r.id,
+      method: r.paymentMethod,
+      details,
+      periodLabel: payrollPeriodLabel(r.period.year, r.period.month),
+    };
+  }
+  return null;
 }
