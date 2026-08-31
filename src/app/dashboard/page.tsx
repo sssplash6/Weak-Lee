@@ -36,6 +36,7 @@ import {
   toYmd,
 } from "@/lib/dates";
 import { weekOpensAt } from "@/lib/lateness";
+import { submissionOffsetHours } from "@/lib/submissionClock";
 import { reconcileSubmissionFines } from "@/lib/submissionFines";
 import {
   reconcileDailyReportFines,
@@ -566,7 +567,9 @@ export default async function DashboardPage({
   // and spend the rest of the cycle a week ahead of the team (see weekOpensAt;
   // the same rule is enforced in startNewWeek). Anyone catching up on an
   // overdue week is already past their Friday, so this never blocks them.
-  const canStartNextWeek = now.getTime() >= weekOpensAt(nextWeek.start).getTime();
+  const canStartNextWeek =
+    now.getTime() >=
+    weekOpensAt(nextWeek.start, submissionOffsetHours(session!.user.email)).getTime();
   // The Friday the window opens: three days before the new week's Monday.
   const opensOnLabel = formatYmd(
     toLocalYmd(new Date(nextWeek.start.getTime() - 3 * 86_400_000)),

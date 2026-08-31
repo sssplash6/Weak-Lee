@@ -12,6 +12,7 @@ import {
 import { getOrCreateCurrentWeek, nextWeekBounds } from "@/lib/weeks";
 import { getOrCreateCurrentMonth, nextMonthBounds } from "@/lib/months";
 import { submissionTiming, weekOpensAt } from "@/lib/lateness";
+import { submissionOffsetHours } from "@/lib/submissionClock";
 import {
   clampPercent,
   goalPercent,
@@ -33,11 +34,19 @@ import { notify } from "@/lib/notifications";
 import { formatYmd, parseYmd, toYmd } from "@/lib/dates";
 
 async function requireUserId(): Promise<string> {
+  return (await requireUser()).id;
+}
+
+/**
+ * The signed-in user with the email attached — needed wherever a rule is read
+ * on the person's own clock rather than the company's (lib/submissionClock.ts).
+ */
+async function requireUser(): Promise<{ id: string; email: string | null }> {
   const session = await auth();
   if (!session?.user?.id) {
     throw new Error("Not authenticated");
   }
-  return session.user.id;
+  return { id: session.user.id, email: session.user.email ?? null };
 }
 
 // A goal belongs to either a week or a month; both count as the user's.
@@ -776,7 +785,11 @@ export async function startNewWeek(
   range?: { start: string; end: string },
   carry: { goalId: string; deadline: string }[] = [],
 ) {
-  const userId = await requireUserId();
+  const { id: userId, email } = await requireUser();
+  // Sunday noon (and so the Friday the next week opens) is read on this
+  // person's own clock where they keep one — the same offset the fine sweep
+  // judges them by. The Monday meeting below is not: it's one shared instant.
+  const offsetHours = submissionOffsetHours(email);
   const week = await getOrCreateCurrentWeek(userId);
 
   const reasonByGoal = new Map(
@@ -848,7 +861,7 @@ export async function startNewWeek(
   // person spends the rest of the cycle a week ahead of everyone else — see
   // weekOpensAt. Enforced here, not just in the UI, because the range is
   // caller-supplied. Closing late (or catching up) is always allowed.
-  if (now.getTime() < weekOpensAt(start).getTime()) {
+  if (now.getTime() < weekOpensAt(start, offsetHours).getTime()) {
     throw new Error(
       "This week isn't over yet — you can close it and start the next one from Friday noon.",
     );
@@ -863,7 +876,7 @@ export async function startNewWeek(
     where: { userId, role: "LEAD" },
     select: { id: true },
   });
-  const timing = submissionTiming(now, start);
+  const timing = submissionTiming(now, start, offsetHours);
   const submittedLate = leadSeat != null && timing !== "on-time";
 
   await prisma.$transaction(async (tx) => {

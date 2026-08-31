@@ -2,8 +2,13 @@
 // with its goals — by Sunday 12:00 Tashkent time (Asia/Tashkent is UTC+5 with no
 // DST). A submission after that deadline is "late". Deadlines are derived from
 // the week's Monday start; production runs in UTC, which these helpers assume.
+//
+// The submission helpers take an `offsetHours` for people who read that noon on
+// another clock (lib/submissionClock.ts) and default to the company's. The
+// MEETING helpers take no such argument on purpose: the Monday 11:00 sync is one
+// event at one instant for the whole team, so it is the company clock, always.
 
-const TASHKENT_UTC_OFFSET_HOURS = 5;
+export const COMPANY_UTC_OFFSET_HOURS = 5; // Asia/Tashkent, no DST
 
 /**
  * When the Sunday-12:00 deadline started being enforced — the first governed
@@ -35,15 +40,26 @@ export const TRIP_SHIFTED_DEADLINE_FROM = new Date("2026-08-16T07:00:00.000Z"); 
 export const TRIP_SHIFTED_DEADLINE_TO = new Date("2026-08-16T19:00:00.000Z"); // Sun 24:00 UZT
 
 /**
- * The submission deadline for a week: Sunday 12:00 Asia/Tashkent immediately
- * before the week's Monday start, as a UTC instant.
+ * The submission deadline for a week: Sunday 12:00 immediately before the
+ * week's Monday start, as a UTC instant. Noon is read on the company clock
+ * unless the person keeps their own (`offsetHours`, from lib/submissionClock).
  */
-export function weekSubmissionDeadline(weekStart: Date): Date {
+export function weekSubmissionDeadline(
+  weekStart: Date,
+  offsetHours: number = COMPANY_UTC_OFFSET_HOURS,
+): Date {
   const d = new Date(weekStart);
   d.setUTCDate(d.getUTCDate() - 1); // step back to the Sunday before Monday
-  d.setUTCHours(12 - TASHKENT_UTC_OFFSET_HOURS, 0, 0, 0); // 12:00 UZT = 07:00 UTC
-  if (d.getTime() === TRIP_SHIFTED_DEADLINE_FROM.getTime()) {
-    return new Date(TRIP_SHIFTED_DEADLINE_TO); // trip week — see above
+  d.setUTCHours(12 - offsetHours, 0, 0, 0); // 12:00 UZT = 07:00 UTC
+  // The trip week's one-off slip from noon to midnight was a team decision
+  // about that Sunday, so it applies on whatever clock the person reads noon
+  // on: the same 12-hour move, off their own noon.
+  const companyNoon = d.getTime() + (offsetHours - COMPANY_UTC_OFFSET_HOURS) * 3_600_000;
+  if (companyNoon === TRIP_SHIFTED_DEADLINE_FROM.getTime()) {
+    return new Date(
+      d.getTime() +
+        (TRIP_SHIFTED_DEADLINE_TO.getTime() - TRIP_SHIFTED_DEADLINE_FROM.getTime()),
+    );
   }
   return d;
 }
@@ -61,18 +77,26 @@ export function weekSubmissionDeadline(weekStart: Date): Date {
  * shows the week they already closed instead of live work. Catching up is never
  * blocked by this — a week whose Friday noon has passed is always openable.
  */
-export function weekOpensAt(weekStart: Date): Date {
-  return new Date(weekSubmissionDeadline(weekStart).getTime() - 48 * 3_600_000);
+export function weekOpensAt(
+  weekStart: Date,
+  offsetHours: number = COMPANY_UTC_OFFSET_HOURS,
+): Date {
+  return new Date(
+    weekSubmissionDeadline(weekStart, offsetHours).getTime() - 48 * 3_600_000,
+  );
 }
 
 /**
  * The Monday 11:00 Asia/Tashkent meeting for the week beginning `weekStart`, as
  * a UTC instant. Goals still unsubmitted at this moment are flagged "not
  * submitted" at the meeting, so submitting after it is the steeper offence.
+ *
+ * No per-person clock here, deliberately: everyone joins the same call at the
+ * same moment, so "you weren't in it" is one instant for the whole team.
  */
 export function weekMeetingDeadline(weekStart: Date): Date {
   const d = new Date(weekStart);
-  d.setUTCHours(11 - TASHKENT_UTC_OFFSET_HOURS, 0, 0, 0); // 11:00 UZT = 06:00 UTC
+  d.setUTCHours(11 - COMPANY_UTC_OFFSET_HOURS, 0, 0, 0); // 11:00 UZT = 06:00 UTC
   return d;
 }
 
@@ -80,8 +104,14 @@ export function weekMeetingDeadline(weekStart: Date): Date {
  * Whether a week submitted at `submittedAt`, for a week beginning `weekStart`,
  * missed the Sunday-midday deadline.
  */
-export function isLateSubmission(submittedAt: Date, weekStart: Date): boolean {
-  return submittedAt.getTime() > weekSubmissionDeadline(weekStart).getTime();
+export function isLateSubmission(
+  submittedAt: Date,
+  weekStart: Date,
+  offsetHours?: number,
+): boolean {
+  return (
+    submittedAt.getTime() > weekSubmissionDeadline(weekStart, offsetHours).getTime()
+  );
 }
 
 // How late a submission was, which sets the fine tier:
@@ -93,10 +123,11 @@ export type SubmissionTiming = "on-time" | "late" | "missed";
 export function submissionTiming(
   submittedAt: Date,
   weekStart: Date,
+  offsetHours?: number,
 ): SubmissionTiming {
   const t = submittedAt.getTime();
   if (t > weekMeetingDeadline(weekStart).getTime()) return "missed";
-  if (t > weekSubmissionDeadline(weekStart).getTime()) return "late";
+  if (t > weekSubmissionDeadline(weekStart, offsetHours).getTime()) return "late";
   return "on-time";
 }
 
@@ -106,7 +137,7 @@ export function submissionTiming(
  * reported vs not.
  */
 export function isTashkentSunday(at: Date): boolean {
-  const shifted = new Date(at.getTime() + TASHKENT_UTC_OFFSET_HOURS * 3_600_000);
+  const shifted = new Date(at.getTime() + COMPANY_UTC_OFFSET_HOURS * 3_600_000);
   return shifted.getUTCDay() === 0;
 }
 
@@ -135,9 +166,14 @@ export type SubmissionCycle = {
  * week's Sunday deadline it stays on that week (phase "before"); once the
  * deadline passes it advances to the coming Monday's week.
  */
-export function currentSubmissionCycle(now = new Date()): SubmissionCycle {
-  // Read the Tashkent wall clock via UTC getters on a shifted instant.
-  const tash = new Date(now.getTime() + TASHKENT_UTC_OFFSET_HOURS * 3_600_000);
+export function currentSubmissionCycle(
+  now = new Date(),
+  offsetHours: number = COMPANY_UTC_OFFSET_HOURS,
+): SubmissionCycle {
+  // Which Monday's week we're in is a shared calendar fact — the team runs one
+  // week at a time — so it's read on the company clock for everyone. Only the
+  // deadline that cuts one cycle from the next moves with `offsetHours`.
+  const tash = new Date(now.getTime() + COMPANY_UTC_OFFSET_HOURS * 3_600_000);
   const y = tash.getUTCFullYear();
   const mo = tash.getUTCMonth();
   const d = tash.getUTCDate();
@@ -148,11 +184,11 @@ export function currentSubmissionCycle(now = new Date()): SubmissionCycle {
   // We move into the coming Monday's cycle once its Sunday-12:00 deadline (this
   // Sunday) has passed; until then we're still in the current week's cycle.
   const weekStart =
-    now.getTime() >= weekSubmissionDeadline(nextMonday).getTime()
+    now.getTime() >= weekSubmissionDeadline(nextMonday, offsetHours).getTime()
       ? nextMonday
       : thisMonday;
 
-  const submissionDeadline = weekSubmissionDeadline(weekStart);
+  const submissionDeadline = weekSubmissionDeadline(weekStart, offsetHours);
   const meetingDeadline = weekMeetingDeadline(weekStart);
   const t = now.getTime();
   const phase: SubmissionPhase =

@@ -7,6 +7,11 @@
 // can safely run on any page load or a cron ping. People who submitted on time
 // are never fined; people who submitted late keep the $20 they earned.
 //
+// The Sunday deadline is read on the person's own clock where they keep one
+// (lib/submissionClock.ts): "noon on Sunday" means noon where they live, so the
+// sweep runs once per clock over non-overlapping sets of people. The Monday
+// 11:00 escalation does NOT move — it's one meeting at one instant for everyone.
+//
 // The deadline only governs department leads (role LEAD — the ops director is
 // one), and only through a normal department: leading a mini one (Alumni
 // Council, Department.mini) owes nothing. Members may set and submit goals
@@ -27,7 +32,14 @@ import {
   SUBMISSION_DEADLINE_EPOCH,
   TRIP_SHIFTED_DEADLINE_FROM,
   TRIP_SHIFTED_DEADLINE_TO,
+  weekSubmissionDeadline,
 } from "@/lib/lateness";
+import {
+  offClockEmails,
+  submissionClockGroups,
+  submissionOffsetHours,
+  type SubmissionClock,
+} from "@/lib/submissionClock";
 import {
   isSubmissionExempt,
   submissionExemptEmails,
@@ -49,7 +61,6 @@ export async function reconcileSubmissionFines(opts?: {
   userId?: string;
 }): Promise<void> {
   const now = new Date();
-  const cycle = currentSubmissionCycle(now);
 
   // Clear anything an exempt account or a member is still carrying first —
   // this runs on every phase, so adding an exemption (or demoting someone to
@@ -61,10 +72,46 @@ export async function reconcileSubmissionFines(opts?: {
   // midnight (see TRIP_SHIFTED_DEADLINE_* in lib/lateness.ts).
   await releaseTripShiftedFines(now, opts?.userId);
 
-  // Nothing due yet, or a cycle from before the deadline was enforced.
+  // One pass per clock. Each pass has its own deadline instant, so its own
+  // cycle and phase, over the people who read Sunday noon on it.
+  for (const clock of submissionClockGroups()) {
+    await reconcileClock(now, clock, opts?.userId);
+  }
+}
+
+/** The `where` fragment selecting exactly the people on one clock. */
+function onClock(clock: SubmissionClock) {
+  if (clock.emails) {
+    return { email: { in: clock.emails, mode: "insensitive" as const } };
+  }
+  // The company clock is everyone NOT listed on another one. Written as an OR
+  // against null rather than `notIn` alone because an account with no email
+  // (nothing has ever excluded those) would fail a plain SQL NOT IN.
+  const off = offClockEmails();
+  if (off.length === 0) return {};
+  return {
+    OR: [
+      { email: null },
+      { email: { notIn: off, mode: "insensitive" as const } },
+    ],
+  };
+}
+
+/** Reconcile one clock's cycle for the people who keep it. */
+async function reconcileClock(
+  now: Date,
+  clock: SubmissionClock,
+  userId?: string,
+): Promise<void> {
+  const cycle = currentSubmissionCycle(now, clock.offsetHours);
+
+  // Nothing due yet, or a cycle from before the deadline was enforced. The
+  // epoch is a team-wide date read on the company clock, so a personal deadline
+  // a few hours either side of it can't pull a cycle in or push one out.
   if (cycle.phase === "before") return;
   if (
-    cycle.submissionDeadline.getTime() < SUBMISSION_DEADLINE_EPOCH.getTime()
+    weekSubmissionDeadline(cycle.weekStart).getTime() <
+    SUBMISSION_DEADLINE_EPOCH.getTime()
   ) {
     return;
   }
@@ -80,7 +127,8 @@ export async function reconcileSubmissionFines(opts?: {
         some: { role: "LEAD", department: { mini: false } },
       },
       createdAt: { lt: submissionDeadline },
-      ...(opts?.userId ? { id: opts.userId } : {}),
+      ...onClock(clock),
+      ...(userId ? { id: userId } : {}),
     },
     select: {
       id: true,
@@ -112,7 +160,7 @@ export async function reconcileSubmissionFines(opts?: {
       await prisma.fineWaiver.findMany({
         where: {
           cycleDeadline: submissionDeadline,
-          ...(opts?.userId ? { userId: opts.userId } : {}),
+          ...(userId ? { userId } : {}),
         },
         select: { userId: true },
       })
@@ -120,6 +168,12 @@ export async function reconcileSubmissionFines(opts?: {
   );
 
   for (const u of users) {
+    // The clock filter above is an optimisation; this is the guarantee. Judging
+    // each person by the offset they actually keep means nobody can fall into
+    // two passes (and be priced on two different deadlines) if the stored email
+    // differs in case from the listed one.
+    if (submissionOffsetHours(u.email) !== clock.offsetHours) continue;
+
     // Accounts not expected to report weekly (e.g. alumni) are never fined for
     // it — releaseUnexpectedSubmissionFines above has already cleaned up after
     // them.

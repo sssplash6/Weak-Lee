@@ -9,6 +9,7 @@ import { getWeekBounds } from "@/lib/weeks";
 import { goalPercent } from "@/lib/progress";
 import { currentMeetingSlot } from "@/lib/meetings";
 import { currentSubmissionCycle } from "@/lib/lateness";
+import { submissionOffsetHours } from "@/lib/submissionClock";
 import { dayDeadline } from "@/lib/dailyReportTypes";
 import {
   formatMoney,
@@ -246,6 +247,9 @@ export async function deletePenalty(penaltyId: string) {
     select: {
       id: true,
       userId: true,
+      // The waiver below is keyed by a deadline instant, and that instant is
+      // read on the fined person's own clock (lib/submissionClock.ts).
+      user: { select: { email: true } },
       type: true,
       amount: true,
       paidAmount: true,
@@ -275,9 +279,13 @@ export async function deletePenalty(penaltyId: string) {
       ? {
           // The cycle this fine belongs to: the Sunday-12:00 deadline that had
           // most recently passed when it was raised — the same key the sweep
-          // groups a cycle's fines by.
-          cycleDeadline: currentSubmissionCycle(penalty.createdAt)
-            .submissionDeadline,
+          // groups a cycle's fines by, read on the same clock it swept them on,
+          // or the waiver lands on a deadline the sweep never looks up and the
+          // fine comes straight back.
+          cycleDeadline: currentSubmissionCycle(
+            penalty.createdAt,
+            submissionOffsetHours(penalty.user.email),
+          ).submissionDeadline,
           meetingId: null,
         }
       : penalty.type === "LATE_DAILY_REPORT" && penalty.reportDay
