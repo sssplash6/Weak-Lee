@@ -10,6 +10,7 @@ import { resolveAvatar } from "@/lib/avatar";
 import { departmentLine } from "@/lib/team";
 import { formatDateTimeTz } from "@/lib/dates";
 import { formatMoney } from "@/lib/penalties";
+import Link from "next/link";
 import { BackLink } from "@/app/_components/BackLink";
 import { ReportForm } from "./_components/ReportForm";
 import { PenaltyMatrix } from "./_components/PenaltyMatrix";
@@ -247,6 +248,14 @@ export default async function PenaltiesPage() {
     }))
     .sort((a, b) => b.paid - a.paid || a.name.localeCompare(b.name));
 
+  // What's waiting on the admin team, and what this person has filed — the
+  // number is the point of the link, so it's fetched rather than guessed.
+  const reportCount = await prisma.colleagueReport.count({
+    where: viewerIsAdmin
+      ? { status: "OPEN" }
+      : { reporterId: session.user.id },
+  });
+
   const grandOutstanding = rows.reduce((s, r) => s + r.outstanding, 0);
   const grandPaid = built.reduce((s, r) => s + r.paid, 0);
 
@@ -272,6 +281,19 @@ export default async function PenaltiesPage() {
       </header>
 
       <ReportForm colleagues={colleagues} />
+
+      {/* Where a filed report goes next. Reports used to be a notification and
+          nothing else; this is the desk they sit on. */}
+      <div className="mt-2 flex justify-end">
+        <Link
+          href="/penalties/reports"
+          className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-muted-fg transition hover:bg-canvas hover:text-ink"
+        >
+          {viewerIsAdmin
+            ? `Reports filed${reportCount > 0 ? ` · ${reportCount} open` : ""}`
+            : `Reports you've filed${reportCount > 0 ? ` · ${reportCount}` : ""}`}
+        </Link>
+      </div>
 
       <section className="mt-8">
         <h2 className="mb-3 px-1 text-sm font-semibold text-ink">

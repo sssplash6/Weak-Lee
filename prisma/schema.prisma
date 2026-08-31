@@ -142,6 +142,10 @@ model User {
   payrollSubmissions PayrollSubmission[]
   payrollEvents      PayrollEvent[] @relation("PayrollEventsActed")
 
+  reportsFiled    ColleagueReport[] @relation("ReportsFiled")
+  reportsClosed   ColleagueReport[] @relation("ReportsClosed")
+  reportedIn      ColleagueReportSubject[]
+
   // The signup queue reads waiting accounts by the department they named.
   @@index([requestedDepartmentId])
 }
@@ -624,6 +628,58 @@ model GoalShare {
 // Product feedback addressed to tech@freshman.academy. Stored here rather than
 // emailed (no mail provider configured); read straight from the table. The
 // submitter's email is captured at write time so it survives user deletion.
+// A member reporting another member — the "Report a colleague" form on
+// /penalties. It began life as a notification to the admins and nothing else,
+// which meant a report was unfindable 48 hours later and nobody could say what
+// had been done about it. The row IS the record; the notification stays as the
+// ping.
+//
+// The reason is one text field because that is what the form asks for. Who it
+// names is a join table, not a string, so "what has been reported about this
+// person" is a query rather than a search through prose.
+enum ColleagueReportStatus {
+  OPEN
+  ACTIONED // an admin acted on it (usually a fine)
+  DISMISSED // looked at, nothing to do
+}
+
+model ColleagueReport {
+  id         String   @id @default(cuid())
+  reporterId String?
+  reason     String
+  createdAt  DateTime @default(now())
+
+  status     ColleagueReportStatus @default(OPEN)
+  // Who closed it and when. `resolution` is the optional note an admin leaves
+  // — what was done, or why nothing was — so a closed report explains itself
+  // months later.
+  closedById String?
+  closedAt   DateTime?
+  resolution String?
+
+  // SetNull on both, like every other actor link here: a report survives the
+  // account that filed or closed it, because it is a record of what happened.
+  reporter User? @relation("ReportsFiled", fields: [reporterId], references: [id], onDelete: SetNull)
+  closedBy User? @relation("ReportsClosed", fields: [closedById], references: [id], onDelete: SetNull)
+  subjects ColleagueReportSubject[]
+
+  @@index([status, createdAt])
+  @@index([reporterId])
+}
+
+// One person named in one report. Cascades with the report; if the named
+// account is deleted the row goes with it (there is nothing left to be about).
+model ColleagueReportSubject {
+  reportId String
+  userId   String
+
+  report ColleagueReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  user   User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([reportId, userId])
+  @@index([userId])
+}
+
 model Feedback {
   id        String   @id @default(cuid())
   message   String
