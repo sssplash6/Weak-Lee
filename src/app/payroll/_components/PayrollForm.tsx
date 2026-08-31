@@ -491,7 +491,7 @@ export function PayrollForm({
             Nothing else needed — you&rsquo;ll be paid in cash.
           </p>
         )}
-        {/* Stripe, SG Bank, Kapital Bank — settled off-app as they always were. */}
+        {/* Stripe, SG Bank — settled off-app as they always were. */}
         {detailFields.length === 0 && !methodIsCash(method) && (
           <p className="rise-in mt-2 text-xs text-muted-fg">
             Finance will arrange the details with you directly — nothing to

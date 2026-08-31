@@ -278,7 +278,10 @@ export function paymentFieldsFor(method: PayrollMethod): PaymentField[] {
   switch (method) {
     case "WISE_USD":
       return [FIELDS.wiseEmail];
+    // Both are a local card in hand: Kapital Bank pays onto one, so it needs
+    // exactly what the Uzbek card method needs and nothing more.
     case "UZS_CARD":
+    case "KAPITAL_BANK":
       return [FIELDS.cardHolder, FIELDS.cardNumber, FIELDS.cardExpiry];
     case "VISA_CARD":
       return [
@@ -293,7 +296,7 @@ export function paymentFieldsFor(method: PayrollMethod): PaymentField[] {
     case "VARIOUS":
       return [FIELDS.otherDetails];
     default:
-      // Cash, Stripe, SG Bank, Kapital Bank — settled off-app as they always were.
+      // Cash, Stripe, SG Bank — settled off-app as they always were.
       return [];
   }
 }

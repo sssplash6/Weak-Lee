@@ -295,7 +295,7 @@ export async function renderPayrollInvoice(
     noteLines.push(`${line.label}: ${line.value}`);
   }
   if (details.length === 0 && !methodIsCash(method)) {
-    // Stripe, SG Bank, Kapital Bank — settled off-app, so finance reads this
+    // Stripe, SG Bank — settled off-app, so finance reads this
     // as "you already know where". Cash needs no second line at all.
     noteLines.push("Account details: arranged directly with finance");
   }
