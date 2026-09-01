@@ -37,6 +37,7 @@ import {
 } from "@/lib/dates";
 import { weekOpensAt } from "@/lib/lateness";
 import { submissionOffsetHours } from "@/lib/submissionClock";
+import { submitsAtBottom } from "@/lib/submitPlacement";
 import { reconcileSubmissionFines } from "@/lib/submissionFines";
 import {
   reconcileDailyReportFines,
@@ -704,6 +705,20 @@ export default async function DashboardPage({
       </>
     ) : null;
 
+  // The submit control sits above the goal list for everyone except the
+  // accounts in lib/submitPlacement.ts, who read down their goals first and
+  // hit Submit at the end. Built once here so both spots stay in sync.
+  const submitAtBottom = submitsAtBottom(session!.user.email);
+  const weekSubmit = (
+    <WeekSubmit
+      scope={view}
+      locked={locked}
+      submittedAtLabel={submittedAtLabel}
+      goalCount={goals.length}
+      placement={submitAtBottom ? "bottom" : "top"}
+    />
+  );
+
   return (
     <>
       {/* Entry alert: nags until this period's goals are submitted once.
@@ -864,12 +879,7 @@ export default async function DashboardPage({
         </section>
       )}
 
-      <WeekSubmit
-        scope={view}
-        locked={locked}
-        submittedAtLabel={submittedAtLabel}
-        goalCount={goals.length}
-      />
+      {!submitAtBottom && weekSubmit}
 
       <section className="flex flex-col gap-4">
         {myGoals.map((goal, i) => (
@@ -898,6 +908,8 @@ export default async function DashboardPage({
           </p>
         )}
       </section>
+
+      {submitAtBottom && weekSubmit}
 
       {sharedGoals.length > 0 && (
         <section className="mt-8">

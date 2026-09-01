@@ -12,25 +12,33 @@ import { CheckCircleIcon } from "./icons";
  *    re-lock; still shows the original submit time, which never changes.
  *
  * Weekly submissions have a deadline (enforced elsewhere); monthly ones never do.
+ *
+ * `placement` only moves the spacing to the other side: the control normally
+ * sits above the goal list, but some accounts have it below (lib/submitPlacement.ts).
  */
 export function WeekSubmit({
   scope = "week",
   locked,
   submittedAtLabel,
   goalCount,
+  placement = "top",
 }: {
   scope?: "week" | "month";
   locked: boolean;
   submittedAtLabel: string | null;
   goalCount: number;
+  placement?: "top" | "bottom";
 }) {
   const [isPending, startTransition] = useTransition();
   const submit = scope === "month" ? submitMonth : submitWeek;
   const reopen = scope === "month" ? reopenMonth : reopenWeek;
+  const spacing = placement === "bottom" ? "mt-5" : "mb-5";
 
   if (locked) {
     return (
-      <div className="mb-5 flex items-center gap-2.5 rounded-xl border border-brand/20 bg-brand-soft/40 px-4 py-2.5">
+      <div
+        className={`${spacing} flex items-center gap-2.5 rounded-xl border border-brand/20 bg-brand-soft/40 px-4 py-2.5`}
+      >
         <CheckCircleIcon className="h-4 w-4 shrink-0 text-brand" />
         <p className="min-w-0 flex-1 truncate text-sm text-ink">
           <span className="font-semibold">Goals submitted</span>
@@ -54,7 +62,9 @@ export function WeekSubmit({
   const resubmitting = submittedAtLabel != null;
 
   return (
-    <div className="mb-5 flex items-center gap-3 rounded-xl border border-dashed border-line bg-surface/50 px-4 py-3">
+    <div
+      className={`${spacing} flex items-center gap-3 rounded-xl border border-dashed border-line bg-surface/50 px-4 py-3`}
+    >
       <div className="min-w-0 flex-1">
         <p className="text-sm font-semibold text-ink">
           {resubmitting ? "Editing your goals" : "Finished setting your goals?"}
