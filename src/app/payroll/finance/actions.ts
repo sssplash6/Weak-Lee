@@ -115,8 +115,14 @@ export async function declineSubmission(
   }
 
   const now = new Date();
-  const window = resubmitWindowFor(now, sub.period.filingClosesAt);
+  const window = resubmitWindowFor(now, sub.period);
   const label = payrollPeriodLabel(sub.period.year, sub.period.month);
+  // A held-open month hands back no deadline (resubmitWindowFor), so the two
+  // messages below say what actually bounds the refile — the month closing —
+  // rather than naming a date nobody has set yet.
+  const byWhen = window.deadline
+    ? `by ${formatTashkent(window.deadline)}`
+    : `whenever you like — ${label} is being held open, so there's no deadline until it closes`;
 
   await prisma.$transaction(async (tx) => {
     await applyTransition(tx, {
@@ -134,7 +140,7 @@ export async function declineSubmission(
       tx,
       sub.user.id,
       "PAYROLL",
-      `Your ${label} pay request was declined — “${cleanNote}”. Resubmit by ${formatTashkent(window.deadline)}.`,
+      `Your ${label} pay request was declined — “${cleanNote}”. Resubmit ${byWhen}.`,
     );
     // In-app only for the other reviewers — no email (the employee gets both).
     await tellOtherReviewers(
@@ -150,7 +156,7 @@ export async function declineSubmission(
       subject: `Payroll: your ${label} request was declined`,
       text:
         `Your ${label} pay request was declined:\n\n“${cleanNote}”\n\n` +
-        `Fix it and resubmit by ${formatTashkent(window.deadline)} — after that the filing rolls into next month's cycle.\n\n` +
+        `Fix it and resubmit ${byWhen}${window.deadline ? " — after that the filing rolls into next month's cycle" : ""}.\n\n` +
         `Your form is reopened with everything prefilled: ${appUrl()}/payroll\n\n— FreshWeek`,
     });
   }

@@ -23,6 +23,8 @@ import {
   payrollPeriodLabel,
   validatePaymentDetails,
   PAYROLL_CLOSED,
+  PAYROLL_HELD_OPEN,
+  isHeldOpenPeriod,
   isPayrollOpenFor,
   isPayrollRolloutTester,
   payrollOpenToEmails,
@@ -218,12 +220,34 @@ export function periodBoundsFor(now: Date): PayrollPeriodBounds {
 }
 
 /**
+ * The same bounds for a month named outright rather than found from an
+ * instant. The 15th is the anchor because it is the one date that can't be
+ * caught by the day-1 step-back above, so the month asked for is the month
+ * that comes back.
+ */
+export function periodBoundsForMonth(
+  year: number,
+  month: number,
+): PayrollPeriodBounds {
+  return periodBoundsFor(new Date(Date.UTC(year, month - 1, 15)));
+}
+
+/**
  * The PayrollPeriod row governing `now`, created on first touch. Rows only
  * exist from the feature's launch month onward, so closed-period surfaces
  * ("did not file", stats history) never reach back before payroll existed.
+ *
+ * A held-open period (PAYROLL_HELD_OPEN) displaces the calendar one for as
+ * long as it is held: while August is being kept open there is no sense in
+ * which September is the cycle people file against, and pointing "current" at
+ * the calendar month would leave the held-open form unreachable — the very
+ * thing holding it open was meant to allow. `update: {}` is what keeps the
+ * stored window intact, so lifting the hold restores the original cutoff.
  */
 export async function ensureCurrentPeriod(db: Db = prisma, now = new Date()) {
-  const b = periodBoundsFor(now);
+  const b = PAYROLL_HELD_OPEN
+    ? periodBoundsForMonth(PAYROLL_HELD_OPEN.year, PAYROLL_HELD_OPEN.month)
+    : periodBoundsFor(now);
   return db.payrollPeriod.upsert({
     where: { year_month: { year: b.year, month: b.month } },
     update: {},
@@ -239,10 +263,20 @@ export async function ensureCurrentPeriod(db: Db = prisma, now = new Date()) {
  */
 export type FilingWindowState = "BEFORE" | "OPEN" | "CLOSED";
 
+export type PeriodWindow = {
+  year: number;
+  month: number;
+  filingOpensAt: Date;
+  filingClosesAt: Date;
+};
+
 export function filingWindowState(
-  period: { filingOpensAt: Date; filingClosesAt: Date },
+  period: PeriodWindow,
   now: Date,
 ): FilingWindowState {
+  // The standing exception, and the only one that applies to everybody: a
+  // held-open month has no cutoff, so it can't be past one.
+  if (isHeldOpenPeriod(period)) return "OPEN";
   if (now < period.filingOpensAt) return "BEFORE";
   if (now > period.filingClosesAt) return "CLOSED";
   return "OPEN";
@@ -264,7 +298,7 @@ export function filingWindowState(
  */
 export function filingWindowStateFor(
   email: string | null | undefined,
-  period: { filingOpensAt: Date; filingClosesAt: Date },
+  period: PeriodWindow,
   now: Date,
 ): FilingWindowState {
   if (isPayrollRolloutTester(email)) return "OPEN";
@@ -364,6 +398,15 @@ export async function applyTransition(
  * would be judged against the wrong date — the exact hours a late-night
  * decline is most likely to land in.
  *
+ * A HELD-OPEN period returns no deadline at all. The deadline is the month's
+ * cutoff and a held-open month has none, so there is nothing to hand back:
+ * `null` says "not yet", and it is the honest answer rather than a date. The
+ * alternative — handing back the stored cutoff, which is already in the past —
+ * would decline a request straight into a lapsed window, and a request that
+ * cannot be refiled is exactly what holding the month open was meant to
+ * prevent. What bounds the refile instead is the filing window itself, tested
+ * in submitPayroll, so lifting the hold closes these windows with the month.
+ *
  * The result therefore only ever takes two values, cutoff or cutoff + 24h, and
  * as time passes it moves from the first to the second and never back. That is
  * what makes re-declines safe: a second decline can neither push the deadline
@@ -375,8 +418,10 @@ export async function applyTransition(
  */
 export function resubmitWindowFor(
   now: Date,
-  filingClosesAt: Date,
-): { deadline: Date; usesGraceDay: boolean } {
+  period: { year: number; month: number; filingClosesAt: Date },
+): { deadline: Date | null; usesGraceDay: boolean } {
+  if (isHeldOpenPeriod(period)) return { deadline: null, usesGraceDay: false };
+  const { filingClosesAt } = period;
   // >= and not ===: nothing expires a SUBMITTED request, so an admin can
   // decline days after the cutoff. Such a decline belongs with the last-day
   // case (already past the deadline it would otherwise be handed), never with
@@ -393,6 +438,22 @@ export function resubmitWindowFor(
  * Lazy and idempotent — called from every payroll surface before it reads, so
  * nobody ever sees (or acts on) a window that is really over. The optimistic
  * update makes concurrent sweeps write one audit row, not two.
+ *
+ * Two shapes of lapsed window, because a decline is deadlined against its
+ * period's cutoff and a held-open period has no cutoff to be deadlined
+ * against (see resubmitWindowFor):
+ *
+ *   • a deadline that has passed — the ordinary case;
+ *   • no deadline at all, on a period whose filing has since closed. That is
+ *     how a request declined while a month was held open is settled once the
+ *     hold is lifted: it lapses with the month, not silently on the stale
+ *     cutoff the row still carries. It also finally settles legacy declines
+ *     written before resubmitDeadline existed, which could not be refiled
+ *     either and were sitting DECLINED for good — blocking the filer from
+ *     ever filing again (DECLINED is in IN_FLIGHT_STATUSES).
+ *
+ * Nothing in a held-open period lapses under either shape: its filing window
+ * is open, so no window in it is over.
  */
 export async function expireLapsedSubmissions(now = new Date()): Promise<void> {
   // Closed: a decline window that lapses while nobody can refile isn't the
@@ -404,7 +465,20 @@ export async function expireLapsedSubmissions(now = new Date()): Promise<void> {
   const lapsed = await prisma.payrollSubmission.findMany({
     where: {
       status: "DECLINED",
-      resubmitDeadline: { lt: now },
+      OR: [
+        { resubmitDeadline: { lt: now } },
+        { resubmitDeadline: null, period: { filingClosesAt: { lt: now } } },
+      ],
+      ...(PAYROLL_HELD_OPEN
+        ? {
+            NOT: {
+              period: {
+                year: PAYROLL_HELD_OPEN.year,
+                month: PAYROLL_HELD_OPEN.month,
+              },
+            },
+          }
+        : {}),
       ...(allowed.length > 0
         ? { user: { email: { in: allowed, mode: "insensitive" as const } } }
         : {}),
@@ -692,6 +766,11 @@ export async function reconcilePayrollReminders(now = new Date()): Promise<void>
   if (PAYROLL_CLOSED) return;
   const period = await ensureCurrentPeriod(prisma, now);
   if (period.reminderSentAt) return;
+  // Both bounds are read off the row, so a HELD-OPEN period is silent here
+  // even though it is the current one: its `remindAt` fired long ago and its
+  // stored cutoff is past. Holding a month open extends the deadline, it does
+  // not re-nudge the team about a month they were already reminded of — a
+  // second all-hands email is a decision for whoever held it open to make.
   if (now < period.remindAt || now > period.filingClosesAt) return;
 
   const claimed = await prisma.payrollPeriod.updateMany({

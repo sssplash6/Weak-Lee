@@ -66,7 +66,8 @@ export function PayrollForm({
   mode,
 }: {
   periodLabel: string;
-  closesLabel: string;
+  /** When filing shuts, or null while the period is held open with no cutoff. */
+  closesLabel: string | null;
   snapshot: {
     bonuses: LedgerLineView[];
     fines: LedgerLineView[];
@@ -90,8 +91,9 @@ export function PayrollForm({
     | { kind: "file" }
     | {
         kind: "refile";
-        deadlineIso: string;
-        deadlineLabel: string;
+        /** Null while the period is held open: no cutoff, so no clock. */
+        deadlineIso: string | null;
+        deadlineLabel: string | null;
         note: string | null;
       }
     | { kind: "edit" };
@@ -253,10 +255,18 @@ export function PayrollForm({
             <p className="mt-1 text-xs text-ink">“{mode.note}”</p>
           )}
           <div className="mt-1.5">
-            <ResubmitCountdown
-              deadlineIso={mode.deadlineIso}
-              deadlineLabel={mode.deadlineLabel}
-            />
+            {mode.deadlineIso && mode.deadlineLabel ? (
+              <ResubmitCountdown
+                deadlineIso={mode.deadlineIso}
+                deadlineLabel={mode.deadlineLabel}
+              />
+            ) : (
+              // Nothing to count down to — the month has no cutoff yet, and a
+              // ticking clock would invent one.
+              <p className="text-xs text-red-700">
+                {`No deadline — ${periodLabel} is being held open, so resend it whenever you're ready.`}
+              </p>
+            )}
           </div>
         </div>
       )}
@@ -285,7 +295,7 @@ export function PayrollForm({
         </h2>
         {mode.kind === "file" && (
           <span className="shrink-0 text-[11px] text-muted-fg">
-            Filing closes {closesLabel}
+            {closesLabel ? `Filing closes ${closesLabel}` : "Filing held open"}
           </span>
         )}
       </div>

@@ -222,7 +222,16 @@ export async function submitPayroll(
     // that deadline is allowed to run one day past the cutoff (the grace day
     // in resubmitWindowFor). Refusing here would strand anyone declined late
     // on the window's last day.
-    if (!existing.resubmitDeadline || now > existing.resubmitDeadline) {
+    //
+    // No deadline on the row means the period had no cutoff to set one from —
+    // it was declined while the month was held open — so the window IS the
+    // bound, and this refile stops being possible when the month closes. (The
+    // same reading settles legacy rows from before the column existed: their
+    // month closed long ago, so they are refused exactly as they were.)
+    const lapsed = existing.resubmitDeadline
+      ? now > existing.resubmitDeadline
+      : filingWindow !== "OPEN";
+    if (lapsed) {
       return fail("The resubmit window has closed — this filing rolls into next month's cycle.");
     }
     mode = "resubmit";

@@ -28,6 +28,7 @@ import {
   payrollMonthName,
   parsePaymentDetails,
   payrollPeriodLabel,
+  isHeldOpenPeriod,
   isPayrollOpenFor,
   isPayrollRolloutTester,
   PAYROLL_STATUS_BADGE,
@@ -55,6 +56,11 @@ export const metadata: Metadata = { title: "Payroll" };
  * closed, rather than showing a form the action would only reject. Missing the
  * window carries no penalty: the next month's snapshot sweeps up whatever is
  * still unpaid.
+ *
+ * One month at a time can be held open past its cutoff for everybody
+ * (PAYROLL_HELD_OPEN), and while it is, it stays the month this page files
+ * against — with a notice, because a form that outlives its own deadline
+ * otherwise looks like a bug.
  */
 export default async function PayrollPage() {
   const session = await auth();
@@ -96,6 +102,10 @@ export default async function PayrollPage() {
   // worth showing.
   const filingWindow = filingWindowStateFor(me.email, period, now);
   const filingOpen = filingWindow === "OPEN";
+  // Held open by hand (PAYROLL_HELD_OPEN): the month has no cutoff until
+  // someone lifts it, so every "closes …" on this page has no date to name.
+  const heldOpen = isHeldOpenPeriod(period);
+  const closesLabel = heldOpen ? null : formatTashkent(period.filingClosesAt);
   // A rollout tester is inside the window by definition (see
   // filingWindowStateFor). Say so where it would otherwise look like the
   // window simply isn't working — filing on the 25th when the card elsewhere
@@ -345,6 +355,20 @@ export default async function PayrollPage() {
         </div>
       )}
 
+      {/* The month is past its cutoff and the form is still here. Say why, or
+          it reads as the window having failed — and say that it ends when
+          someone decides, since there is no date to plan around. */}
+      {heldOpen && (
+        <div className="mb-5 rounded-xl border border-line bg-surface p-4">
+          <p className="text-sm font-semibold text-ink">
+            {`${label} is being held open`}
+          </p>
+          <p className="mt-1 text-sm text-muted-fg">
+            {`Filing for ${label} would normally have closed ${formatTashkent(period.filingClosesAt)}. It's open to everyone as an exception, with no new deadline — file whenever you're ready, and you'll be told before it closes.`}
+          </p>
+        </div>
+      )}
+
       {/* Filing is normally shut outside the window; it's open here because
           this account is on the restricted-rollout allowlist. Announce it —
           otherwise filing mid-month looks like the window is broken. */}
@@ -359,10 +383,13 @@ export default async function PayrollPage() {
         </div>
       )}
 
-      {canResubmit && snapshot && current && current.resubmitDeadline && (
+      {/* No `resubmitDeadline` check: a decline inside a held-open month is
+          given none (resubmitWindowFor), and the form is what the person needs
+          most in exactly that case. */}
+      {canResubmit && snapshot && current && (
         <PayrollForm
           periodLabel={label}
-          closesLabel={formatTashkent(period.filingClosesAt)}
+          closesLabel={closesLabel}
           snapshot={snapshot}
           prefill={{
             baseSalary: current.baseSalary,
@@ -377,8 +404,10 @@ export default async function PayrollPage() {
           }}
           mode={{
             kind: "refile",
-            deadlineIso: current.resubmitDeadline.toISOString(),
-            deadlineLabel: formatTashkent(current.resubmitDeadline),
+            deadlineIso: current.resubmitDeadline?.toISOString() ?? null,
+            deadlineLabel: current.resubmitDeadline
+              ? formatTashkent(current.resubmitDeadline)
+              : null,
             note: declineNote,
           }}
         />
@@ -395,7 +424,7 @@ export default async function PayrollPage() {
           form={
             <PayrollForm
               periodLabel={label}
-              closesLabel={formatTashkent(period.filingClosesAt)}
+              closesLabel={closesLabel}
               snapshot={snapshot}
               prefill={{
                 baseSalary: current.baseSalary,
@@ -434,7 +463,7 @@ export default async function PayrollPage() {
       {canFileFresh && !blocking && snapshot && (
         <PayrollForm
           periodLabel={label}
-          closesLabel={formatTashkent(period.filingClosesAt)}
+          closesLabel={closesLabel}
           snapshot={snapshot}
           prefill={prefill}
           mode={{ kind: "file" }}

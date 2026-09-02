@@ -59,6 +59,45 @@ export function payrollOpenToEmails(): string[] {
 }
 
 /**
+ * ONE period held open by hand, for everyone, with no closing date — the
+ * standing exception to the four-day filing window.
+ *
+ * Filing normally runs the last three days of a month plus the 1st of the next
+ * (see periodBoundsFor), and a month that shuts is shut: whoever missed it
+ * files in the next cycle instead. Naming a period here suspends that for that
+ * month alone, until someone sets this back to `null`:
+ *
+ *   • that month is the current cycle, whatever the calendar says, so /payroll
+ *     keeps offering its form instead of moving on to the next month;
+ *   • its filing window reads OPEN for every account, not just the rollout
+ *     testers PAYROLL_OPEN_TO lets in early;
+ *   • nothing in it lapses — a declined request has NO resubmit deadline while
+ *     the month it belongs to has no closing date;
+ *   • closing it again is this one edit, and the ordinary rules resume: the
+ *     stored window is untouched the whole time, so the month reverts to the
+ *     cutoff it was created with rather than to whatever the code now computes.
+ *
+ * It is deliberately a single period and not a list. This exists to be undone,
+ * and a list is how one forgotten entry becomes a month that never closes.
+ */
+export const PAYROLL_HELD_OPEN: { year: number; month: number } | null = {
+  year: 2026,
+  month: 8,
+};
+
+/** Whether this period is the one being held open. */
+export function isHeldOpenPeriod(period: {
+  year: number;
+  month: number;
+}): boolean {
+  return (
+    PAYROLL_HELD_OPEN !== null &&
+    period.year === PAYROLL_HELD_OPEN.year &&
+    period.month === PAYROLL_HELD_OPEN.month
+  );
+}
+
+/**
  * APPROVED_BY_ADMIN is legacy and nothing enters it any more: it was the admin
  * stage's hand-off to finance, and payroll has one reviewer stage now. The
  * value stays because rows and audit events still hold it, and a row left in

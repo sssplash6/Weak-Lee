@@ -16,6 +16,7 @@ import {
   eligibleEmployees,
   ensureCurrentPeriod,
   expireLapsedSubmissions,
+  filingWindowState,
   formatTashkent,
   isFinance,
   reconcilePayrollReminders,
@@ -25,6 +26,7 @@ import {
   paymentDetailLines,
   paymentSummary,
   payrollPeriodLabel,
+  isHeldOpenPeriod,
   isPayrollOpenFor,
   PAYROLL_METHOD_LABEL,
   PAYROLL_STATUS_BADGE,
@@ -220,7 +222,13 @@ export default async function PayrollPanelPage({
 
   const periods = await prisma.payrollPeriod.findMany({
     orderBy: [{ year: "desc" }, { month: "desc" }],
-    select: { id: true, year: true, month: true, filingClosesAt: true },
+    select: {
+      id: true,
+      year: true,
+      month: true,
+      filingOpensAt: true,
+      filingClosesAt: true,
+    },
   });
   // One definition now that there is one page — this used to be written out in
   // both /payroll/review and /payroll/sheet.
@@ -232,7 +240,12 @@ export default async function PayrollPanelPage({
     periods[0];
   const label = payrollPeriodLabel(selected.year, selected.month);
   const periodKey = periodKeyOf(selected);
-  const periodClosed = now > selected.filingClosesAt;
+  // Read through filingWindowState, not off the column: a month held open
+  // (PAYROLL_HELD_OPEN) is past its stored cutoff and still accepting filings,
+  // so the raw comparison would report it closed and start naming people who
+  // "did not file" while they still can.
+  const periodClosed = filingWindowState(selected, now) === "CLOSED";
+  const heldOpen = isHeldOpenPeriod(selected);
 
   /** Every link on the page: pick a month, or a view, and keep the other. */
   const hrefFor = (key: string, to: PanelView) =>
@@ -378,7 +391,9 @@ export default async function PayrollPanelPage({
     {
       label: "Not filed",
       value: String(unfiled.length),
-      hint: `Filing ${periodClosed ? "closed" : "closes"} ${formatTashkent(selected.filingClosesAt)}`,
+      hint: heldOpen
+        ? "Filing held open — no cutoff"
+        : `Filing ${periodClosed ? "closed" : "closes"} ${formatTashkent(selected.filingClosesAt)}`,
       tone: "muted",
     },
   ];
@@ -418,7 +433,12 @@ export default async function PayrollPanelPage({
     const metaLine =
       s.status === "DECLINED" && s.resubmitDeadline
         ? `Resubmit by ${formatTashkent(s.resubmitDeadline)}${s.graceDayUsed ? " · grace day" : ""}`
-        : s.status === "PROCESSED" && s.processedAt
+        : // Declined inside a held-open month, so it carries no deadline —
+          // saying when it was filed instead would hide that it is waiting on
+          // the filer, with nothing counting down.
+          s.status === "DECLINED" && heldOpen
+          ? "Resubmit — no deadline while the month is held open"
+          : s.status === "PROCESSED" && s.processedAt
           ? `Paid ${formatDateTimeTz(s.processedAt)}`
           : s.status === "APPROVED_BY_ADMIN" && handedOver
             ? `Approved ${formatDateTimeTz(handedOver)}`
