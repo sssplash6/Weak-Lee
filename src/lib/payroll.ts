@@ -84,6 +84,31 @@ export function canSeeAllPayroll(email: string | null | undefined): boolean {
   return isAdmin(email) || isFinance(email);
 }
 
+/**
+ * Who keeps payroll's READ side open after payroll itself closes — the panel,
+ * and the invoices and receipts a panel row links to. Global admins do.
+ *
+ * Closing payroll (PAYROLL_CLOSED, or a restricted rollout that leaves an
+ * account off PAYROLL_OPEN_TO) is about who may file and be paid. It is not
+ * about the record: a month that was already filed, decided and paid stays
+ * part of the books, and the people who administer the app have to be able to
+ * look it up — not least to answer "what happened to my request?" from behind
+ * a coming-soon screen.
+ *
+ * This unlocks reading and nothing else. Every payroll verb keeps its own
+ * `isPayrollOpenFor` guard (../app/payroll/finance/actions.ts,
+ * ../app/payroll/sheet/actions.ts, ../app/payroll/actions.ts) and refuses
+ * while closed, and the panel draws no verb it cannot honour — so an admin
+ * reading a shut payroll can pay nothing, decline nothing and record nothing.
+ * The lazy sweeps are safe for the same reason: both already return early
+ * while closed, so opening the panel can't expire a row or email anyone.
+ */
+export function canReadPayrollWhileClosed(
+  email: string | null | undefined,
+): boolean {
+  return isAdmin(email);
+}
+
 type SessionLike = {
   user?: { id?: string; email?: string | null };
 } | null;

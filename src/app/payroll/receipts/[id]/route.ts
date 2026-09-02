@@ -3,7 +3,7 @@
 
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canSeeAllPayroll } from "@/lib/payroll";
+import { canReadPayrollWhileClosed, canSeeAllPayroll } from "@/lib/payroll";
 import { isPayrollOpenFor } from "@/lib/payrollTypes";
 
 export async function GET(
@@ -12,8 +12,13 @@ export async function GET(
 ) {
   const session = await auth();
   if (!session?.user) return new Response("Sign in required", { status: 401 });
-  // Payroll off, or this account isn't in the restricted rollout yet.
-  if (!isPayrollOpenFor(session.user.email)) {
+  // Payroll off, or this account isn't in the restricted rollout yet — with
+  // the admin's read-only exception, because the panel stays open to them
+  // while closed and every row on it has to keep opening its documents.
+  if (
+    !isPayrollOpenFor(session.user.email) &&
+    !canReadPayrollWhileClosed(session.user.email)
+  ) {
     return new Response("Payroll is closed", { status: 404 });
   }
 

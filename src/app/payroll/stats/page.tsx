@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { formatMoney } from "@/lib/penalties";
 import { BackLink } from "@/app/_components/BackLink";
 import {
+  canReadPayrollWhileClosed,
   canSeeAllPayroll,
   ensureCurrentPeriod,
   expireLapsedSubmissions,
@@ -86,7 +87,15 @@ export default async function PayrollStatsPage({
   if (!session?.user?.id) redirect("/signin");
   await assertApproved(session.user);
   // Closed: reviewers see the same screen employees do, before any sweep runs.
-  if (!isPayrollOpenFor(session.user.email)) return <PayrollComingSoon />;
+  // The panel is the one payroll surface that outlives the switch, so an admin
+  // who lands here while closed is pointed at it rather than dead-ended.
+  if (!isPayrollOpenFor(session.user.email)) {
+    return (
+      <PayrollComingSoon
+        panelLink={canReadPayrollWhileClosed(session.user.email)}
+      />
+    );
+  }
   if (!canSeeAllPayroll(session.user.email)) redirect("/payroll");
 
   const now = new Date();

@@ -11,6 +11,7 @@ import { COMPANY_TIME_ZONE, formatDateTimeTz, formatYmd } from "@/lib/dates";
 import { formatMoney } from "@/lib/penalties";
 import { BackLink } from "@/app/_components/BackLink";
 import {
+  canReadPayrollWhileClosed,
   canSeeAllPayroll,
   eligibleEmployees,
   ensureCurrentPeriod,
@@ -173,8 +174,17 @@ export default async function PayrollPanelPage({
   const session = await auth();
   if (!session?.user?.id) redirect("/signin");
   await assertApproved(session.user);
-  // Closed: reviewers see the same screen employees do, before any sweep runs.
-  if (!isPayrollOpenFor(session.user.email)) return <PayrollComingSoon />;
+  /**
+   * Closed payroll: everyone gets the coming-soon screen employees do — except
+   * a global admin, who keeps this panel as a read-only record (see
+   * canReadPayrollWhileClosed). The reviewer does NOT: paying is exactly what
+   * closing payroll stops, so a reviewer with no verbs left has nothing to be
+   * here for, and letting them in would only look like the switch had failed.
+   */
+  const payrollOpen = isPayrollOpenFor(session.user.email);
+  if (!payrollOpen && !canReadPayrollWhileClosed(session.user.email)) {
+    return <PayrollComingSoon />;
+  }
   // Reading the panel is for everyone who reviews money — both stages plus
   // global admins. Acting on a row is narrower, and decided per row below.
   if (!canSeeAllPayroll(session.user.email)) redirect("/dashboard");
@@ -194,8 +204,11 @@ export default async function PayrollPanelPage({
    * Both are copies of a server-side guard, for deciding what to draw. Neither
    * is the guard.
    */
-  const canPay = isFinance(session.user.email);
-  const canRecord = canPay || isAdmin(session.user.email);
+  // While payroll is closed the panel is strictly a record: both flags go
+  // false for everyone, because every action behind them refuses anyway and a
+  // button that throws is worse than no button.
+  const canPay = payrollOpen && isFinance(session.user.email);
+  const canRecord = payrollOpen && (canPay || isAdmin(session.user.email));
 
   const now = new Date();
   await expireLapsedSubmissions(now);
@@ -573,6 +586,23 @@ export default async function PayrollPanelPage({
         </div>
         <BackLink href="/payroll" label="Payroll" />
       </header>
+
+      {/* Reachable while payroll is shut, and only by an admin — so say which
+          of the two it is, or a panel with every verb missing reads as broken
+          rather than as closed. */}
+      {!payrollOpen && (
+        <div className="mb-5 rounded-xl border border-line bg-surface p-4">
+          <p className="text-sm font-semibold text-ink">
+            Payroll is closed — this is the record
+          </p>
+          <p className="mt-1 text-sm text-muted-fg">
+            Everyone else sees the coming-soon screen, and nothing here can be
+            paid, declined or recorded until payroll reopens. What was already
+            filed is still listed in full, invoices and receipts included, and
+            no request expires or is chased while the feature is shut.
+          </p>
+        </div>
+      )}
 
       <PanelSummary stats={stats} />
 

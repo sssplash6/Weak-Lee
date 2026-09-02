@@ -9,6 +9,7 @@ import { PaymentDetailsPrompt } from "./_components/PaymentDetailsPrompt";
 import { formatDateTimeTz, formatYmd, toYmd } from "@/lib/dates";
 import { PENALTY_LABEL } from "@/lib/penalties";
 import {
+  canReadPayrollWhileClosed,
   canSeeAllPayroll,
   ensureCurrentPeriod,
   expireLapsedSubmissions,
@@ -60,7 +61,16 @@ export default async function PayrollPage() {
   if (!session?.user?.id) redirect("/signin");
   await assertApproved(session.user);
   // Closed: bail before the sweeps so nothing expires or emails while shut.
-  if (!isPayrollOpenFor(session.user.email)) return <PayrollComingSoon />;
+  // An admin is pointed on to the panel, the one payroll surface that stays
+  // readable while closed — this page has nothing to offer them, since there
+  // is no filing to do.
+  if (!isPayrollOpenFor(session.user.email)) {
+    return (
+      <PayrollComingSoon
+        panelLink={canReadPayrollWhileClosed(session.user.email)}
+      />
+    );
+  }
 
   const me = await prisma.user.findUnique({
     where: { id: session.user.id },
