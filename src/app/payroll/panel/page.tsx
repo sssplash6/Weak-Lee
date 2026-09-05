@@ -39,7 +39,11 @@ import {
   eventViews,
   fineLineViews,
 } from "../_components/lineViews";
-import { PanelBoard, type PanelBoardItem } from "../_components/PanelBoard";
+import {
+  PanelBoard,
+  type PanelBoardItem,
+  type PanelBoardSummary,
+} from "../_components/PanelBoard";
 import { RowTickSpacer } from "../_components/PaySelection";
 import {
   medianNet,
@@ -166,7 +170,7 @@ function approvedAt(
  *
  * The period is the only thing the queue keeps in the URL besides the view,
  * because it changes which rows are fetched. Everything else a reviewer does
- * to the queue (status, search, department, payment source, order) happens in
+ * to the queue (status, search, department, order) happens in
  * the browser over rows already on the page, so working down a month never
  * reloads it under them.
  */
@@ -368,6 +372,13 @@ export default async function PayrollPanelPage({
     })
     .filter((x) => x.count > 0);
 
+  /**
+   * The month at a glance, for the register. The queue builds its own copy of
+   * this strip inside the board (see `boardSummary` below): there the figures
+   * follow the filters, so narrowing to a department shows that department's
+   * money, and only the board knows what the filters left on screen. The sheet
+   * has no filters, so its strip is this one, computed once here.
+   */
   const stats: PanelStat[] = [
     {
       label: "To pay",
@@ -529,6 +540,14 @@ export default async function PayrollPanelPage({
       periodKey,
       periodLabel: label,
       payable,
+      // What this row is to the money lines. The page reads the status; the
+      // board only adds up what it is handed.
+      money: AWAITING.includes(s.status)
+        ? "awaiting"
+        : s.status === "PROCESSED"
+          ? "paid"
+          : "none",
+      countable: COUNTABLE.includes(s.status),
       node,
     };
   });
@@ -569,6 +588,26 @@ export default async function PayrollPanelPage({
         netTotal: s.netTotal,
       };
     });
+
+  /**
+   * What the queue's strip needs beyond the rows themselves. `listUnfiled`
+   * carries the same rule the page used to apply around the list below —
+   * before the window closes, "did not file" only means "has not filed yet".
+   */
+  const boardSummary: PanelBoardSummary = {
+    periodLabel: label,
+    notFiledHint: heldOpen
+      ? "Filing held open — no cutoff"
+      : `Filing ${periodClosed ? "closed" : "closes"} ${formatTashkent(selected.filingClosesAt)}`,
+    unfiled: unfiled.map((e) => ({
+      id: e.id,
+      name: e.name ?? e.email ?? "—",
+      departments: e.memberships.map((m) => m.department.name),
+    })),
+    listUnfiled: periodClosed,
+    unfiledNote:
+      "Nobody here is chased or penalized — they simply file in the next month\u2019s cycle, and that snapshot sweeps up anything unpaid.",
+  };
 
   // Counted off the rows already loaded rather than re-queried: a month with
   // expired filings is short a few lines on the register, and dropping them
@@ -632,8 +671,6 @@ export default async function PayrollPanelPage({
         </div>
       )}
 
-      <PanelSummary stats={stats} />
-
       {carryOver.length > 0 && (
         <p className="mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 px-1 text-xs text-muted-fg">
           <span>Also awaiting payment in</span>
@@ -691,6 +728,8 @@ export default async function PayrollPanelPage({
 
       {view === "sheet" ? (
         <>
+          <PanelSummary stats={stats} />
+
           {sheetRows.length === 0 ? (
             <div className="rounded-xl border border-line bg-surface px-4 py-8 text-center">
               <p className="text-sm font-semibold text-ink">
@@ -732,35 +771,8 @@ export default async function PayrollPanelPage({
               // The batch bar is a verb, so it comes from here and only for
               // the reviewer — the board itself never grows one.
               batchBar={canPay ? <BatchPayBar /> : undefined}
+              summary={boardSummary}
             />
-          )}
-
-          {periodClosed && unfiled.length > 0 && (
-            <section className="mt-8">
-              <h2 className="mb-1 px-1 text-sm font-semibold text-ink">
-                Did not file
-              </h2>
-              <p className="mb-3 px-1 text-xs text-muted-fg">
-                Nobody here is chased or penalized — they simply file in the
-                next month&rsquo;s cycle, and that snapshot sweeps up anything
-                unpaid.
-              </p>
-              <ul className="flex flex-col gap-1.5">
-                {unfiled.map((e) => (
-                  <li
-                    key={e.id}
-                    className="flex items-center justify-between gap-3 rounded-xl border border-line bg-surface px-4 py-2.5 text-sm"
-                  >
-                    <span className="min-w-0 truncate text-ink">
-                      {e.name ?? e.email ?? "—"}
-                    </span>
-                    <span className="shrink-0 text-xs text-muted-fg">
-                      Files next cycle
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </section>
           )}
         </>
       )}

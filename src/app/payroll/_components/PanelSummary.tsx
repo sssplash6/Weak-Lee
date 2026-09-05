@@ -1,10 +1,14 @@
 // The at-a-glance strip at the top of the reviewer panel (/payroll/panel). A
 // reviewer opens it with three questions — how much is still on my desk, how
 // much money is about to move, and what is already through — and until the
-// strip existed the only answer was to count the rows. Server-rendered and
-// deliberately static: it describes the whole month, not whatever the filters
-// below happen to be showing, so it can't drift while someone types in the
-// search box.
+// strip existed the only answer was to count the rows.
+//
+// Presentation only: it renders the figures it is handed and works out none of
+// them. Who does the arithmetic decides what the strip means, and the two
+// views answer that differently — the register hands it the month, computed on
+// the server, while the queue hands it PanelBoard's running total of whatever
+// the filters have left on screen, so picking a department re-reads the money
+// as that department's.
 //
 // Same visual grammar as the penalties LedgerBar: a kicker label, one big
 // tabular number, a quiet hint underneath.

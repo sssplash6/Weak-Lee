@@ -7,6 +7,7 @@ import {
   SelectAllTick,
   type PayableRow,
 } from "./PaySelection";
+import { PanelSummary, type PanelStat } from "./PanelSummary";
 import {
   PAYROLL_METHODS,
   PAYROLL_METHOD_LABEL,
@@ -47,6 +48,40 @@ export type PanelBoardItem = {
    * ticked row still has to get past the action's own checks.
    */
   payable?: boolean;
+  /**
+   * Which of the summary's money lines this row belongs to, decided by the
+   * page from the status it alone interprets: money still on the reviewer's
+   * desk, money already out, or neither (a request back with its filer, or one
+   * that lapsed).
+   */
+  money?: "awaiting" | "paid" | "none";
+  /**
+   * Whether this row is part of the month's real money. An expired filing is
+   * never paid — it rolls into the next cycle — so it is listed but not
+   * totalled, which is what keeps this strip reconciling with the register.
+   */
+  countable?: boolean;
+};
+
+/**
+ * The ingredients for the figures above the list. The page supplies what only
+ * it knows — which month this is, and who filed nothing — and the board does
+ * the arithmetic, because only the board knows what is on screen.
+ */
+export type PanelBoardSummary = {
+  /** "August 2026", naming the month total. */
+  periodLabel: string;
+  /** Under "Not filed": when filing closes, or that the month is held open. */
+  notFiledHint: string;
+  /** Everyone eligible who filed nothing this month. */
+  unfiled: { id: string; name: string; departments: string[] }[];
+  /**
+   * Whether to list them under the queue. Only worth saying once filing has
+   * closed — before that "did not file" is just "has not filed yet".
+   */
+  listUnfiled: boolean;
+  /** The line above that list. */
+  unfiledNote: string;
 };
 
 type SortKey = "default" | "waited" | "amount" | "name";
@@ -63,13 +98,18 @@ const SORT_LABEL: Record<SortKey, string> = {
 };
 
 /** Which filter a count is being computed for, so it can exclude itself. */
-type Facet = "status" | "period" | "dept" | "method";
+type Facet = "status" | "period" | "dept";
 
 type Row = { item: PanelBoardItem; index: number; haystack: string };
 
 /**
- * The working surface of the reviewer panel: search, faceted filters, a
- * payment source breakdown and sorting over rows that are already on the page.
+ * The working surface of the reviewer panel: the figures, search, faceted
+ * filters, a payment source breakdown and sorting over rows that are already
+ * on the page.
+ *
+ * The figures are part of the surface rather than a header above it: they are
+ * recomputed from whatever the filters have left, so a department pill re-reads
+ * the whole strip as that department's money. Only sorting leaves them alone.
  *
  * Everything here is client-side on purpose. The page already loads the whole
  * month it covers, so narrowing it is a re-render rather than a round trip,
@@ -87,6 +127,7 @@ export function PanelBoard({
   sourceNote,
   emptyHint,
   batchBar,
+  summary,
 }: {
   items: PanelBoardItem[];
   searchPlaceholder?: string;
@@ -101,12 +142,17 @@ export function PanelBoard({
    * through the context and shows itself only when there are some.
    */
   batchBar?: ReactNode;
+  /**
+   * The figures over the list. Passing them makes the strip part of the board
+   * rather than a static header, which is the whole point: filter to one
+   * department and the money follows.
+   */
+  summary?: PanelBoardSummary;
 }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<PayrollStatus | null>(null);
   const [period, setPeriod] = useState<string | null>(null);
   const [dept, setDept] = useState<string | null>(null);
-  const [method, setMethod] = useState<PayrollMethod | null>(null);
   const [sort, setSort] = useState<SortKey>("default");
 
   // One lowercase haystack per row, built once. Searching the source and the
@@ -162,29 +208,10 @@ export function PanelBoard({
     (!q || r.haystack.includes(q)) &&
     (except === "status" || !status || r.item.status === status) &&
     (except === "period" || !period || r.item.periodKey === period) &&
-    (except === "dept" || !dept || r.item.departments.includes(dept)) &&
-    (except === "method" || !method || r.item.method === method);
+    (except === "dept" || !dept || r.item.departments.includes(dept));
 
   const countFor = (facet: Facet, match: (r: Row) => boolean) =>
     rows.filter((r) => passes(r, facet) && match(r)).length;
-
-  // The source split: how much money each payment method accounts for in the
-  // current view. Finance pays out per source and reconciles against the
-  // "Source" column of the accounting sheet, so this is the run sheet — and
-  // each card doubles as the filter for its own source.
-  // Not memoized: a panel holds a month of requests at most, so both passes
-  // are a few hundred comparisons — cheaper than the dependency list it would
-  // take to memoize a closure over five filters correctly.
-  const sources = PAYROLL_METHODS.map((m) => {
-    const matching = rows.filter((r) => passes(r, "method") && r.item.method === m);
-    return {
-      method: m,
-      count: matching.length,
-      total: matching.reduce((s, r) => s + r.item.net, 0),
-    };
-  }).filter((s) => s.count > 0 || s.method === method);
-
-  const sourceMax = Math.max(1, ...sources.map((s) => s.total));
 
   const visible = rows
     .filter((r) => passes(r, null))
@@ -206,26 +233,99 @@ export function PanelBoard({
 
   const shownTotal = visible.reduce((s, r) => s + r.item.net, 0);
 
+  // The source split: how much money each payment method accounts for in what
+  // is on screen. Finance pays out per source and reconciles against the
+  // "Source" column of the accounting sheet, so this is the run sheet — a
+  // breakdown to work from, not a filter. (Narrowing to one source is what the
+  // search box is for: a source's name is part of every row's haystack.)
+  // Not memoized: a panel holds a month of requests at most, so this is a few
+  // hundred comparisons — cheaper than the dependency list it would take to
+  // memoize a closure over four filters correctly.
+  const sources = PAYROLL_METHODS.map((m) => {
+    const matching = visible.filter((r) => r.item.method === m);
+    return {
+      method: m,
+      count: matching.length,
+      total: matching.reduce((s, r) => s + r.item.net, 0),
+    };
+  }).filter((s) => s.count > 0);
+
+  const sourceMax = Math.max(1, ...sources.map((s) => s.total));
+
   /**
    * What may be ticked right now: the payable rows THAT ARE ON SCREEN, in the
    * order they are shown. Filtering is how a reviewer picks a batch — narrow
-   * to one payment source, tick them all — so the selection is scoped to the
-   * view rather than to the month, and a row filtered away leaves the batch
-   * with it (see PaySelectionProvider).
+   * to one department, or search a payment source, then tick them all — so the
+   * selection is scoped to the view rather than to the month, and a row
+   * filtered away leaves the batch with it (see PaySelectionProvider).
    */
   const selectable: PayableRow[] = visible
     .filter((r) => r.item.payable)
     .map((r) => ({ id: r.item.id, name: r.item.name, net: r.item.net }));
   const narrowed =
-    q !== "" || status !== null || period !== null || dept !== null || method !== null;
+    q !== "" || status !== null || period !== null || dept !== null;
 
   function clearFilters() {
     setQuery("");
     setStatus(null);
     setPeriod(null);
     setDept(null);
-    setMethod(null);
   }
+
+  /**
+   * The figures over the list, recomputed as the filters narrow it — filter to
+   * one department and every number here is that department's.
+   *
+   * They follow every filter EXCEPT the status pills, because these three
+   * money lines ARE a status breakdown: filtering them by status would leave
+   * two of the three reading zero and the third repeating the "in view" line
+   * below. Picking "With finance" narrows the list, not the month it is part
+   * of.
+   */
+  const counted = rows.filter((r) => passes(r, "status"));
+  const sumOf = (list: Row[]) => list.reduce((s, r) => s + r.item.net, 0);
+  const awaiting = counted.filter((r) => r.item.money === "awaiting");
+  const settled = counted.filter((r) => r.item.money === "paid");
+  const awaitingSources = new Set(awaiting.map((r) => r.item.method)).size;
+  // Who never filed, under the same narrowing — a department's strip that
+  // counted the whole company's non-filers would not be that department's.
+  const unfiled = (summary?.unfiled ?? []).filter(
+    (p) =>
+      (!q || `${p.name} ${p.departments.join(" ")}`.toLowerCase().includes(q)) &&
+      (!dept || p.departments.includes(dept)),
+  );
+
+  const stats: PanelStat[] = summary
+    ? [
+        {
+          label: "To pay",
+          value: formatMoney(sumOf(awaiting)),
+          hint:
+            awaiting.length > 0
+              ? `${awaiting.length} ${awaiting.length === 1 ? "request" : "requests"} · ${awaitingSources} ${awaitingSources === 1 ? "source" : "sources"}`
+              : "Nothing on that desk",
+          tone: awaiting.length > 0 ? "brand" : "muted",
+        },
+        {
+          label: "Paid",
+          value: formatMoney(sumOf(settled)),
+          hint: `${settled.length} ${settled.length === 1 ? "request" : "requests"} settled`,
+          tone: settled.length > 0 ? "brand" : "muted",
+        },
+        {
+          label: `${summary.periodLabel} total`,
+          value: formatMoney(sumOf(counted.filter((r) => r.item.countable))),
+          hint: `${counted.length} filed · ${settled.length} paid`,
+          tone: "ink",
+        },
+        {
+          label: "Not filed",
+          value: String(unfiled.length),
+          hint: summary.notFiledHint,
+          tone: "muted",
+        },
+      ]
+    : [];
 
   const pillClass = (active: boolean) =>
     `whitespace-nowrap rounded-full border px-3 py-1 text-xs font-semibold transition ${
@@ -239,6 +339,8 @@ export function PanelBoard({
   return (
     <PaySelectionProvider selectable={selectable}>
       <div>
+        <PanelSummary stats={stats} />
+
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <input
             type="search"
@@ -335,43 +437,33 @@ export function PanelBoard({
               {sourceNote && <p className="text-[11px] text-muted-fg">{sourceNote}</p>}
             </div>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-              {sources.map((s) => {
-                const active = method === s.method;
-                return (
-                  <button
-                    key={s.method}
-                    type="button"
-                    onClick={() => setMethod(active ? null : s.method)}
-                    aria-pressed={active}
-                    className={`rounded-xl border px-3 py-2 text-left transition ${
-                      active
-                        ? "border-brand bg-brand-soft"
-                        : "border-line bg-surface hover:bg-canvas"
-                    }`}
+              {sources.map((s) => (
+                <div
+                  key={s.method}
+                  className="rounded-xl border border-line bg-surface px-3 py-2"
+                >
+                  <span className="block truncate text-[11px] font-semibold uppercase tracking-wide text-muted-fg">
+                    {PAYROLL_METHOD_LABEL[s.method]}
+                  </span>
+                  <span className="mt-0.5 block text-sm font-bold tabular-nums text-ink">
+                    {formatMoney(s.total)}
+                  </span>
+                  {/* Share of the largest source, so the grid reads as a
+                      breakdown at a glance rather than eight equal cards. */}
+                  <span
+                    className="mt-1.5 block h-1 overflow-hidden rounded-full bg-line"
+                    aria-hidden="true"
                   >
-                    <span className="block truncate text-[11px] font-semibold uppercase tracking-wide text-muted-fg">
-                      {PAYROLL_METHOD_LABEL[s.method]}
-                    </span>
-                    <span className="mt-0.5 block text-sm font-bold tabular-nums text-ink">
-                      {formatMoney(s.total)}
-                    </span>
-                    {/* Share of the largest source, so the grid reads as a
-                        breakdown at a glance rather than eight equal cards. */}
                     <span
-                      className="mt-1.5 block h-1 overflow-hidden rounded-full bg-line"
-                      aria-hidden="true"
-                    >
-                      <span
-                        className="block h-full rounded-full bg-accent"
-                        style={{ width: `${Math.round((s.total / sourceMax) * 100)}%` }}
-                      />
-                    </span>
-                    <span className="mt-1 block text-[11px] text-muted-fg">
-                      {s.count} {s.count === 1 ? "request" : "requests"}
-                    </span>
-                  </button>
-                );
-              })}
+                      className="block h-full rounded-full bg-accent"
+                      style={{ width: `${Math.round((s.total / sourceMax) * 100)}%` }}
+                    />
+                  </span>
+                  <span className="mt-1 block text-[11px] text-muted-fg">
+                    {s.count} {s.count === 1 ? "request" : "requests"}
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -409,6 +501,32 @@ export function PanelBoard({
               <Fragment key={r.item.id}>{r.item.node}</Fragment>
             ))}
           </ul>
+        )}
+
+        {/* Kept next to the "Not filed" figure it belongs to, so the two
+            always agree about which department is being looked at. */}
+        {summary && summary.listUnfiled && unfiled.length > 0 && (
+          <section className="mt-8">
+            <h2 className="mb-1 px-1 text-sm font-semibold text-ink">
+              Did not file
+            </h2>
+            <p className="mb-3 px-1 text-xs text-muted-fg">
+              {summary.unfiledNote}
+            </p>
+            <ul className="flex flex-col gap-1.5">
+              {unfiled.map((e) => (
+                <li
+                  key={e.id}
+                  className="flex items-center justify-between gap-3 rounded-xl border border-line bg-surface px-4 py-2.5 text-sm"
+                >
+                  <span className="min-w-0 truncate text-ink">{e.name}</span>
+                  <span className="shrink-0 text-xs text-muted-fg">
+                    Files next cycle
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
         )}
 
         {batchBar}

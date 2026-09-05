@@ -513,7 +513,16 @@ export async function expireLapsedSubmissions(now = new Date()): Promise<void> {
 export async function eligibleEmployees(db: Db = prisma) {
   return db.user.findMany({
     where: { approvedAt: { not: null }, memberships: { some: {} } },
-    select: { id: true, name: true, email: true },
+    // The departments come along because the panel groups non-filers by them:
+    // a department's figures have to be able to say how many of ITS people
+    // never filed. Every row here has at least one membership by definition of
+    // the `where`, so this is a join that was already implied.
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      memberships: { select: { department: { select: { name: true } } } },
+    },
     orderBy: { name: "asc" },
   });
 }
