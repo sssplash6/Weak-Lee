@@ -40,6 +40,7 @@ import {
   fineLineViews,
 } from "../_components/lineViews";
 import { PanelBoard, type PanelBoardItem } from "../_components/PanelBoard";
+import { RowTickSpacer } from "../_components/PaySelection";
 import {
   medianNet,
   sizeFlag,
@@ -52,6 +53,7 @@ import {
 } from "../_components/PanelRowShell";
 import { PanelSummary, type PanelStat } from "../_components/PanelSummary";
 import { SubmissionDetail } from "../_components/SubmissionDetail";
+import { BatchPayBar } from "./BatchPayBar";
 import { FinanceRow } from "./FinanceRow";
 // The two ways to read the same month, shared with the three redirects that
 // land here so they cannot name a view this page does not have.
@@ -501,14 +503,19 @@ export default async function PayrollPanelPage({
      * alone is enough, and anyone else gets the shell, which has no move to
      * offer and does not even pull the action module into the bundle.
      */
-    const node =
-      AWAITING.includes(s.status) && canPay ? (
-        <FinanceRow submissionId={s.id} summary={summary}>
-          {detail}
-        </FinanceRow>
-      ) : (
-        <PanelRowShell summary={summary}>{detail}</PanelRowShell>
-      );
+    const payable = AWAITING.includes(s.status) && canPay;
+    const node = payable ? (
+      <FinanceRow submissionId={s.id} summary={summary}>
+        {detail}
+      </FinanceRow>
+    ) : (
+      // No tick of its own, but the space one takes — the spacer draws itself
+      // only while the board has something tickable, so a settled month is not
+      // indented for a column it does not have.
+      <PanelRowShell summary={summary} select={<RowTickSpacer />}>
+        {detail}
+      </PanelRowShell>
+    );
 
     return {
       id: s.id,
@@ -521,6 +528,7 @@ export default async function PayrollPanelPage({
       waitingSince: waitingSince?.getTime() ?? null,
       periodKey,
       periodLabel: label,
+      payable,
       node,
     };
   });
@@ -600,7 +608,7 @@ export default async function PayrollPanelPage({
                 ? "UZS, SGD and the Wise fee are yours to fill in as each payment settles."
                 : "The settled amounts are recorded by finance."
               : canPay
-                ? "Confirming a payment records the fine deduction and closes the request; declining sends it back with a note."
+                ? "Confirming a payment records the fine deduction and closes the request; declining sends it back with a note. Tick several rows to pay them in one go."
                 : "Read-only — requests are decided and paid by finance."}
           </p>
         </div>
@@ -721,6 +729,9 @@ export default async function PayrollPanelPage({
               searchPlaceholder="Search name, department, source or status…"
               sourceNote="Pay out per source, then reconcile against the sheet."
               emptyHint={`No ${label} requests match these filters.`}
+              // The batch bar is a verb, so it comes from here and only for
+              // the reviewer — the board itself never grows one.
+              batchBar={canPay ? <BatchPayBar /> : undefined}
             />
           )}
 

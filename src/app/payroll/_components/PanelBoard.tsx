@@ -3,6 +3,11 @@
 import { Fragment, useMemo, useState, type ReactNode } from "react";
 import { formatMoney } from "@/lib/penalties";
 import {
+  PaySelectionProvider,
+  SelectAllTick,
+  type PayableRow,
+} from "./PaySelection";
+import {
   PAYROLL_METHODS,
   PAYROLL_METHOD_LABEL,
   type PayrollMethod,
@@ -34,6 +39,14 @@ export type PanelBoardItem = {
   waitingSince: number | null;
   periodKey: string; // "2026-08" — sortable, and the pill's identity
   periodLabel: string; // "August 2026"
+  /**
+   * Whether this row may be ticked and paid in a batch. The page decides it
+   * the same way it decides whether the row gets a Confirm button at all — the
+   * request is awaiting payment AND this viewer is the reviewer — and the
+   * board only counts what it is told. A row cannot make itself payable, and a
+   * ticked row still has to get past the action's own checks.
+   */
+  payable?: boolean;
 };
 
 type SortKey = "default" | "waited" | "amount" | "name";
@@ -73,6 +86,7 @@ export function PanelBoard({
   searchPlaceholder = "Search name, department or source…",
   sourceNote,
   emptyHint,
+  batchBar,
 }: {
   items: PanelBoardItem[];
   searchPlaceholder?: string;
@@ -80,6 +94,13 @@ export function PanelBoard({
   sourceNote?: string;
   /** What to say when the filters match nothing. */
   emptyHint: string;
+  /**
+   * What acts on the ticked rows, supplied by the page because the board holds
+   * no verbs of its own — it decides which rows are on screen, never what may
+   * be done to them. Rendered inside the selection, so it reads the ticks
+   * through the context and shows itself only when there are some.
+   */
+  batchBar?: ReactNode;
 }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<PayrollStatus | null>(null);
@@ -184,6 +205,17 @@ export function PanelBoard({
     });
 
   const shownTotal = visible.reduce((s, r) => s + r.item.net, 0);
+
+  /**
+   * What may be ticked right now: the payable rows THAT ARE ON SCREEN, in the
+   * order they are shown. Filtering is how a reviewer picks a batch — narrow
+   * to one payment source, tick them all — so the selection is scoped to the
+   * view rather than to the month, and a row filtered away leaves the batch
+   * with it (see PaySelectionProvider).
+   */
+  const selectable: PayableRow[] = visible
+    .filter((r) => r.item.payable)
+    .map((r) => ({ id: r.item.id, name: r.item.name, net: r.item.net }));
   const narrowed =
     q !== "" || status !== null || period !== null || dept !== null || method !== null;
 
@@ -205,173 +237,182 @@ export function PanelBoard({
   const withCount = (label: string, n: number) => (n > 0 ? `${label} · ${n}` : label);
 
   return (
-    <div>
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <input
-          type="search"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder={searchPlaceholder}
-          aria-label={searchPlaceholder}
-          className="min-w-0 flex-1 basis-56 rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink placeholder:text-muted-fg focus:border-brand focus:outline-none"
-        />
-        <select
-          value={sort}
-          onChange={(e) => setSort(e.target.value as SortKey)}
-          aria-label="Sort requests"
-          className="rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink focus:border-brand focus:outline-none"
-        >
-          {SORT_KEYS.map((k) => (
-            <option key={k} value={k}>
-              {SORT_LABEL[k]}
-            </option>
-          ))}
-        </select>
-        {narrowed && (
-          <button
-            type="button"
-            onClick={clearFilters}
-            className="whitespace-nowrap rounded-full border border-line px-3 py-1.5 text-xs font-semibold text-muted-fg transition hover:text-ink"
-          >
-            Clear filters
-          </button>
-        )}
-      </div>
-
-      {statuses.length > 1 && (
-        <div className="mb-2 flex flex-wrap items-center gap-2">
-          <button type="button" onClick={() => setStatus(null)} className={pillClass(!status)}>
-            All statuses
-          </button>
-          {statuses.map((s) => (
-            <button
-              key={s.value}
-              type="button"
-              onClick={() => setStatus(status === s.value ? null : s.value)}
-              aria-pressed={status === s.value}
-              className={pillClass(status === s.value)}
-            >
-              {withCount(s.label, countFor("status", (r) => r.item.status === s.value))}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {periods.length > 1 && (
-        <div className="mb-2 flex flex-wrap items-center gap-2">
-          <button type="button" onClick={() => setPeriod(null)} className={pillClass(!period)}>
-            All months
-          </button>
-          {periods.map((x) => (
-            <button
-              key={x.value}
-              type="button"
-              onClick={() => setPeriod(period === x.value ? null : x.value)}
-              aria-pressed={period === x.value}
-              className={pillClass(period === x.value)}
-            >
-              {withCount(x.label, countFor("period", (r) => r.item.periodKey === x.value))}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {depts.length > 1 && (
+    <PaySelectionProvider selectable={selectable}>
+      <div>
         <div className="mb-3 flex flex-wrap items-center gap-2">
-          <button type="button" onClick={() => setDept(null)} className={pillClass(!dept)}>
-            All departments
-          </button>
-          {depts.map((d) => (
-            <button
-              key={d}
-              type="button"
-              onClick={() => setDept(dept === d ? null : d)}
-              aria-pressed={dept === d}
-              className={pillClass(dept === d)}
-            >
-              {withCount(d, countFor("dept", (r) => r.item.departments.includes(d)))}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {sources.length > 0 && (
-        <div className="mb-3">
-          <div className="mb-1.5 flex flex-wrap items-baseline justify-between gap-x-3 px-1">
-            <h3 className="text-xs font-semibold text-ink">By payment source</h3>
-            {sourceNote && <p className="text-[11px] text-muted-fg">{sourceNote}</p>}
-          </div>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-            {sources.map((s) => {
-              const active = method === s.method;
-              return (
-                <button
-                  key={s.method}
-                  type="button"
-                  onClick={() => setMethod(active ? null : s.method)}
-                  aria-pressed={active}
-                  className={`rounded-xl border px-3 py-2 text-left transition ${
-                    active
-                      ? "border-brand bg-brand-soft"
-                      : "border-line bg-surface hover:bg-canvas"
-                  }`}
-                >
-                  <span className="block truncate text-[11px] font-semibold uppercase tracking-wide text-muted-fg">
-                    {PAYROLL_METHOD_LABEL[s.method]}
-                  </span>
-                  <span className="mt-0.5 block text-sm font-bold tabular-nums text-ink">
-                    {formatMoney(s.total)}
-                  </span>
-                  {/* Share of the largest source, so the grid reads as a
-                      breakdown at a glance rather than eight equal cards. */}
-                  <span
-                    className="mt-1.5 block h-1 overflow-hidden rounded-full bg-line"
-                    aria-hidden="true"
-                  >
-                    <span
-                      className="block h-full rounded-full bg-accent"
-                      style={{ width: `${Math.round((s.total / sourceMax) * 100)}%` }}
-                    />
-                  </span>
-                  <span className="mt-1 block text-[11px] text-muted-fg">
-                    {s.count} {s.count === 1 ? "request" : "requests"}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      <p className="mb-2 px-1 text-xs text-muted-fg">
-        Showing{" "}
-        <span className="font-semibold text-ink">
-          {visible.length} of {items.length}
-        </span>{" "}
-        · {formatMoney(shownTotal)} in view
-      </p>
-
-      {visible.length === 0 ? (
-        <div className="rounded-xl border border-line bg-surface px-4 py-8 text-center">
-          <p className="text-sm font-semibold text-ink">Nothing here</p>
-          <p className="mt-1 text-xs text-muted-fg">{emptyHint}</p>
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={searchPlaceholder}
+            aria-label={searchPlaceholder}
+            className="min-w-0 flex-1 basis-56 rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink placeholder:text-muted-fg focus:border-brand focus:outline-none"
+          />
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value as SortKey)}
+            aria-label="Sort requests"
+            className="rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink focus:border-brand focus:outline-none"
+          >
+            {SORT_KEYS.map((k) => (
+              <option key={k} value={k}>
+                {SORT_LABEL[k]}
+              </option>
+            ))}
+          </select>
           {narrowed && (
             <button
               type="button"
               onClick={clearFilters}
-              className="mt-3 rounded-lg border border-line px-3.5 py-2 text-xs font-semibold text-brand transition hover:bg-canvas"
+              className="whitespace-nowrap rounded-full border border-line px-3 py-1.5 text-xs font-semibold text-muted-fg transition hover:text-ink"
             >
               Clear filters
             </button>
           )}
         </div>
-      ) : (
-        <ul className="flex flex-col gap-2">
-          {visible.map((r) => (
-            <Fragment key={r.item.id}>{r.item.node}</Fragment>
-          ))}
-        </ul>
-      )}
-    </div>
+
+        {statuses.length > 1 && (
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <button type="button" onClick={() => setStatus(null)} className={pillClass(!status)}>
+              All statuses
+            </button>
+            {statuses.map((s) => (
+              <button
+                key={s.value}
+                type="button"
+                onClick={() => setStatus(status === s.value ? null : s.value)}
+                aria-pressed={status === s.value}
+                className={pillClass(status === s.value)}
+              >
+                {withCount(s.label, countFor("status", (r) => r.item.status === s.value))}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {periods.length > 1 && (
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <button type="button" onClick={() => setPeriod(null)} className={pillClass(!period)}>
+              All months
+            </button>
+            {periods.map((x) => (
+              <button
+                key={x.value}
+                type="button"
+                onClick={() => setPeriod(period === x.value ? null : x.value)}
+                aria-pressed={period === x.value}
+                className={pillClass(period === x.value)}
+              >
+                {withCount(x.label, countFor("period", (r) => r.item.periodKey === x.value))}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {depts.length > 1 && (
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <button type="button" onClick={() => setDept(null)} className={pillClass(!dept)}>
+              All departments
+            </button>
+            {depts.map((d) => (
+              <button
+                key={d}
+                type="button"
+                onClick={() => setDept(dept === d ? null : d)}
+                aria-pressed={dept === d}
+                className={pillClass(dept === d)}
+              >
+                {withCount(d, countFor("dept", (r) => r.item.departments.includes(d)))}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {sources.length > 0 && (
+          <div className="mb-3">
+            <div className="mb-1.5 flex flex-wrap items-baseline justify-between gap-x-3 px-1">
+              <h3 className="text-xs font-semibold text-ink">By payment source</h3>
+              {sourceNote && <p className="text-[11px] text-muted-fg">{sourceNote}</p>}
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+              {sources.map((s) => {
+                const active = method === s.method;
+                return (
+                  <button
+                    key={s.method}
+                    type="button"
+                    onClick={() => setMethod(active ? null : s.method)}
+                    aria-pressed={active}
+                    className={`rounded-xl border px-3 py-2 text-left transition ${
+                      active
+                        ? "border-brand bg-brand-soft"
+                        : "border-line bg-surface hover:bg-canvas"
+                    }`}
+                  >
+                    <span className="block truncate text-[11px] font-semibold uppercase tracking-wide text-muted-fg">
+                      {PAYROLL_METHOD_LABEL[s.method]}
+                    </span>
+                    <span className="mt-0.5 block text-sm font-bold tabular-nums text-ink">
+                      {formatMoney(s.total)}
+                    </span>
+                    {/* Share of the largest source, so the grid reads as a
+                        breakdown at a glance rather than eight equal cards. */}
+                    <span
+                      className="mt-1.5 block h-1 overflow-hidden rounded-full bg-line"
+                      aria-hidden="true"
+                    >
+                      <span
+                        className="block h-full rounded-full bg-accent"
+                        style={{ width: `${Math.round((s.total / sourceMax) * 100)}%` }}
+                      />
+                    </span>
+                    <span className="mt-1 block text-[11px] text-muted-fg">
+                      {s.count} {s.count === 1 ? "request" : "requests"}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-1">
+          <p className="text-xs text-muted-fg">
+            Showing{" "}
+            <span className="font-semibold text-ink">
+              {visible.length} of {items.length}
+            </span>{" "}
+            · {formatMoney(shownTotal)} in view
+          </p>
+          {/* Ticking is scoped to what is shown, so its control belongs on the
+              line that says what is shown. */}
+          <SelectAllTick />
+        </div>
+
+        {visible.length === 0 ? (
+          <div className="rounded-xl border border-line bg-surface px-4 py-8 text-center">
+            <p className="text-sm font-semibold text-ink">Nothing here</p>
+            <p className="mt-1 text-xs text-muted-fg">{emptyHint}</p>
+            {narrowed && (
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="mt-3 rounded-lg border border-line px-3.5 py-2 text-xs font-semibold text-brand transition hover:bg-canvas"
+              >
+                Clear filters
+              </button>
+            )}
+          </div>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {visible.map((r) => (
+              <Fragment key={r.item.id}>{r.item.node}</Fragment>
+            ))}
+          </ul>
+        )}
+
+        {batchBar}
+      </div>
+    </PaySelectionProvider>
   );
 }

@@ -166,43 +166,60 @@ export async function declineSubmission(
 }
 
 /**
- * Confirm the payment: the snapshot is re-verified against the live ledger,
- * the fine deduction is written back as one PAYROLL FinePayment batch, the
- * bonuses are stamped consumed, and the request goes PROCESSED (see
- * lib/payroll.ts processSubmission). If the ledger moved after filing, this
- * refuses with the exact reasons instead of paying wrong amounts — decline it
- * so the person refiles with a fresh snapshot.
+ * One payment, from a desk that has already been established as the
+ * reviewer's: re-verify the snapshot against the live ledger, write the fine
+ * deduction back as one PAYROLL FinePayment batch, stamp the bonuses consumed
+ * and move the request to PROCESSED (lib/payroll.ts processSubmission), then
+ * tell the filer and the other reviewers.
+ *
+ * It does no session work and no revalidation, because it is shared by the
+ * single row's button and the batch below, and those differ in exactly that:
+ * a batch checks the role once and refreshes the page once, at the end. The
+ * caller MUST have gone through `requireFinance` and the closed-payroll gate
+ * before calling this — `actorId` is the proof it did.
+ *
+ * Every failure here is per-request and returns rather than throws: in a batch
+ * one stale snapshot must not take the other payments down with it. Each
+ * payment is its own transaction for the same reason — money that has moved
+ * for one person is never rolled back because the next person's numbers had
+ * drifted.
  */
-export async function confirmPayment(
-  submissionId: string,
-): Promise<FinanceActionResult> {
-  const session = await auth();
-  if (!isPayrollOpenFor(session?.user?.email)) {
-    return fail("Payroll is closed right now.");
-  }
-  const actorId = await requireFinance(session);
-  await expireLapsedSubmissions();
+type PayOutcome =
+  | { ok: true; name: string }
+  | { ok: false; name: string; error: string };
 
+async function payOne(
+  submissionId: string,
+  actorId: string,
+): Promise<PayOutcome> {
   const sub = await loadForReview(submissionId);
-  if (!sub) return fail("Request not found.");
+  if (!sub) {
+    return { ok: false, name: "That request", error: "Request not found." };
+  }
+  const who = sub.user.name ?? sub.user.email ?? "Someone";
   if (!ACTIONABLE.includes(sub.status)) {
-    return fail("Only a request awaiting payment can be confirmed — reload.");
+    return {
+      ok: false,
+      name: who,
+      error: "Only a request awaiting payment can be confirmed — reload.",
+    };
   }
 
   try {
     const result = await processSubmission({ submissionId, actorId });
     if (!result.ok) {
-      return fail(
-        `The ledger moved after filing — ${result.reasons.join(" ")} Decline it so they refile with a fresh snapshot.`,
-      );
+      return {
+        ok: false,
+        name: who,
+        error: `The ledger moved after filing — ${result.reasons.join(" ")} Decline it so they refile with a fresh snapshot.`,
+      };
     }
   } catch (e) {
-    if (e instanceof Error) return fail(e.message);
+    if (e instanceof Error) return { ok: false, name: who, error: e.message };
     throw e;
   }
 
   const label = payrollPeriodLabel(sub.period.year, sub.period.month);
-  const who = sub.user.name ?? sub.user.email ?? "Someone";
 
   await notify(
     prisma,
@@ -233,6 +250,99 @@ export async function confirmPayment(
     });
   }
 
+  return { ok: true, name: who };
+}
+
+/**
+ * Confirm the payment: the snapshot is re-verified against the live ledger,
+ * the fine deduction is written back as one PAYROLL FinePayment batch, the
+ * bonuses are stamped consumed, and the request goes PROCESSED (see
+ * lib/payroll.ts processSubmission). If the ledger moved after filing, this
+ * refuses with the exact reasons instead of paying wrong amounts — decline it
+ * so the person refiles with a fresh snapshot.
+ */
+export async function confirmPayment(
+  submissionId: string,
+): Promise<FinanceActionResult> {
+  const session = await auth();
+  if (!isPayrollOpenFor(session?.user?.email)) {
+    return fail("Payroll is closed right now.");
+  }
+  const actorId = await requireFinance(session);
+  await expireLapsedSubmissions();
+
+  const outcome = await payOne(submissionId, actorId);
+  if (!outcome.ok) return fail(outcome.error);
+
   revalidatePanels();
   return { ok: true };
+}
+
+/**
+ * The most payments one call will make. A month of payroll is a couple of
+ * dozen requests, so this is far above any real batch and only there to bound
+ * what a hand-made POST can ask the server to do in one request — each payment
+ * is a transaction plus an email.
+ */
+const MAX_BATCH = 100;
+
+export type BatchPaymentResult =
+  | { ok: false; error: string }
+  | {
+      ok: true;
+      paid: number;
+      /** Per request, why it did not go through — named, so the bar can say who. */
+      failed: { id: string; name: string; error: string }[];
+    };
+
+/**
+ * Confirm several payments in one go — the reviewer ticks a run of rows (say,
+ * everything paid from one source) and settles them together.
+ *
+ * PARTIAL SUCCESS IS THE NORMAL OUTCOME, not an error case. Each request is
+ * paid in its own transaction, so a stale snapshot or a row someone else just
+ * decided fails alone and the rest still settle; the result names every
+ * failure so the panel can show which people still need a decision. There is
+ * no all-or-nothing mode on purpose — refusing a whole batch because one
+ * person's fines moved would mean un-paying people the ledger was happy with.
+ *
+ * The ids come from the client, so they are treated as a list of references
+ * and nothing more: the role is checked once here, and `payOne` re-reads every
+ * request's own status before it moves any money.
+ */
+export async function confirmPayments(
+  submissionIds: string[],
+): Promise<BatchPaymentResult> {
+  const session = await auth();
+  if (!isPayrollOpenFor(session?.user?.email)) {
+    return { ok: false, error: "Payroll is closed right now." };
+  }
+  const actorId = await requireFinance(session);
+
+  const ids = [
+    ...new Set(
+      (Array.isArray(submissionIds) ? submissionIds : []).filter(
+        (id): id is string => typeof id === "string" && id.length > 0,
+      ),
+    ),
+  ];
+  if (ids.length === 0) return { ok: false, error: "Nothing selected." };
+  if (ids.length > MAX_BATCH) {
+    return { ok: false, error: `Too many at once — pay at most ${MAX_BATCH}.` };
+  }
+
+  await expireLapsedSubmissions();
+
+  // One at a time: each payment writes a FinePayment batch against the same
+  // ledger the next one is about to re-check, and each sends an email.
+  let paid = 0;
+  const failed: { id: string; name: string; error: string }[] = [];
+  for (const id of ids) {
+    const outcome = await payOne(id, actorId);
+    if (outcome.ok) paid += 1;
+    else failed.push({ id, name: outcome.name, error: outcome.error });
+  }
+
+  if (paid > 0) revalidatePanels();
+  return { ok: true, paid, failed };
 }

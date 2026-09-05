@@ -5,14 +5,17 @@ import {
   PanelRowShell,
   type PanelRowSummary,
 } from "../_components/PanelRowShell";
+import { RowTick } from "../_components/PaySelection";
 // The reviewer's moves stay in ../finance, next to the state machine they
 // drive. Only the UI moved here when the three panels merged.
 import { confirmPayment, declineSubmission } from "../finance/actions";
 
 /**
  * A panel row plus the reviewer's two moves — pay it, or decline it back to
- * the filer with a required note (a small modal). The revalidated page moves
- * the row on success; this component only holds the open/typing state.
+ * the filer with a required note (a small modal) — and the tick that hands it
+ * to the batch bar instead, to be paid alongside the other ticked rows. The
+ * revalidated page moves the row on success; this component only holds the
+ * open/typing state.
  *
  * There is no `canAct` prop, on purpose. This component IS the permission:
  * /payroll/panel renders it only for a row awaiting payment being looked at by
@@ -70,6 +73,13 @@ export function FinanceRow({
   return (
     <PanelRowShell
       summary={summary}
+      // The tick and the button below are the same permission, seen twice:
+      // this row exists because the page established that this viewer may pay
+      // this request. RowTick draws nothing when the row is outside a board
+      // that can batch.
+      select={
+        <RowTick id={submissionId} name={summary.name} disabled={isPending} />
+      }
       footer={
         <>
           <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line pt-3">
