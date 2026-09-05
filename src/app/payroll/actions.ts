@@ -31,7 +31,7 @@ import {
   RECEIPT_MIME_TYPES,
   payrollMonthName,
   payrollPeriodLabel,
-  isPayrollMethod,
+  isOfferedPayrollMethod,
   paymentFieldsFor,
   validatePaymentDetails,
   isPayrollOpenFor,
@@ -110,7 +110,10 @@ export async function submitPayroll(
   }
 
   const rawMethod = formData.get("paymentMethod");
-  if (!isPayrollMethod(rawMethod)) {
+  // Offered, not merely valid: the retired sources are still legal values in
+  // the column so old rows can keep theirs, and a POST naming one would
+  // otherwise file a request against a source nobody pays from any more.
+  if (!isOfferedPayrollMethod(rawMethod)) {
     return fail("Pick a preferred payment method.");
   }
   const method: PayrollMethod = rawMethod;

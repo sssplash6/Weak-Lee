@@ -731,9 +731,19 @@ enum PayrollStatus {
 // How someone is paid. These mirror the "Source" column of the finance team's
 // accounting sheet one-for-one, so a filed payroll row can be reconciled
 // against it without translation. Labels live in lib/payrollTypes.ts.
+// The "Source" column of the finance team's accounting sheet. Payroll settles
+// through four of these now — CASH_UZBEKISTAN, PAYME, UZBEK_COMPANY and
+// WISE_USD (which finance simply calls Wise) — and the rest are RETIRED: no
+// new filing can name one, but rows already filed under them keep it, because
+// a paid request has to keep saying how it was actually paid. The offered list
+// lives in lib/payrollTypes.ts (PAYROLL_METHODS_OFFERED), which is also what
+// the filing form and the submit action check against; this enum is only the
+// set of values the column may hold.
 enum PayrollMethod {
   CASH_SINGAPORE
   CASH_UZBEKISTAN
+  PAYME
+  UZBEK_COMPANY
   WISE_USD
   UZS_CARD
   VISA_CARD

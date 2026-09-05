@@ -112,14 +112,23 @@ export type PayrollStatus =
   | "PROCESSED";
 
 /**
- * How someone is paid. These mirror the "Source" column of the finance team's
- * accounting sheet one-for-one, so a filed row reconciles against that sheet
- * without translation.
+ * How someone is paid — the "Source" column of the finance team's accounting
+ * sheet, so a filed row reconciles against that sheet without translation.
+ *
+ * Most of these are RETIRED: payroll settles through four sources now (see
+ * PAYROLL_METHODS_OFFERED), and the rest are here for the same reason
+ * APPROVED_BY_ADMIN is still a status — rows filed under them exist, and a
+ * paid request must keep saying how it was actually paid. Nothing new can be
+ * filed under a retired source, and none of them is quietly rewritten into a
+ * surviving one: a record of money that moved is not ours to restate.
  */
 export type PayrollMethod =
-  | "CASH_SINGAPORE"
   | "CASH_UZBEKISTAN"
+  | "PAYME"
+  | "UZBEK_COMPANY"
   | "WISE_USD"
+  // Retired — readable, never offered.
+  | "CASH_SINGAPORE"
   | "UZS_CARD"
   | "VISA_CARD"
   | "STRIPE"
@@ -128,11 +137,26 @@ export type PayrollMethod =
   | "KAPITAL_BANK"
   | "VARIOUS";
 
-/** Every method, in the order the accounting sheet lists them. */
-export const PAYROLL_METHODS: PayrollMethod[] = [
-  "CASH_SINGAPORE",
+/**
+ * The four sources payroll actually uses, in the order finance names them.
+ * This is the list the form offers and the only list a new filing may come
+ * from — everything else in the enum is history.
+ */
+export const PAYROLL_METHODS_OFFERED: PayrollMethod[] = [
   "CASH_UZBEKISTAN",
+  "PAYME",
+  "UZBEK_COMPANY",
   "WISE_USD",
+];
+
+/**
+ * Every value the column can hold, current first. Read-side lists (the panel's
+ * by-source breakdown, the register) walk this one so a retired source still
+ * shows up wherever an old row does.
+ */
+export const PAYROLL_METHODS: PayrollMethod[] = [
+  ...PAYROLL_METHODS_OFFERED,
+  "CASH_SINGAPORE",
   "UZS_CARD",
   "VISA_CARD",
   "STRIPE",
@@ -155,9 +179,13 @@ export const PAYROLL_STATUS_LABEL: Record<PayrollStatus, string> = {
 };
 
 export const PAYROLL_METHOD_LABEL: Record<PayrollMethod, string> = {
-  CASH_SINGAPORE: "Cash Singapore",
   CASH_UZBEKISTAN: "Cash Uzbekistan",
-  WISE_USD: "Wise USD",
+  PAYME: "Payme",
+  UZBEK_COMPANY: "Uzbek Company",
+  // Still WISE_USD in the column, so every Wise row ever filed stays one
+  // bucket on the panel and the sheet; finance calls it Wise, so it reads Wise.
+  WISE_USD: "Wise",
+  CASH_SINGAPORE: "Cash Singapore",
   UZS_CARD: "Uzbek card",
   VISA_CARD: "Visa card",
   STRIPE: "Stripe",
@@ -170,9 +198,15 @@ export const PAYROLL_METHOD_LABEL: Record<PayrollMethod, string> = {
   VARIOUS: "Other",
 };
 
-/** True for a value the enum actually holds — use on anything caller-supplied. */
-export function isPayrollMethod(v: unknown): v is PayrollMethod {
-  return typeof v === "string" && (PAYROLL_METHODS as string[]).includes(v);
+/**
+ * True for a source someone may file under today — the check every
+ * caller-supplied method goes through. It is deliberately narrower than "is a
+ * value of the enum": the retired sources are still legal in the column so old
+ * rows can keep theirs, and a hand-made POST naming one would otherwise file a
+ * fresh request against a source nobody pays from.
+ */
+export function isOfferedPayrollMethod(v: unknown): v is PayrollMethod {
+  return typeof v === "string" && (PAYROLL_METHODS_OFFERED as string[]).includes(v);
 }
 
 /**
@@ -208,7 +242,7 @@ export type PaymentDetails = {
   wiseEmail?: string;
   cardHolder?: string;
   cardNumber?: string;
-  cardExpiry?: string;
+  phone?: string;
   bankName?: string;
   accountNumber?: string;
   bankCode?: string;
@@ -226,7 +260,7 @@ export type PaymentField = {
   /** Blocks filing when empty. Optional ones are still asked for, never demanded. */
   required: boolean;
   /** Drives the input type, the validation, and whether the PDF masks it. */
-  kind: "email" | "card" | "expiry" | "text" | "note";
+  kind: "email" | "card" | "phone" | "text" | "note";
 };
 
 const FIELDS: Record<PaymentFieldKey, PaymentField> = {
@@ -254,13 +288,16 @@ const FIELDS: Record<PaymentFieldKey, PaymentField> = {
     required: true,
     kind: "card",
   },
-  cardExpiry: {
-    key: "cardExpiry",
-    label: "Expires",
-    placeholder: "MM/YY",
-    maxLength: 7,
-    required: true,
-    kind: "expiry",
+  // Payme sends to a card or to the phone the account is registered on, so the
+  // phone rides along as a second way to reach the same person — never
+  // demanded, because the card number alone is enough to pay them.
+  phone: {
+    key: "phone",
+    label: "Phone number",
+    placeholder: "+998 90 123 45 67 (optional)",
+    maxLength: 32,
+    required: false,
+    kind: "phone",
   },
   // Bank routing is asked for but never demanded: a filing window is four days
   // long, and nobody should miss it hunting for a branch code. Finance gets
@@ -317,16 +354,17 @@ export function paymentFieldsFor(method: PayrollMethod): PaymentField[] {
   switch (method) {
     case "WISE_USD":
       return [FIELDS.wiseEmail];
-    // Both are a local card in hand: Kapital Bank pays onto one, so it needs
-    // exactly what the Uzbek card method needs and nothing more.
+    case "PAYME":
+      return [FIELDS.cardNumber, FIELDS.phone];
+    // Retired, but old rows still read back through here: they show what they
+    // were filed with, minus the expiry date nothing asks for any more.
     case "UZS_CARD":
     case "KAPITAL_BANK":
-      return [FIELDS.cardHolder, FIELDS.cardNumber, FIELDS.cardExpiry];
+      return [FIELDS.cardHolder, FIELDS.cardNumber];
     case "VISA_CARD":
       return [
         FIELDS.cardHolder,
         FIELDS.cardNumber,
-        FIELDS.cardExpiry,
         FIELDS.bankName,
         FIELDS.accountNumber,
         FIELDS.bankCode,
@@ -335,7 +373,8 @@ export function paymentFieldsFor(method: PayrollMethod): PaymentField[] {
     case "VARIOUS":
       return [FIELDS.otherDetails];
     default:
-      // Cash, Stripe, SG Bank — settled off-app as they always were.
+      // Cash and the Uzbek company pay from finance's own books, and the
+      // retired Stripe/SG Bank sources settled off-app as they always did.
       return [];
   }
 }
@@ -382,9 +421,8 @@ export function validatePaymentDetails(
         return "Enter the full card number (digits only, spaces are fine).";
       }
     }
-    if (f.kind === "expiry") {
-      const m = /^(0[1-9]|1[0-2])\s*\/\s*(\d{2}|\d{4})$/.exec(value);
-      if (!m) return "Enter the card expiry as MM/YY.";
+    if (f.kind === "phone" && cardDigits(value).length < 7) {
+      return "Enter a full phone number, or leave it empty.";
     }
   }
   return null;
@@ -428,10 +466,10 @@ export function paymentDetailLines(
 }
 
 /**
- * How this person gets paid, in one line: "Uzbek card · •••• 9012",
- * "Wise USD · a@b.c", "Cash Singapore" — the sheet's own wording plus the one
- * identifying detail. Always masked: this is a summary for lists and headers,
- * and the full number is a click away in the details below it.
+ * How this person gets paid, in one line: "Payme · •••• 9012", "Wise · a@b.c",
+ * "Cash Uzbekistan" — the sheet's own wording plus the one identifying detail.
+ * Always masked: this is a summary for lists and headers, and the full number
+ * is a click away in the details below it.
  */
 export function paymentSummary(
   method: PayrollMethod,
@@ -440,6 +478,9 @@ export function paymentSummary(
   const label = PAYROLL_METHOD_LABEL[method];
   if (details.wiseEmail) return `${label} · ${details.wiseEmail}`;
   if (details.cardNumber) return `${label} · ${maskCardNumber(details.cardNumber)}`;
+  // Payme to a phone and no card: the number is the whole address, so it is
+  // what identifies the payout.
+  if (details.phone) return `${label} · ${details.phone}`;
   return label;
 }
 

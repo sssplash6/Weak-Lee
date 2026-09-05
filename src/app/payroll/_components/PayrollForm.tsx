@@ -14,7 +14,7 @@ import {
   paymentFieldsFor,
   validatePaymentDetails,
   PAYROLL_METHOD_LABEL,
-  PAYROLL_METHODS,
+  PAYROLL_METHODS_OFFERED,
   RECEIPT_MIME_TYPES,
   type PaymentDetails,
   type PaymentFieldKey,
@@ -431,9 +431,14 @@ export function PayrollForm({
           Preferred payment method
         </label>
         {/* A dropdown rather than the pills this used to be: the list mirrors
-            the accounting sheet's "Source" column, and nine pills wrap into a
-            wall of buttons. Options come straight from PAYROLL_METHODS, so a
-            tenth source appears here without touching this file. */}
+            the accounting sheet's "Source" column, and it changes with that
+            sheet — options come straight from PAYROLL_METHODS_OFFERED, so
+            finance adding or dropping a source never touches this file.
+            A request filed under a source that has since been retired keeps it
+            listed, exactly once, so reopening that form shows what was chosen
+            instead of silently moving the money somewhere else. Picking
+            anything current drops it from the list, because it can't be
+            chosen again. */}
         <div className="mt-1.5">
           <select
             id="payroll-method"
@@ -441,7 +446,10 @@ export function PayrollForm({
             onChange={(e) => setMethod(e.target.value as PayrollMethod)}
             className="w-72 max-w-full rounded-lg border border-line px-3 py-2 text-sm text-ink focus:border-brand focus:outline-none"
           >
-            {PAYROLL_METHODS.map((m) => (
+            {(PAYROLL_METHODS_OFFERED.includes(method)
+              ? PAYROLL_METHODS_OFFERED
+              : [method, ...PAYROLL_METHODS_OFFERED]
+            ).map((m) => (
               <option key={m} value={m}>
                 {PAYROLL_METHOD_LABEL[m]}
               </option>
@@ -469,18 +477,20 @@ export function PayrollForm({
                   />
                 ) : (
                   <input
-                    type={f.kind === "email" ? "email" : "text"}
-                    inputMode={
-                      f.kind === "card" || f.kind === "expiry" ? "numeric" : undefined
+                    type={
+                      f.kind === "email"
+                        ? "email"
+                        : f.kind === "phone"
+                          ? "tel"
+                          : "text"
                     }
+                    inputMode={f.kind === "card" ? "numeric" : undefined}
                     autoComplete="off"
                     value={details[f.key] ?? ""}
                     onChange={(e) => patchDetail(f.key, e.target.value)}
                     placeholder={f.placeholder}
                     maxLength={f.maxLength}
-                    className={`${
-                      f.kind === "expiry" ? "w-24" : "w-72"
-                    } max-w-full rounded-lg border border-line px-3 py-2 text-sm text-ink placeholder:text-muted-fg focus:border-brand focus:outline-none`}
+                    className="w-72 max-w-full rounded-lg border border-line px-3 py-2 text-sm text-ink placeholder:text-muted-fg focus:border-brand focus:outline-none"
                   />
                 )}
               </label>
@@ -501,7 +511,7 @@ export function PayrollForm({
             Nothing else needed — you&rsquo;ll be paid in cash.
           </p>
         )}
-        {/* Stripe, SG Bank — settled off-app as they always were. */}
+        {/* The Uzbek company, and the retired off-app sources. */}
         {detailFields.length === 0 && !methodIsCash(method) && (
           <p className="rise-in mt-2 text-xs text-muted-fg">
             Finance will arrange the details with you directly — nothing to

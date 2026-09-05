@@ -169,12 +169,14 @@ export function PaymentDetailsPrompt({ pending }: { pending: PendingDetails }) {
                       />
                     ) : (
                       <input
-                        type={f.kind === "email" ? "email" : "text"}
-                        inputMode={
-                          f.kind === "card" || f.kind === "expiry"
-                            ? "numeric"
-                            : undefined
+                        type={
+                          f.kind === "email"
+                            ? "email"
+                            : f.kind === "phone"
+                              ? "tel"
+                              : "text"
                         }
+                        inputMode={f.kind === "card" ? "numeric" : undefined}
                         autoComplete="off"
                         value={values[f.key] ?? ""}
                         onChange={(e) => patch(f.key, e.target.value)}
